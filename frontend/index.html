@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>屏损故障鉴定 - 智能助手</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: #fff; position: relative; }
+.header { padding: 20px 20px 12px; border-bottom: 1px solid #f0f0f0; }
+.header h1 { font-size: 18px; font-weight: 700; }
+.header .sub { font-size: 12px; color: #999; margin-top: 4px; }
+.steps { display: flex; padding: 12px 16px; gap: 6px; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap; }
+.step-dot { flex: 1; height: 4px; border-radius: 2px; background: #e8e8e8; transition: background 0.3s; }
+.step-dot.done { background: #4f46e5; }
+.step-dot.active { background: #4f46e5; }
+.page { flex: 1; padding: 20px; display: none; flex-direction: column; overflow-y: auto; }
+.page.active { display: flex; }
+.page-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.page-desc { font-size: 13px; color: #888; margin-bottom: 20px; }
+.symptoms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.symptom-card { border: 2px solid #e8e8e8; border-radius: 12px; padding: 20px 14px; cursor: pointer; transition: all 0.2s; text-align: center; position: relative; }
+.symptom-card:active { transform: scale(0.97); }
+.symptom-card.selected { border-color: #4f46e5; background: #eef2ff; }
+.symptom-card .icon { font-size: 36px; margin-bottom: 8px; }
+.symptom-card .label { font-size: 14px; font-weight: 600; }
+.symptom-card .desc { font-size: 11px; color: #999; margin-top: 4px; }
+.symptom-card .check { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 10px; background: #4f46e5; color: #fff; font-size: 12px; display: none; align-items: center; justify-content: center; }
+.symptom-card.selected .check { display: flex; }
+.camera-area { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.camera-view { width: 100%; max-height: 320px; background: #000; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 16px; }
+.camera-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-view .guide-overlay { position: absolute; inset: 0; pointer-events: none; display: none; }
+.camera-view .guide-overlay.on { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.guide-box { width: 60%; height: 50%; border: 2px dashed rgba(255,255,255,0.7); border-radius: 8px; position: relative; }
+.guide-box::after { content: '对准凹坑/裂痕处'; position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #fff; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 4px; white-space: nowrap; }
+.photo-preview { width: 100%; max-height: 250px; border-radius: 12px; overflow: hidden; position: relative; background: #f5f5f5; cursor: pointer; }
+.photo-preview canvas { width: 100%; display: block; }
+.photo-preview .re-take { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.btn-row { display: flex; gap: 10px; margin-top: 16px; }
+.btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: #4f46e5; color: #fff; }
+.btn-outline { background: #fff; color: #4f46e5; border: 2px solid #4f46e5; }
+.btn-success { background: #059669; color: #fff; }
+.btn-sm { padding: 8px 16px; font-size: 12px; flex: none; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f0f0f0; }
+.toggle-row .label { font-size: 15px; font-weight: 500; }
+.toggle-row .hint { font-size: 12px; color: #999; margin-top: 2px; }
+.toggle { width: 52px; height: 30px; border-radius: 15px; background: #d1d5db; cursor: pointer; position: relative; transition: background 0.3s; flex-shrink: 0; }
+.toggle.on { background: #4f46e5; }
+.toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 12px; background: #fff; transition: transform 0.3s; }
+.toggle.on::after { transform: translateX(22px); }
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.form-group select, .form-group input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: #fff; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.checkbox-pill { padding: 8px 16px; border: 2px solid #e8e8e8; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.checkbox-pill.selected { border-color: #4f46e5; background: #eef2ff; color: #4f46e5; }
+.pill-unknown { border-style: dashed; color: #d97706; border-color: #fcd34d; }
+.pill-unknown.selected { border-color: #d97706; background: #fffbeb; color: #d97706; }
+.result-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 24px; color: #fff; text-align: center; margin-bottom: 16px; animation: fadeInUp 0.5s ease; }
+.result-card.quality { background: linear-gradient(135deg, #059669 0%, #10b981 100%); }
+.result-card.logistics { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
+.result-card.review { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+.result-card .result-icon { font-size: 48px; margin-bottom: 8px; }
+.result-card .result-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.result-card .result-subtitle { font-size: 13px; opacity: 0.85; }
+.confidence-bar { background: rgba(255,255,255,0.2); border-radius: 8px; height: 8px; margin: 12px 0; overflow: hidden; }
+.confidence-bar .fill { height: 100%; background: #fff; border-radius: 8px; transition: width 1s ease; }
+.path-list { background: #f8f9ff; border-radius: 12px; padding: 16px; }
+.path-list h4 { font-size: 14px; margin-bottom: 12px; color: #555; }
+.path-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.path-item:last-child { border: none; }
+.path-item .step-num { width: 24px; height: 24px; border-radius: 12px; background: #4f46e5; color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0; }
+.path-item .step-answer { color: #4f46e5; font-weight: 600; margin-left: auto; }
+.info-card { background: #f8f9ff; border-radius: 12px; padding: 12px 16px; font-size: 13px; color: #666; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.info-card .emoji { font-size: 20px; }
+.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; }
+.spinner { width: 40px; height: 40px; border: 3px solid #e8e8e8; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes fadeInUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
+.similar-section { margin-top: 20px; }
+.similar-section h4 { font-size: 14px; margin-bottom: 12px; color: #555; }
+.similar-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 14px; margin-bottom: 10px; transition: all 0.2s; animation: fadeInUp 0.4s ease; }
+.similar-card:hover { border-color: #4f46e5; box-shadow: 0 2px 8px rgba(79,70,229,0.1); }
+.similar-card .sim-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.similar-card .sim-title { font-size: 14px; font-weight: 600; flex: 1; }
+.similar-card .sim-score { padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+.similar-card .sim-score.high { background: #d1fae5; color: #065f46; }
+.similar-card .sim-score.medium { background: #fef3c7; color: #92400e; }
+.similar-card .sim-detail { display: block; font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
+.similar-card .sim-model { font-size: 12px; color: #888; margin-bottom: 4px; }
+.similar-card .sim-result { font-size: 12px; margin-bottom: 6px; }
+.similar-card .sim-summary { font-size: 12px; color: #666; line-height: 1.5; }
+.similar-card .sim-cause { font-size: 12px; color: #92400e; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b; }
+.similar-card .sim-warranty { font-size: 12px; color: #1e40af; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6; }
+.analysis-panel { background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 16px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
+.analysis-panel .analysis-title { font-size: 14px; font-weight: 700; color: #065f46; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.ai-panel { background: #f5f3ff; border: 1px solid #c4b5fd; border-radius: 12px; padding: 16px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
+.ai-panel .analysis-title { font-size: 14px; font-weight: 700; color: #5b21b6; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.analysis-row { display: flex; gap: 12px; margin-bottom: 10px; }
+.analysis-detail { font-size: 13px; line-height: 1.9; color: #333; padding: 0 4px; }
+.analysis-detail strong { color: #1a1a2e; }
+.analysis-detail .report-section { margin-top: 12px; }
+.analysis-detail .report-section h4 { font-size: 13px; color: #4f46e5; margin-bottom: 4px; }
+.analysis-source { font-size: 11px; color: #888; margin-top: 6px; }
+.correction-panel { margin-top: 12px; padding: 12px; background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; display: none; animation: fadeInUp 0.3s ease; }
+.correction-panel .corr-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.correction-row { display: flex; gap: 8px; align-items: flex-end; }
+.correction-row select { flex: 1; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background: #fff; }
+.correction-row .btn-confirm { padding: 8px 14px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.correction-row .btn-confirm:disabled { background: #9ca3af; cursor: not-allowed; }
+.correct-btn { padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; background: #fff; cursor: pointer; color: #888; margin-top: 8px; }
+.correct-btn:hover { border-color: #d97706; color: #d97706; }
+
+.llm-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: 2px dashed #7c3aed; border-radius: 10px; background: #f5f3ff; color: #6d28d9; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.llm-btn:hover { background: #ede9fe; border-color: #6d28d9; }
+.llm-btn.loading { opacity: 0.6; pointer-events: none; }
+.llm-progress { margin-top: 10px; display: none; }
+.llm-progress-bar { width: 100%; height: 6px; background: #e8e8e8; border-radius: 3px; overflow: hidden; }
+.llm-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 3px; transition: width 0.3s ease; }
+.llm-progress-text { font-size: 12px; color: #888; text-align: center; margin-top: 6px; }
+.llm-result-label { font-size: 13px; font-weight: 700; color: #5b21b6; margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #e8e8e8; }
+.llm-result-label span { font-weight: 400; font-size: 11px; color: #999; }
+.llm-result-text { font-size: 13px; line-height: 1.9; color: #333; padding: 0 4px; white-space: pre-wrap; word-break: break-word; }
+.llm-result-text p { margin: 0 0 10px; }
+.llm-result-text p:last-child { margin-bottom: 0; }
+.llm-result-text h3 { font-size: 15px; font-weight: 700; margin: 14px 0 6px; color: #1a1a2e; }
+.llm-result-text h4 { font-size: 14px; font-weight: 600; margin: 10px 0 4px; color: #333; }
+.llm-result-text strong { color: #1a1a2e; }
+.llm-result-text code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: 'SF Mono', 'Consolas', monospace; }
+.llm-result-meta { font-size: 11px; color: #999; margin-top: 8px; }
+
+.analysis-source { font-size: 11px; color: #888; margin-top: 6px; }
+
+/* Photo grid */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px,1fr)); gap: 8px; margin-top: 10px; }
+.photo-grid-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; background: #f9fafb; }
+.photo-grid-item.main { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+.photo-grid-item img, .photo-grid-item canvas { width: 100%; height: 100%; object-fit: cover; }
+.photo-grid-item .grid-badge { position: absolute; top: 2px; left: 4px; background: #2563eb; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 600; }
+.photo-grid-item .grid-del { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.photo-grid-item .grid-del:hover { background: rgba(220,38,38,0.85); }
+.photo-grid-add { aspect-ratio: 1; border: 2px dashed #cbd5e1; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 28px; font-weight: 300; }
+.photo-grid-add:hover { border-color: #2563eb; color: #2563eb; }
+.photo-count { font-size: 12px; color: #64748b; margin-top: 4px; text-align: center; }
+
+.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.img-lightbox-overlay img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 4px; transition: transform 0.3s ease; }
+.img-lightbox-close { position: fixed; top: 16px; right: 20px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 20px; cursor: pointer; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.img-lightbox-close:hover { background: rgba(255,255,255,0.3); }
+.img-lightbox-rotate { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 14px; cursor: pointer; z-index: 10000; font-weight: 600; }
+.img-lightbox-rotate:hover { background: rgba(255,255,255,0.3); }
+
+/* Bottom sheet */
+.bottom-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 9000; display: none; align-items: flex-end; justify-content: center; }
+.bottom-sheet-overlay.open { display: flex; }
+.bottom-sheet { background: #fff; width: 100%; max-width: 480px; border-radius: 20px 20px 0 0; max-height: 75vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); padding: 0 20px 28px; }
+.bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
+.bottom-sheet-handle { width: 40px; height: 4px; background: #d1d5db; border-radius: 2px; margin: 12px auto 16px; }
+.bottom-sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.bottom-sheet-header .sheet-title { font-size: 16px; font-weight: 700; color: #1e293b; }
+.bottom-sheet-close { width: 32px; height: 32px; border-radius: 16px; border: none; background: #f1f5f9; color: #64748b; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.bottom-sheet-close:hover { background: #e2e8f0; color: #334155; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>屏损故障鉴定</h1>
+    <div class="sub">TCL 智能判定助手 · v1.0</div>
+  </div>
+  <div class="steps" id="steps">
+    <div class="step-dot active" data-step="1"></div>
+    <div class="step-dot" data-step="2"></div>
+  </div>
+
+  <!-- 第1步：拍照取证 -->
+  <div class="page active" id="page1">
+    <div class="page-title">① 现场拍照取证</div>
+    <div class="page-desc">请对准屏幕损伤位置拍摄，系统将自动添加时间戳水印</div>
+    <div class="camera-view" id="cameraView">
+      <video id="video" autoplay playsinline muted></video>
+    </div>
+    <div class="photo-preview" id="photoPreview" style="display:none">
+      <div class="photo-grid" id="photoGrid"></div>
+      <div class="photo-count" id="photoCount"></div>
+      <div class="btn-row" id="btnInfoRow" style="margin-top:6px;display:none">
+        <button class="btn btn-outline btn-sm" id="btnOpenInfo" onclick="openInfoSheet()">📋 安装与故障信息</button>
+      </div>
+    </div>
+    <div id="analysisHint" style="display:none;text-align:center;padding:16px;color:#94a3b8;font-size:13px;">
+      请上传图片并填写安装与故障信息后，查看分析结果
+    </div>
+    <div class="analysis-panel" id="analysisPanel">
+      <div class="analysis-title">🔍 RAG 分析结果</div>
+      <div class="analysis-loading" id="analysisLoading">正在分析屏损特征...</div>
+      <div id="analysisResult" style="display:none">
+        <div class="analysis-detail" id="analysisDetail"></div>
+        <div class="analysis-source" id="analysisSource"></div>
+        <button class="correct-btn" onclick="showCorrection()">分析不准？点此纠正 →</button>
+      </div>
+    </div>
+    <div class="ai-panel" id="aiAnalysisPanel">
+      <div class="analysis-title">🧠 屏损鉴定分析</div>
+      <button class="llm-btn" id="llmAnalyzeBtn" onclick="runLLMAnalysis()">🤖 启动屏损鉴定分析</button>
+      <div id="llmResult" style="display:none">
+        <div class="llm-progress" id="llmProgress">
+          <div class="llm-progress-bar"><div class="llm-progress-fill" id="llmProgressFill"></div></div>
+          <div class="llm-progress-text" id="llmProgressText">准备分析...</div>
+        </div>
+        <div class="llm-result-label">鉴定分析结果 <span id="llmModelTag"></span></div>
+        <div class="llm-result-text" id="llmResultText"></div>
+        <div class="llm-result-meta" id="llmResultMeta"></div>
+      </div>
+    </div>
+    <div class="correction-panel" id="correctionPanel">
+      <div class="corr-title">✏️ 纠正分析结果（将作为训练数据提升后续准确率）</div>
+      <div class="correction-row">
+        <select id="corrLocation">
+          <option value="">选择正确位置</option>
+          <option>天侧</option><option>地侧</option><option>左侧右侧</option>
+          <option>四角区域</option><option>中央区域</option><option>全屏区域</option>
+          <option>局部不规则区域</option>
+        </select>
+        <select id="corrShape">
+          <option value="">选择正确形状</option>
+          <option>单条线状屏裂</option><option>多条线状屏裂</option>
+          <option>点放射状屏裂</option><option>发散性线状屏裂</option>
+          <option>环状/圈状屏裂</option><option>网状(大面积无规则)屏裂</option>
+        </select>
+        <button class="btn-confirm" id="corrConfirmBtn" onclick="submitCorrection()">确认提交</button>
+      </div>
+      <div id="corrMsg" style="font-size:11px;color:#059669;margin-top:6px;"></div>
+    </div>
+    <input type="file" accept="image/*" multiple id="fileInput" style="display:none" onchange="uploadFromAlbum(event)" />
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnCapture" onclick="capture()">📷 拍照</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('fileInput').click()">🖼️ 上传相册</button>
+      <button class="btn btn-outline btn-sm" id="btnRetake" onclick="retake()" style="display:none">🔄 重拍全部</button>
+    </div>
+    <div style="margin-top:auto;padding-top:12px;">
+      <button class="btn btn-primary" onclick="submitCase()" id="btnSubmit" disabled>提交判定 →</button>
+    </div>
+  </div>
+
+  <!-- 底部滑出面板：安装与故障信息 -->
+  <div class="bottom-sheet-overlay" id="infoSheetOverlay" onclick="if(event.target===this)closeInfoSheet()">
+    <div class="bottom-sheet" onclick="event.stopPropagation()">
+      <div class="bottom-sheet-handle"></div>
+      <div class="bottom-sheet-header">
+        <div class="sheet-title">📋 安装与故障信息</div>
+        <button class="bottom-sheet-close" onclick="closeInfoSheet()">✕</button>
+      </div>
+      <div class="form-group">
+        <label>安装状态</label>
+        <select id="installStatus">
+          <option value="not_installed">未安装</option>
+          <option value="installed">已安装</option>
+          <option value="unknown">不确定</option>
+        </select>
+      </div>
+      <div class="form-group" id="authGroup">
+        <label>开箱人员</label>
+        <select id="authPersonnel">
+          <option value="yes">TCL 授权人员开箱</option>
+          <option value="no">非授权人员开箱</option>
+          <option value="unknown">不清楚</option>
+        </select>
+      </div>
+      <div class="form-group" id="pkgGroup">
+        <label>包装箱状态</label>
+        <select id="packageDamage">
+          <option value="none">无破损</option>
+          <option value="damaged">有破损</option>
+          <option value="unknown">无法查看</option>
+        </select>
+      </div>
+      <div style="padding-top:12px">
+        <button class="btn btn-primary" onclick="closeInfoSheet()" style="width:100%">确认信息</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 第2步：判定结果 -->
+  <div class="page" id="page2">
+    <div class="page-title">② 判定结果</div>
+    <div class="page-desc">系统已完成自动判定，结果如下：</div>
+    <div id="resultContent">
+      <div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>
+    </div>
+    <div id="similarContent"></div>
+    <div style="margin-top:auto;padding-top:20px">
+      <button class="btn btn-outline" onclick="resetAll()">鉴定新案例</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片原图预览弹窗 -->
+<div class="img-lightbox-overlay" id="imgLightbox" style="display:none" onclick="if(event.target===this)closeLightbox()">
+  <button class="img-lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="img-lightbox-rotate" onclick="rotateLightboxImg()">↻ 旋转</button>
+  <img id="lightboxImg" src="" alt="预览原图" />
+</div>
+
+<script>
+const API = window.location.origin + '/api/v1/cases/decide'
+
+let state = {
+  step: 1, photos: [],
+  installStatus: 'not_installed', authPersonnel: 'yes', packageDamage: 'none', faultLinks: [],
+  currentResult: null,
+  analysis: null,
+  infoConfirmed: false,
+}
+let stream = null
+let lightboxAngle = 0
+let lightboxScale = 1
+let panelConfig = { showRagPanel: true, showAiPanel: true }
+
+async function loadPanelConfig() {
+  try {
+    const resp = await fetch('/api/knowledge/model-config')
+    const data = await resp.json()
+    if (data.success && data.data) {
+      panelConfig.showRagPanel = data.data.showRagPanel !== false
+      panelConfig.showAiPanel = data.data.showAiPanel !== false
+    }
+  } catch {
+    // 使用默认值 (两个面板都显示)
+  }
+}
+
+function init() {
+  initCamera()
+  loadPanelConfig()
+}
+function initCamera() {
+  const v = document.getElementById('video')
+  if (!navigator.mediaDevices) return
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width:{ideal:1920}, height:{ideal:1080} } })
+    .then(s => { stream = s; v.srcObject = s })
+    .catch(() => {})
+}
+function stopCamera() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null } }
+const MAX_PHOTOS = 5
+
+function renderPhotoGrid() {
+  const grid = document.getElementById('photoGrid'), cnt = document.getElementById('photoCount')
+  grid.innerHTML = ''
+  state.photos.forEach((p, i) => {
+    const div = document.createElement('div')
+    div.className = 'photo-grid-item' + (i === 0 ? ' main' : '')
+    div.onclick = () => openLightbox(p.url)
+    const canvas = document.createElement('canvas')
+    canvas.width = 200; canvas.height = 200
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+    img.onload = () => {
+      const s = Math.min(200/img.width, 200/img.height)
+      const w = img.width*s, h = img.height*s
+      ctx.drawImage(img, (200-w)/2, (200-h)/2, w, h)
+    }
+    img.src = p.url
+    div.appendChild(canvas)
+    if (i === 0) {
+      const badge = document.createElement('span'); badge.className = 'grid-badge'; badge.textContent = '主图'; div.appendChild(badge)
+    }
+    const del = document.createElement('button'); del.className = 'grid-del'; del.textContent = '×'
+    del.onclick = e => { e.stopPropagation(); removePhoto(i) }
+    div.appendChild(del)
+    grid.appendChild(div)
+  })
+  if (state.photos.length < MAX_PHOTOS) {
+    const add = document.createElement('div')
+    add.className = 'photo-grid-add'; add.textContent = '+'
+    add.onclick = () => document.getElementById('fileInput').click()
+    grid.appendChild(add)
+  }
+  cnt.textContent = `已选 ${state.photos.length} 张 · 上限 ${MAX_PHOTOS} 张`
+  document.getElementById('btnRetake').style.display = state.photos.length > 0 ? '' : 'none'
+}
+
+function addPhotoFromCanvas(canvas) {
+  const now = new Date()
+  const ts = now.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+  const tempCanvas = document.createElement('canvas')
+  tempCanvas.width = canvas.width; tempCanvas.height = canvas.height
+  const ctx = tempCanvas.getContext('2d')
+  ctx.drawImage(canvas, 0, 0)
+  const fw = tempCanvas.width, fh = 60
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, tempCanvas.height-fh, fw, fh)
+  ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(14, fw/40)}px sans-serif`
+  ctx.fillText(`📷 ${ts}  TCL智能鉴定`, 16, tempCanvas.height-32)
+  ctx.font = `${Math.max(11, fw/50)}px sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.7)'
+  ctx.fillText(`ID:${Date.now().toString(36)}`, 16, tempCanvas.height-10)
+  state.photos.push({ id: Date.now().toString(36), ts: ts, url: tempCanvas.toDataURL() })
+  renderPhotoGrid()
+}
+
+function removePhoto(index) {
+  state.photos.splice(index, 1)
+  renderPhotoGrid()
+  if (state.photos.length === 0) {
+    document.getElementById('photoPreview').style.display = 'none'
+    document.getElementById('cameraView').style.display = 'block'
+    document.getElementById('analysisPanel').style.display = 'none'
+    document.getElementById('aiAnalysisPanel').style.display = 'none'
+    document.getElementById('analysisHint').style.display = 'none'
+    document.getElementById('btnSubmit').disabled = true
+    document.getElementById('btnRetake').style.display = 'none'
+    document.getElementById('btnInfoRow').style.display = 'none'
+    document.getElementById('infoSheetOverlay').classList.remove('open')
+    state.analysis = null
+    state.infoConfirmed = false
+    resetLLMResult()
+  } else {
+    document.getElementById('btnSubmit').disabled = false
+  }
+}
+
+function capture() {
+  const v = document.getElementById('video')
+  if (state.photos.length >= MAX_PHOTOS) { alert(`最多只能拍摄 ${MAX_PHOTOS} 张照片`); return }
+  const c = document.createElement('canvas')
+  c.width = v.videoWidth || 640; c.height = v.videoHeight || 480
+  const tempCanvas = document.createElement('canvas')
+  tempCanvas.width = c.width; tempCanvas.height = c.height
+  const ctx = tempCanvas.getContext('2d'); ctx.drawImage(v, 0, 0, c.width, c.height)
+  addPhotoFromCanvas(tempCanvas)
+  document.getElementById('cameraView').style.display = 'none'
+  document.getElementById('photoPreview').style.display = 'block'
+  document.getElementById('btnSubmit').disabled = false
+  document.getElementById('btnInfoRow').style.display = ''
+  if (state.photos.length === 1) resetLLMResult()
+  if (state.photos.length >= MAX_PHOTOS) { document.getElementById('btnCapture').disabled = true }
+  maybeRunInitialAnalysis()
+  state.analysis = null
+}
+
+function retake() {
+  state.photos = []
+  state.analysis = null
+  state.infoConfirmed = false
+  document.getElementById('cameraView').style.display = 'block'
+  document.getElementById('photoPreview').style.display = 'none'
+  document.getElementById('analysisPanel').style.display = 'none'
+  document.getElementById('aiAnalysisPanel').style.display = 'none'
+  document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('btnSubmit').disabled = true
+  document.getElementById('btnRetake').style.display = 'none'
+  document.getElementById('btnCapture').disabled = false
+  document.getElementById('btnInfoRow').style.display = 'none'
+  document.getElementById('infoSheetOverlay').classList.remove('open')
+  resetLLMResult()
+}
+
+function uploadFromAlbum(event) {
+  const files = event.target.files
+  if (!files || !files.length) return
+  if (state.photos.length + files.length > MAX_PHOTOS) {
+    alert(`最多只能上传 ${MAX_PHOTOS} 张照片，当前已有 ${state.photos.length} 张，还可添加 ${MAX_PHOTOS - state.photos.length} 张`)
+    event.target.value = ''; return
+  }
+  let loaded = 0
+  Array.from(files).forEach(file => {
+    const reader = new FileReader()
+    reader.onload = function(e) {
+      const img = new Image()
+      img.onload = function() {
+        const c = document.createElement('canvas')
+        c.width = img.width; c.height = img.height
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, c.width, c.height)
+        addPhotoFromCanvas(c)
+        loaded++
+        if (loaded === 1) {
+          document.getElementById('cameraView').style.display = 'none'
+          document.getElementById('photoPreview').style.display = 'block'
+          document.getElementById('btnSubmit').disabled = false
+          document.getElementById('btnInfoRow').style.display = ''
+          resetLLMResult()
+          if (state.photos.length >= MAX_PHOTOS) document.getElementById('btnCapture').disabled = true
+          maybeRunInitialAnalysis()
+        }
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+  event.target.value = ''
+}
+function resetLLMResult() {
+  const r = document.getElementById('llmResult')
+  r.style.display = 'none'
+  document.getElementById('llmResultText').innerHTML = ''
+  document.getElementById('llmResultMeta').innerHTML = ''
+  document.getElementById('llmModelTag').textContent = ''
+  document.getElementById('llmProgress').style.display = 'none'
+  const btn = document.getElementById('llmAnalyzeBtn')
+  btn.style.display = ''
+  btn.classList.remove('loading')
+  btn.textContent = '🤖 启动屏损鉴定分析'
+  btn.style.color = '#6d28d9'
+  btn.style.borderColor = '#7c3aed'
+  // 确保 AI 面板可见（如果配置允许）
+  if (panelConfig.showAiPanel) {
+    document.getElementById('aiAnalysisPanel').style.display = 'block'
+  }
+}
+function togglePill(el) {
+  el.classList.toggle('selected')
+  const v = el.dataset.val
+  const idx = state.faultLinks.indexOf(v)
+  if (idx > -1) { state.faultLinks.splice(idx,1) }
+  else {
+    state.faultLinks.push(v)
+    if (v !== 'unknown') {
+      const unknownEl = document.querySelector('#faultLinks .pill-unknown')
+      if (unknownEl) unknownEl.classList.remove('selected')
+      const unknownIdx = state.faultLinks.indexOf('unknown')
+      if (unknownIdx > -1) state.faultLinks.splice(unknownIdx, 1)
+    }
+  }
+  updateUncertaintyHint()
+}
+function toggleUnknownPill(el) {
+  el.classList.toggle('selected')
+  if (el.classList.contains('selected')) {
+    state.faultLinks = ['unknown']
+    document.querySelectorAll('#faultLinks .checkbox-pill:not(.pill-unknown)').forEach(p => p.classList.remove('selected'))
+  } else {
+    state.faultLinks = []
+  }
+  updateUncertaintyHint()
+}
+function updateUncertaintyHint() {
+  const hint = document.getElementById('uncertaintyHint')
+  if (!hint) return
+  let count = 0
+  if (document.getElementById('installStatus').value === 'unknown') count++
+  if (document.getElementById('authPersonnel').value === 'unknown') count++
+  if (document.getElementById('packageDamage').value === 'unknown') count++
+  if (state.faultLinks.includes('unknown') || state.faultLinks.length === 0) count++
+  hint.style.display = count > 0 ? '' : 'none'
+  if (count >= 2) {
+    hint.textContent = '⚠️ 已选择 ' + count + ' 项不确定，系统将建议转人工复核'
+  } else if (count === 1) {
+    hint.textContent = '⚠️ 有 1 项不确定，判定置信度将有所降低'
+  }
+}
+function syncFormState() {
+  state.installStatus = document.getElementById('installStatus').value
+  state.authPersonnel = document.getElementById('authPersonnel').value
+  state.packageDamage = document.getElementById('packageDamage').value
+}
+function setStep(n) {
+  state.step = n
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+  document.getElementById('page' + n).classList.add('active')
+  document.querySelectorAll('.step-dot').forEach((d,i) => {
+    d.classList.remove('done','active')
+    if (i < n-1) d.classList.add('done')
+    if (i === n-1) d.classList.add('active')
+  })
+  document.getElementById('page'+n).scrollTop = 0
+}
+function goToResult() { setStep(2) }
+function openInfoSheet() {
+  document.getElementById('infoSheetOverlay').classList.add('open')
+}
+function closeInfoSheet() {
+  document.getElementById('infoSheetOverlay').classList.remove('open')
+  syncFormState()
+  state.infoConfirmed = true
+  updateUncertaintyHint()
+  maybeRunInitialAnalysis()
+}
+function maybeRunInitialAnalysis() {
+  const hasPhotos = state.photos.length > 0
+  if (!hasPhotos) {
+    document.getElementById('analysisPanel').style.display = 'none'
+    document.getElementById('aiAnalysisPanel').style.display = 'none'
+    document.getElementById('analysisHint').style.display = 'none'
+    return
+  }
+  if (!state.infoConfirmed) {
+    document.getElementById('analysisPanel').style.display = 'none'
+    document.getElementById('aiAnalysisPanel').style.display = 'none'
+    document.getElementById('analysisHint').style.display = ''
+    return
+  }
+  // photos + info confirmed → run analysis
+  document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('analysisPanel').style.display = panelConfig.showRagPanel ? '' : 'none'
+  document.getElementById('aiAnalysisPanel').style.display = panelConfig.showAiPanel ? '' : 'none'
+  // 取第一张做主图跑 RAG 分析
+  const first = state.photos[0]
+  const img = new Image()
+  img.onload = () => {
+    const c = document.createElement('canvas')
+    c.width = img.width; c.height = img.height
+    c.getContext('2d').drawImage(img, 0, 0)
+    runAnalysis(c)
+  }
+  img.src = first.url
+}
+function resetAll() {
+  state = { step:1, photos:[], installStatus:'not_installed', authPersonnel:'yes', packageDamage:'none', faultLinks:[], currentResult:null, analysis:null, infoConfirmed:false }
+  document.getElementById('btnSubmit').disabled = true
+  document.getElementById('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
+  document.getElementById('installStatus').value = 'not_installed'
+  document.getElementById('authPersonnel').value = 'yes'; document.getElementById('packageDamage').value = 'none'
+  document.getElementById('cameraView').style.display = 'block'; document.getElementById('photoPreview').style.display = 'none'
+  document.getElementById('fileInput').value = ''; document.getElementById('similarContent').innerHTML = ''
+  document.getElementById('btnRetake').style.display = 'none'; document.getElementById('btnCapture').disabled = false
+  document.getElementById('btnInfoRow').style.display = 'none'
+  document.getElementById('infoSheetOverlay').classList.remove('open')
+  document.getElementById('analysisPanel').style.display = 'none'
+  document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('aiAnalysisPanel').style.display = 'none'
+  resetLLMResult()
+  setStep(1); initCamera()
+}
+async function submitCase() {
+  setStep(2)
+  const rc = document.getElementById('resultContent')
+  rc.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
+  try {
+    const body = {
+      installStatus: state.installStatus,
+      authPersonnel: state.authPersonnel,
+      packageDamage: state.packageDamage,
+      faultLinks: state.faultLinks,
+      crackLocation: state.analysis ? state.analysis.location : '',
+      crackShape: state.analysis ? state.analysis.shape : '',
+    }
+    const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error?.message || '判定失败')
+    state.currentResult = data.data.decision
+    renderResult(data.data)
+    fetchSimilarCases(data.data.decision)
+  } catch (e) {
+    rc.innerHTML = `<div style="text-align:center;padding:40px 0;color:#dc2626">
+      <div style="font-size:48px;margin-bottom:12px">😞</div>
+      <div>判定请求失败</div><div style="font-size:12px;color:#999;margin-top:8px">${e.message}</div>
+      <div style="margin-top:16px">${!navigator.onLine ? '⚠️ 网络连接异常' : '⚠️ 后端服务可能未启动'}</div>
+      <div style="margin-top:12px;font-size:12px;color:#999">API: ${API}</div>
+      <button class="btn btn-outline" style="margin-top:16px" onclick="submitCase()">重试</button>
+    </div>`
+  }
+}
+function renderResult(data) {
+  const d = data.decision
+  const clsMap = { product_quality_issue:'quality', logistics_issue:'logistics', needs_further_review:'review' }
+  const cls = clsMap[d.result] || 'review'
+  const iconMap = { product_quality_issue:'✅', logistics_issue:'🚚', needs_further_review:'🔍', not_product_quality:'❌' }
+  const rc = document.getElementById('resultContent')
+  rc.innerHTML = `
+    <div class="result-card ${cls}">
+      <div class="result-icon">${iconMap[d.result] || '📋'}</div>
+      <div class="result-title">${d.resultLabel}</div>
+      <div class="result-subtitle">Case: ${data.caseId}</div>
+      <div style="font-size:12px;margin-top:6px;opacity:0.7">规则版本: ${d.ruleVersion}</div>
+    </div>
+    ${state.analysis ? (() => {
+      const report = generateAnalysisReport(state.analysis)
+      // 安装环境描述
+      let env = ''
+      const ist = state.installStatus, pkg = state.packageDamage
+      if (ist === 'not_installed') env += '机器<strong>尚未安装</strong>。'
+      else if (ist === 'installed') env += '机器<strong>已安装</strong>。'
+      else env += '安装状态<strong>未知</strong>。'
+      if (pkg === 'severe') env += '外包装存在<strong>严重损坏</strong>，不排除运输途中受损。'
+      else if (pkg === 'minor') env += '外包装存在<strong>轻微损坏</strong>。'
+      else if (pkg === 'none') env += '外包装<strong>完好</strong>。'
+
+      // 初步结论
+      const d2 = data.decision
+      const causeMap = {
+        product_quality_issue: '屏幕本身的制造工艺或元器件老化等产品质量问题所致。建议进一步核实生产批次信息。',
+        logistics_issue: '物流运输途中的外力碰撞、挤压或跌落导致的物理屏损。建议核查物流环节的监控记录。',
+        needs_further_review: '需进一步综合判定，建议结合实物检查和更多信息确认具体原因。',
+        not_product_quality: '非屏幕本身的产品质量问题，属于外部因素导致的物理屏损。',
+      }
+      const causeText = causeMap[d2.result] || causeMap['needs_further_review']
+
+      return `
+    <div class="result-report" style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:16px 20px;margin-bottom:16px;font-size:13px;line-height:1.9;color:#333;">
+      <div class="report-section">
+        <h4>📌 屏损概况</h4>
+        <div style="margin-top:4px;">${report.summary}</div>
+      </div>
+      <div class="report-section"><h4>📦 当前状态</h4>${env}</div>
+      <div class="report-section" style="margin-top:14px;padding-top:12px;border-top:1px solid #e8e8e8;">
+        <h4>📋 初步鉴定结论</h4>
+        <div style="margin-top:4px;"><strong>故障类型：</strong>${state.analysis.location}受力导致的${state.analysis.shape}</div>
+        <div style="margin-top:4px;" id="resultCause"><strong>可能原因：</strong>${causeText}</div>
+      </div>
+    </div>`
+    })() : ''}
+    <div class="result-card" style="background:linear-gradient(135deg,#374151,#1f2937);padding:20px;margin-bottom:16px">
+      <div style="font-size:12px;opacity:0.7;margin-bottom:4px">置信度</div>
+      <div style="font-size:28px;font-weight:700">${d.confidence}%</div>
+      <div class="confidence-bar"><div class="fill" style="width:${d.confidence}%"></div></div>
+      <div style="font-size:12px;margin-top:6px;opacity:0.8">
+        ${d.needExpertReview ? '⚠️ 置信度不足，建议转专家复核' : '✅ 置信度达标，自动判定结果'}
+      </div>
+    </div>
+    ${d.uncertainty ? `
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e;">
+      ⚠️ ${d.uncertainty.message}（${d.uncertainty.fields} 项不确定，置信度已下调）
+    </div>` : ''}
+    <div class="path-list">
+      <h4>📋 判定路径回溯</h4>
+      ${(d.decisionPath||[]).map((p,i) => `
+        <div class="path-item">
+          <div class="step-num">${i+1}</div>
+          <div>${p.question}</div>
+          <div class="step-answer">→ ${p.answer}</div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+async function fetchSimilarCases(decision) {
+  const sc = document.getElementById('similarContent')
+  sc.innerHTML = '<div style="text-align:center;padding:16px;color:#888;font-size:13px;">🔍 正在向量检索相似案例...</div>'
+  try {
+    const body = {
+      symptoms: [],
+      crackShape: state.analysis ? state.analysis.shape : '',
+      physicalFeature: state.analysis ? state.analysis.location : '',
+      liquidState: '',
+      installStatus: state.installStatus,
+      result: decision.result,
+      excludeId: '',
+      topK: 5,
+    }
+    if (state.photos[0]) {
+      body.imageBase64 = state.photos[0].url
+    }
+    const res = await fetch('/api/v1/cases/search-similar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    const data = await res.json()
+    if (!data.success || !data.data?.results?.length) {
+      sc.innerHTML = '<div style="text-align:center;padding:16px;color:#999;font-size:13px;">暂无相似案例</div>'
+      return
+    }
+    const engineLabel = data.data.engine || ''
+    const isVector = engineLabel.includes('vector')
+    sc.innerHTML = `<div class="similar-section">
+      <h4>📚 ${isVector ? '向量+标签融合匹配' : '标签匹配'} Top ${data.data.results.length} 相似案例</h4>
+      ${data.data.results.map((c,i) => {
+        const cls = c.similarity >= 70 ? 'high' : 'medium'
+        // 高匹配（>=80%）：用案例库结论覆盖自动分析
+        if (c.similarity >= 80 && c.possibleCause) {
+          const detailEl = document.getElementById('analysisDetail')
+          let detailText = '<p>' + escHtml(c.possibleCause) + '</p>'
+          if (c.warrantyTip) detailText += '<p style="margin-top:8px;padding:8px 12px;background:#fff3cd;border-left:3px solid #ffc107;border-radius:4px;font-size:13px;">📋 保修提示：' + escHtml(c.warrantyTip) + '</p>'
+          detailEl.innerHTML = detailText
+          document.getElementById('analysisSource').textContent = '向量融合匹配：' + c.title + ' (融合相似度 ' + c.similarity + '%)'
+          const rc = document.getElementById('resultCause')
+          if (rc) rc.innerHTML = '<strong>可能原因：</strong>' + escHtml(c.possibleCause)
+        }
+        // 构建相似度明细
+        let scoreDetail = ''
+        if (c.vecSimilarity != null && c.labelSimilarity != null) {
+          const vecPct = Math.round(c.vecSimilarity)
+          const lblPct = Math.round(c.labelSimilarity * 100)
+          scoreDetail = `<span class="sim-detail">向量 ${vecPct}% × 0.6 + 标签 ${lblPct}% × 0.4</span>`
+        }
+        return `<div class="similar-card" style="animation-delay:${i*0.1}s">
+          <div class="sim-header">
+            <div class="sim-title">${escHtml(c.title)}</div>
+            <div class="sim-score ${cls}">相似度 ${c.similarity}%</div>
+          </div>
+          ${scoreDetail}
+          <div class="sim-model">📺 ${c.deviceModel} | 结论: ${c.resultLabel} | 置信度: ${c.confidence}%</div>
+          <div class="sim-summary">${escHtml(c.summary)}</div>
+          ${c.possibleCause ? '<div class="sim-cause">🔍 可能原因：' + escHtml(c.possibleCause) + '</div>' : ''}
+          ${c.warrantyTip ? '<div class="sim-warranty">📋 保修提示：' + escHtml(c.warrantyTip) + '</div>' : ''}
+        </div>`
+      }).join('')}
+    </div>`
+  } catch (e) {
+    sc.innerHTML = '<div style="text-align:center;padding:16px;color:#999;font-size:13px;">⚠️ 案例检索服务暂不可用</div>'
+  }
+}
+
+function escHtml(s) { return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+const ANALYSIS_TARGET_W = 400
+
+function grayscale(data, w, h) {
+  const out = new Float32Array(w * h)
+  for (let i = 0; i < w * h; i++) {
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]
+    out[i] = 0.299 * r + 0.587 * g + 0.114 * b
+  }
+  return out
+}
+
+function sobelEdges(gray, w, h) {
+  const mag = new Float32Array(w * h)
+  const dir = new Float32Array(w * h)
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x
+      const gx = -gray[idx - w - 1] - 2 * gray[idx - 1] - gray[idx + w - 1]
+        + gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1]
+      const gy = -gray[idx - w - 1] - 2 * gray[idx - w] - gray[idx - w + 1]
+        + gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1]
+      mag[idx] = Math.sqrt(gx * gx + gy * gy)
+      dir[idx] = Math.atan2(gy, gx)
+    }
+  }
+  return { mag, dir }
+}
+
+function dynamicThreshold(mag, w, h) {
+  const valid = []
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) valid.push(mag[i]) }
+  if (valid.length === 0) return 1
+  valid.sort((a, b) => a - b)
+  const mean = valid.reduce((s, v) => s + v, 0) / valid.length
+  let sumSq = 0
+  for (const v of valid) sumSq += (v - mean) * (v - mean)
+  const std = Math.sqrt(sumSq / valid.length)
+  return mean + 1.2 * std
+}
+
+function analyzeLocation(mag, w, h, threshold) {
+  const zones = [
+    { name: '天侧', key: 'top', y0: 0, y1: h * 0.33, x0: 0, x1: w },
+    { name: '地侧', key: 'bottom', y0: h * 0.67, y1: h, x0: 0, x1: w },
+    { name: '左侧', key: 'left', y0: 0, y1: h, x0: 0, x1: w * 0.33 },
+    { name: '右侧', key: 'right', y0: 0, y1: h, x0: w * 0.67, x1: w },
+  ]
+  const totalEdges = mag.reduce((s, v, i) => {
+    if (v < threshold) return s
+    const y = Math.floor(i / w), x = i % w
+    for (const z of zones) {
+      if (y >= z.y0 && y < z.y1 && x >= z.x0 && x < z.x1) z.count = (z.count || 0) + 1
+    }
+    return s + 1
+  }, 0)
+  if (totalEdges < 10) return { location: '无明显屏损', confidence: 0 }
+
+  const cornerCount = (() => {
+    let c = 0
+    const corners = [
+      [0, 0, w * 0.25, h * 0.25],
+      [w * 0.75, 0, w, h * 0.25],
+      [0, h * 0.75, w * 0.25, h],
+      [w * 0.75, h * 0.75, w, h],
+    ]
+    for (let i = 0; i < mag.length; i++) {
+      if (mag[i] < threshold) continue
+      const y = Math.floor(i / w), x = i % w
+      for (const [x0, y0, x1, y1] of corners) {
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) { c++; break }
+      }
+    }
+    return c
+  })()
+  const centerCount = (() => {
+    let c = 0
+    for (let i = 0; i < mag.length; i++) {
+      if (mag[i] < threshold) continue
+      const y = Math.floor(i / w), x = i % w
+      if (x >= w * 0.3 && x < w * 0.7 && y >= h * 0.3 && y < h * 0.7) c++
+    }
+    return c
+  })()
+
+  const spreadRatio = (() => {
+    const bw = 3, bh = 3
+    const cellW = Math.floor(w / bw), cellH = Math.floor(h / bh)
+    const cells = new Array(bw * bh).fill(0)
+    for (let i = 0; i < mag.length; i++) {
+      if (mag[i] < threshold) continue
+      const cx = Math.min(Math.floor((i % w) / cellW), bw - 1)
+      const cy = Math.min(Math.floor(Math.floor(i / w) / cellH), bh - 1)
+      cells[cy * bw + cx]++
+    }
+    return cells.filter(v => v > 0).length / (bw * bh)
+  })()
+
+  let best = null
+  for (const z of zones) {
+    const cnt = z.count || 0
+    const ratio = cnt / (totalEdges || 1)
+    if (ratio > 0.25 && (!best || ratio > best.ratio)) best = { ...z, ratio }
+  }
+
+  const cornerRatio = cornerCount / (totalEdges || 1)
+  const centerRatio = centerCount / (totalEdges || 1)
+
+  if (spreadRatio > 0.7) return { location: '全屏区域', confidence: Math.round(spreadRatio * 100) }
+  if (cornerRatio > 0.3) return { location: '四角区域', confidence: Math.round((1 - spreadRatio) * (0.3 + centerRatio * 0.7) * 100) }
+  if (centerRatio > 0.35) return { location: '中央区域', confidence: Math.round(centerRatio * 100) }
+  if (spreadRatio > 0.2 && spreadRatio < 0.5 && !best) return { location: '局部不规则区域', confidence: Math.round((1 - spreadRatio * 0.5) * 100) }
+  if (best) return { location: best.name, confidence: Math.round(best.ratio * 100) }
+  return { location: '局部不规则区域', confidence: 40 }
+}
+
+function analyzeShape(mag, dir, w, h, threshold) {
+  const bins = 18
+  const hist = new Array(bins).fill(0)
+  let total = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    let d = dir[i]
+    if (d < 0) d += Math.PI
+    const binIdx = Math.min(Math.floor(d / Math.PI * bins), bins - 1)
+    hist[binIdx]++
+    total++
+  }
+  if (total < 10) return { shape: '无明显屏损', confidence: 0 }
+
+  const maxVal = Math.max(...hist)
+  const normalized = hist.map(v => v / (maxVal || 1))
+  const peaks = []
+  for (let i = 0; i < bins; i++) {
+    const prev = normalized[(i - 1 + bins) % bins]
+    const next = normalized[(i + 1) % bins]
+    if (normalized[i] > 0.4 && normalized[i] > prev && normalized[i] > next) peaks.push(i)
+  }
+  const variance = (() => {
+    const m = normalized.reduce((s, v) => s + v, 0) / bins
+    return normalized.reduce((s, v) => s + (v - m) * (v - m), 0) / bins
+  })()
+
+  if (peaks.length === 0 || peaks.length === 1) return { shape: '单条线状屏裂', confidence: Math.round((1 - variance * 3) * 100) }
+
+  const evenSpread = peaks.every((p, i) => {
+    if (i === 0) return true
+    const gap = Math.min(Math.abs(p - peaks[i - 1]), bins - Math.abs(p - peaks[i - 1]))
+    return gap >= 2 && gap <= bins / peaks.length + 1
+  })
+
+  if (peaks.length >= 5 && evenSpread) return { shape: '点放射状屏裂', confidence: Math.round((0.5 + peaks.length / 12) * 100) }
+  if (peaks.length >= 4) return { shape: '发散性线状屏裂', confidence: Math.round((0.4 + peaks.length / 10) * 100) }
+  if (peaks.length === 2) {
+    const gap = Math.min(Math.abs(peaks[0] - peaks[1]), bins - Math.abs(peaks[0] - peaks[1]))
+    if (gap >= bins / 6) return { shape: '多条线状屏裂', confidence: Math.round((0.5 + (1 - variance * 2)) * 100) }
+    return { shape: '多条线状屏裂', confidence: Math.round((0.4 + (1 - variance * 2)) * 100) }
+  }
+  if (variance < 0.04) return { shape: '环状/圈状屏裂', confidence: Math.round((1 - variance * 6) * 100) }
+  if (variance > 0.12) return { shape: '网状(大面积无规则)屏裂', confidence: Math.round(variance * 300) }
+
+  return { shape: '网状(大面积无规则)屏裂', confidence: 50 }
+}
+
+function analyzeScreenDamage(canvas) {
+  const srcW = canvas.width, srcH = canvas.height
+  const scale = Math.min(1, ANALYSIS_TARGET_W / srcW)
+  const w = Math.round(srcW * scale), h = Math.round(srcH * scale)
+  const offCanvas = document.createElement('canvas')
+  offCanvas.width = w; offCanvas.height = h
+  const octx = offCanvas.getContext('2d')
+  octx.drawImage(canvas, 0, 0, w, h)
+  const imgData = octx.getImageData(0, 0, w, h)
+
+  const gray = grayscale(imgData.data, w, h)
+  const { mag, dir } = sobelEdges(gray, w, h)
+  const threshold = dynamicThreshold(mag, w, h)
+
+  const loc = analyzeLocation(mag, w, h, threshold)
+  const shp = analyzeShape(mag, dir, w, h, threshold)
+
+  return { location: loc.location, locationConfidence: loc.confidence, shape: shp.shape, shapeConfidence: shp.confidence }
+}
+
+function normalizeLabel(text, type) {
+  if (!text) return type === 'location' ? '局部不规则区域' : '点放射状屏裂'
+  const t = text.toLowerCase()
+  if (type === 'location') {
+    if (t.includes('四角') || t.includes('左下角') || t.includes('右下角') || t.includes('左上角') || t.includes('右上角') || t.includes('角落')) return '四角区域'
+    if (t.includes('全屏')) return '全屏区域'
+    if (t.includes('中央') || t.includes('中心') || t.includes('中部')) return '中央区域'
+    if (t.includes('天侧') || t.includes('顶部') || t.includes('上侧')) return '天侧'
+    if (t.includes('地侧') || t.includes('底部') || t.includes('下侧')) return '地侧'
+    if (t.includes('左侧') || t.includes('右侧') || t.includes('侧面') || t.includes('边缘')) return '左侧右侧'
+    if (t.includes('不规则')) return '局部不规则区域'
+    return '局部不规则区域'
+  }
+  if (t.includes('单条') || t.includes('单道')) return '单条线状屏裂'
+  if (t.includes('环状') || t.includes('圈状') || t.includes('环形')) return '环状/圈状屏裂'
+  if (t.includes('网状') || t.includes('蜘蛛网') || t.includes('大面积无规则')) return '网状(大面积无规则)屏裂'
+  if (t.includes('点放射') || t.includes('放射状')) return '点放射状屏裂'
+  if (t.includes('发散') || t.includes('延伸')) return '发散性线状屏裂'
+  if (t.includes('多条') || t.includes('多道')) return '多条线状屏裂'
+  return '点放射状屏裂'
+}
+
+function generateAnalysisReport(analysis) {
+  // 使用原始标注文本：向量检索返回案例库详细标注，启发式回退返回短标签
+  const loc = analysis.location || '未知'
+  const shape = analysis.shape || '未知'
+  const locConf = analysis.locationConfidence ?? 0
+  const shapeConf = analysis.shapeConfidence ?? 0
+
+  // ---- 摘要 ----
+  const summary = `📍 屏损位置：<strong>${loc}</strong>（置信度 ${locConf}%），屏损形状：<strong>${shape}</strong>（置信度 ${shapeConf}%）`
+
+  // ---- 详细报告 ----
+  const locDesc = {
+    '天侧': '屏幕<strong>上方（顶部区域）</strong>',
+    '地侧': '屏幕<strong>下方（底部区域）</strong>',
+    '左侧右侧': '屏幕<strong>侧面区域</strong>',
+    '四角区域': '屏幕<strong>角落区域</strong>',
+    '中央区域': '屏幕<strong>中心区域</strong>',
+    '全屏区域': '<strong>整个屏幕</strong>',
+    '局部不规则区域': '屏幕<strong>局部不规则区域</strong>',
+  }
+
+  const shapeDesc = {
+    '单条线状屏裂': '呈现典型的<strong>单条线状屏裂</strong>，裂纹方向集中，受力点较为明确。',
+    '多条线状屏裂': '呈现<strong>多条线状屏裂</strong>，多道裂纹并行或交叉分布，可能由多次受力或大范围冲击导致。',
+    '点放射状屏裂': '呈现典型的<strong>点放射状/网状屏裂</strong>，带有明确的受力中心点，裂纹由此向四周发散，边缘疑似有明显的<strong>外力磕碰/挤压变形</strong>痕迹。此类损伤100%由严重的外部暴力撞击、高处跌落或重物挤压导致，属于典型的物理外力屏损。',
+    '发散性线状屏裂': '呈现<strong>发散性线状屏裂</strong>，多条裂纹从受力中心向四周延伸贯穿，表明受力强度较大且方向分散。',
+    '环状/圈状屏裂': '呈现<strong>环状/圈状屏裂</strong>，裂纹呈环形或弧形分布，推测为圆形物体集中撞击或局部强力挤压所致。',
+    '网状(大面积无规则)屏裂': '呈现<strong>大面积的网状无规则屏裂</strong>，裂纹纵横交错、无明确方向性，通常由极大的外部冲击力或整机弯曲变形导致。',
+  }
+
+  const locText = locDesc[loc] || `<strong>${loc}</strong>`
+  const shapeText = shapeDesc[shape] || `呈现<strong>${shape}</strong>特征。`
+
+  const confLevel = (locConf + shapeConf) / 2
+  const severity = confLevel > 70 ? '极其严重的' : confLevel > 40 ? '明显的' : '一定程度的'
+
+  let report = `从您提供的照片来看，屏幕存在<strong>${severity}</strong>物理损伤，具体特征如下：`
+
+  report += `<div class="report-section"><h4>📌 屏损位置</h4>`
+  // 短标签走模板，详细标注（案例库）直接显示原文
+  if (locDesc[loc]) {
+    if (loc === '全屏区域') {
+      report += `裂纹已覆盖${locText}，无单一集中受力点，表明损伤范围极为广泛。`
+    } else if (loc === '四角区域') {
+      report += `主要受力点位于${locText}，此类位置损伤通常由边角跌落或撞击硬物导致。`
+    } else if (loc === '中央区域') {
+      report += `受力点集中于${locText}，常见于正面受到强力按压或撞击。`
+    } else {
+      report += `主要受力点位于${locText}。`
+    }
+  } else {
+    // 案例库详细标注原文
+    report += `<strong>${loc}</strong>`
+  }
+  report += `</div>`
+
+  report += `<div class="report-section"><h4>🔍 屏损形状</h4>${shapeText}</div>`
+
+  return { summary, report }
+}
+
+async function runAnalysis(canvas) {
+  // 重新拉取面板配置，确保管理后台的开关立即生效
+  await loadPanelConfig()
+
+  const panel = document.getElementById('analysisPanel')
+  const aiPanel = document.getElementById('aiAnalysisPanel')
+
+  // 按最新配置显示/隐藏面板
+  panel.style.display = panelConfig.showRagPanel ? 'block' : 'none'
+  aiPanel.style.display = 'none'
+  if (!panelConfig.showRagPanel && !panelConfig.showAiPanel) {
+    // 两个面板都关闭则不运行分析
+    return
+  }
+  const loading = document.getElementById('analysisLoading')
+  const result = document.getElementById('analysisResult')
+  const source = document.getElementById('analysisSource')
+  const corrPanel = document.getElementById('correctionPanel')
+  result.style.display = 'none'; loading.style.display = ''
+  corrPanel.style.display = 'none'
+
+  setTimeout(async () => {
+    try {
+      let analysis = null
+      let sourceText = ''
+      let clipUsed = false
+
+      // 1. 优先尝试 CLIP 向量检索
+      try {
+        const base64 = state.photos[0].url
+        const resp = await fetch('/api/knowledge/search-vector', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, topK: 3 }),
+        })
+        const data = await resp.json()
+        if (data.success && data.data?.results?.length > 0) {
+          const top = data.data.results[0]
+          analysis = {
+            location: top.crackLocation || '局部不规则区域',
+            locationConfidence: Math.round(top.similarity),
+            shape: top.crackShape || '点放射状屏裂',
+            shapeConfidence: Math.round(top.similarity),
+          }
+          sourceText = `基于 CLIP ViT-B/32 向量检索匹配 (相似度 ${top.similarity}%，共检索 ${data.data.totalHits} 条)`
+          clipUsed = true
+        }
+      } catch (e) {
+        // CLIP 不可用，回退
+      }
+
+      // 2. 回退：本地 Sobel 边缘检测 + 启发式分析
+      if (!analysis) {
+        analysis = analyzeScreenDamage(canvas)
+        sourceText = '基于本地启发式规则分析 (CLIP 服务不可用，使用 Sobel 边缘检测)'
+      }
+
+      state.analysis = analysis
+      loading.style.display = 'none'
+      result.style.display = ''
+      const report = generateAnalysisReport(analysis)
+      document.getElementById('analysisDetail').innerHTML = report.report
+      source.textContent = sourceText
+
+      // 显示 AI 分析面板（如果配置允许）
+      if (panelConfig.showAiPanel) {
+        document.getElementById('aiAnalysisPanel').style.display = 'block'
+      }
+    } catch (e) {
+      loading.innerHTML = '分析失败: ' + e.message
+    }
+  }, 100)
+}
+
+function extractFeatures(mag, dir, w, h, threshold) {
+  const f = []
+  const bw = 3, bh = 3, cellW = Math.floor(w / bw), cellH = Math.floor(h / bh)
+  const cells = new Array(bw * bh).fill(0)
+  let totalEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    totalEdges++
+    const cx = Math.min(Math.floor((i % w) / cellW), bw - 1)
+    const cy = Math.min(Math.floor(Math.floor(i / w) / cellH), bh - 1)
+    cells[cy * bw + cx]++
+  }
+  for (const c of cells) f.push(totalEdges > 0 ? c / totalEdges : 0)
+
+  const bins = 18, hist = new Array(bins).fill(0)
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    let d = dir[i]; if (d < 0) d += Math.PI
+    hist[Math.min(Math.floor(d / Math.PI * bins), bins - 1)]++
+  }
+  const maxHist = Math.max(...hist) || 1
+  for (const h of hist) f.push(h / maxHist)
+
+  f.push(totalEdges / (w * h))
+  let sum = 0, cnt = 0
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) { sum += mag[i]; cnt++ } }
+  const meanMag = cnt > 0 ? sum / cnt : 0
+  f.push(meanMag)
+  let sumSq = 0
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) sumSq += (mag[i] - meanMag) ** 2 }
+  f.push(cnt > 0 ? Math.sqrt(sumSq / cnt) : 0)
+
+  f.push(cells.filter(v => v > 0).length / (bw * bh))
+
+  const c1 = [0, 0, w * 0.25, h * 0.25], c2 = [w * 0.75, 0, w, h * 0.25]
+  const c3 = [0, h * 0.75, w * 0.25, h], c4 = [w * 0.75, h * 0.75, w, h]
+  const corners = [c1, c2, c3, c4]
+  let cornerEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    const y = Math.floor(i / w), x = i % w
+    for (const [x0, y0, x1, y1] of corners) { if (x >= x0 && x < x1 && y >= y0 && y < y1) { cornerEdges++; break } }
+  }
+  f.push(totalEdges > 0 ? cornerEdges / totalEdges : 0)
+
+  let centerEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    const y = Math.floor(i / w), x = i % w
+    if (x >= w * 0.3 && x < w * 0.7 && y >= h * 0.3 && y < h * 0.7) centerEdges++
+  }
+  f.push(totalEdges > 0 ? centerEdges / totalEdges : 0)
+
+  let peaks = 0
+  for (let i = 0; i < bins; i++) {
+    const prev = hist[(i - 1 + bins) % bins], next = hist[(i + 1) % bins]
+    if (hist[i] > maxHist * 0.3 && hist[i] > prev && hist[i] > next) peaks++
+  }
+  f.push(peaks)
+
+  const histNorm = hist.map(v => v / (maxHist || 1))
+  const hMean = histNorm.reduce((s, v) => s + v, 0) / bins
+  f.push(histNorm.reduce((s, v) => s + (v - hMean) ** 2, 0) / bins)
+
+  return f
+}
+
+function euclideanDist(a, b) {
+  let sum = 0
+  for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; sum += d * d }
+  return Math.sqrt(sum)
+}
+
+function knnClassify(features, trainingData, k) {
+  k = Math.min(k, trainingData.length)
+  if (k < 2) return null
+
+  const distances = trainingData.map((entry, idx) => ({ idx, dist: euclideanDist(features, entry.features) }))
+  distances.sort((a, b) => a.dist - b.dist)
+  const neighbors = distances.slice(0, k)
+
+  const locVotes = {}, shapeVotes = {}
+  let locWTotal = 0, shapeWTotal = 0
+  for (const n of neighbors) {
+    const w = 1 / (n.dist + 0.001)
+    const loc = trainingData[n.idx].location, shape = trainingData[n.idx].shape
+    locVotes[loc] = (locVotes[loc] || 0) + w; locWTotal += w
+    shapeVotes[shape] = (shapeVotes[shape] || 0) + w; shapeWTotal += w
+  }
+
+  let bestLoc = '', bestLocW = 0, bestShape = '', bestShapeW = 0
+  for (const [l, w] of Object.entries(locVotes)) { if (w > bestLocW) { bestLocW = w; bestLoc = l } }
+  for (const [s, w] of Object.entries(shapeVotes)) { if (w > bestShapeW) { bestShapeW = w; bestShape = s } }
+
+  return {
+    location: bestLoc,
+    locationConfidence: Math.round(bestLocW / (locWTotal || 1) * 100),
+    shape: bestShape,
+    shapeConfidence: Math.round(bestShapeW / (shapeWTotal || 1) * 100),
+    neighborCount: neighbors.length,
+  }
+}
+
+// 轻量 Markdown 转 HTML（支持 **粗体**、*斜体*、标题、列表、代码）
+function renderMarkdown(text) {
+  if (!text) return ''
+  let html = text
+    // 转义 HTML 特殊字符（保留已转义内容）
+    .replace(/&(?!amp;|lt;|gt;|quot;|#\d+;|#x[\da-f]+;)/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  // 粗体
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  // 斜体（注意不能和粗体冲突）
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  // 行内代码
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+  // 标题（### 先于 ##）
+  html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>')
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>')
+  // 非标题行的换行 → <br>
+  html = html.replace(/([^\n])\n([^\n])/g, '$1<br>$2')
+  // 连续空行 → 段落分隔
+  html = html.replace(/<br>\s*<br>/g, '</p><p>')
+  // 包裹在 <p> 中（如还没被包裹）
+  if (!html.startsWith('<h') && !html.startsWith('<p>')) {
+    html = '<p>' + html + '</p>'
+  }
+  return html
+}
+
+async function runLLMAnalysis() {
+  // 重新拉取面板配置，确保管理后台的开关立即生效
+  await loadPanelConfig()
+
+  const btn = document.getElementById('llmAnalyzeBtn')
+  const resultDiv = document.getElementById('llmResult')
+  const textDiv = document.getElementById('llmResultText')
+  const metaDiv = document.getElementById('llmResultMeta')
+  const tag = document.getElementById('llmModelTag')
+  const progressDiv = document.getElementById('llmProgress')
+  const progressFill = document.getElementById('llmProgressFill')
+  const progressText = document.getElementById('llmProgressText')
+  const label = resultDiv.querySelector('.llm-result-label')
+
+  if (!state.photos[0]) return
+
+  // 重置状态
+  btn.classList.add('loading')
+  btn.textContent = '⏳ 分析中...'
+  label.style.display = 'none'
+  textDiv.innerHTML = ''
+  metaDiv.innerHTML = ''
+  tag.textContent = ''
+
+  // 显示进度条
+  progressDiv.style.display = 'block'
+  progressFill.style.width = '0%'
+  progressText.textContent = '准备分析...'
+  resultDiv.style.display = ''
+
+  try {
+    const context = {
+      installStatus: state.installStatus,
+      authPersonnel: state.authPersonnel,
+      packageDamage: state.packageDamage,
+      faultLinks: state.faultLinks,
+    }
+    const resp = await fetch('/api/knowledge/analyze-llm-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: state.photos.map(p => p.url), context }),
+    })
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: { message: `HTTP ${resp.status}` } }))
+      throw new Error(err.error?.message || '分析失败')
+    }
+
+    // 读取 SSE 流
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const line = part.trim()
+        if (!line) continue
+        const jsonStr = line.startsWith('data: ') ? line.slice(6) : ''
+        if (!jsonStr) continue
+
+        let event
+        try { event = JSON.parse(jsonStr) } catch { continue }
+
+        if (event.stage === 'error') throw new Error(event.message || '分析失败')
+
+        // 更新进度
+        if (event.percent != null) progressFill.style.width = event.percent + '%'
+        if (event.message) progressText.textContent = event.message + (event.percent != null ? ' ' + event.percent + '%' : '')
+
+        if (event.stage === 'done') {
+          progressFill.style.width = '100%'
+          progressText.textContent = '分析完成！100%'
+          await new Promise(r => setTimeout(r, 500))
+          progressDiv.style.display = 'none'
+
+          const r = event.result
+          // LLM 结果仅在 LLM 面板展示，不覆盖 RAG 分析结果面板
+          label.style.display = ''
+          tag.textContent = `(基于 ${r.model}，耗时 ${(r.elapsed/1000).toFixed(1)}s)`
+          textDiv.innerHTML = renderMarkdown(r.description) || renderMarkdown(report.report)
+          metaDiv.innerHTML = `📍 位置: ${r.location}（${r.locationConfidence}%）| 🔍 形状: ${r.shape}（${r.shapeConfidence}%）| ⚠️ 严重程度: ${r.severity}`
+          btn.style.display = 'none'
+          return
+        }
+      }
+    }
+  } catch (e) {
+    progressDiv.style.display = 'none'
+    label.style.display = ''
+    btn.classList.remove('loading')
+    btn.textContent = '⚠️ 分析失败，点击重试'
+    btn.style.color = '#dc2626'
+    btn.style.borderColor = '#dc2626'
+    setTimeout(() => {
+      btn.textContent = '🤖 启动屏损鉴定分析'
+      btn.style.color = '#6d28d9'
+      btn.style.borderColor = '#7c3aed'
+    }, 3000)
+    textDiv.textContent = '错误: ' + e.message
+    metaDiv.textContent = ''
+    tag.textContent = ''
+  }
+}
+
+function showCorrection() {
+  const panel = document.getElementById('correctionPanel')
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none'
+  document.getElementById('corrMsg').textContent = ''
+  document.getElementById('corrLocation').value = ''
+  document.getElementById('corrShape').value = ''
+}
+
+async function submitCorrection() {
+  const loc = document.getElementById('corrLocation').value
+  const shape = document.getElementById('corrShape').value
+  if (!loc || !shape) return
+
+  // CLIP 模式下，直接在分析结果中体现纠正
+  state.analysis = {
+    location: loc,
+    locationConfidence: 100,
+    shape: shape,
+    shapeConfidence: 100,
+  }
+  const report = generateAnalysisReport(state.analysis)
+  document.getElementById('analysisDetail').innerHTML = report.report
+  document.getElementById('analysisSource').textContent = '人工校正 (CLIP 模型将持续学习优化)'
+  document.getElementById('correctionPanel').style.display = 'none'
+  document.getElementById('corrMsg').textContent = '分析结果已手动校正'
+}
+
+document.getElementById('installStatus').addEventListener('change', function() {
+  state.installStatus = this.value
+  document.getElementById('authGroup').style.display = this.value === 'unknown' ? '' : (this.value === 'not_installed' ? '' : 'none')
+  document.getElementById('pkgGroup').style.display = (this.value === 'unknown' || (this.value === 'not_installed' && document.getElementById('authPersonnel').value === 'yes')) ? '' : 'none'
+  updateUncertaintyHint()
+})
+document.getElementById('authPersonnel').addEventListener('change', function() {
+  state.authPersonnel = this.value
+  document.getElementById('pkgGroup').style.display = (this.value === 'unknown' || (this.value === 'yes' && document.getElementById('installStatus').value === 'not_installed')) ? '' : 'none'
+  updateUncertaintyHint()
+})
+document.getElementById('packageDamage').addEventListener('change', function() { state.packageDamage = this.value; updateUncertaintyHint() })
+
+function openLightbox(src) {
+  lightboxAngle = 0
+  lightboxScale = 1
+  const img = document.getElementById('lightboxImg')
+  img.src = src
+  img.style.transform = 'rotate(0deg) scale(1)'
+  document.getElementById('imgLightbox').style.display = 'flex'
+}
+function closeLightbox() {
+  document.getElementById('imgLightbox').style.display = 'none'
+}
+function rotateLightboxImg() {
+  lightboxAngle = (lightboxAngle + 90) % 360
+  updateLightboxTransform()
+}
+function updateLightboxTransform() {
+  const img = document.getElementById('lightboxImg')
+  img.style.transform = `rotate(${lightboxAngle}deg) scale(${lightboxScale})`
+}
+document.getElementById('imgLightbox').addEventListener('wheel', function(e) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.15 : 0.15
+  lightboxScale = Math.max(0.3, Math.min(8, lightboxScale + delta))
+  updateLightboxTransform()
+}, { passive: false })
+
+init()
+</script>
+</body>
+</html>

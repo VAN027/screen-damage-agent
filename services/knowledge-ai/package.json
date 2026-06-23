@@ -1,0 +1,10 @@
+{
+  "name": "knowledge-ai",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "屏损智能体 — 知识库与向量检索服务",
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "hnswlib-node": "^3.0.0"
+  }
+}

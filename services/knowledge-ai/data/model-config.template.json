@@ -1,0 +1,28 @@
+{
+  "provider": "openai",
+  "model": "your-model-name",
+  "apiKey": "your-api-key",
+  "endpoint": "https://your-api-endpoint/v1/chat/completions",
+  "temperature": 0.1,
+  "maxTokens": 2000,
+  "enabled": false,
+  "systemPrompt": "你是一名资深的智能屏幕故障鉴定专家...",
+  "kbEnabled": true,
+  "kbSearchQuery": "",
+  "kbMaxChunks": 7,
+  "showRagPanel": true,
+  "showAiPanel": true,
+  "annoFields": [
+    { "id": "crackLocation", "label": "屏损位置", "type": "tag-grid", "required": true,
+      "options": ["天侧","地侧","左侧","右侧","四角区域","中央区域","全屏区域","局部不规则区域","__custom__"] },
+    { "id": "crackShape", "label": "屏损形态", "type": "tag-grid", "required": true,
+      "options": ["单条线状屏裂","多条线状屏裂","点放射状屏裂","发散性线状屏裂","环状/圈状屏裂","网状(大面积无规则)屏裂","__custom__"] },
+    { "id": "result", "label": "鉴定结论", "type": "result-btns", "required": false,
+      "options": [
+        { "value": "product_quality_issue", "label": "产品质量问题", "cls": "pq" },
+        { "value": "logistics_issue", "label": "物流问题", "cls": "logistics" },
+        { "value": "not_product_quality", "label": "非产品质量问题", "cls": "npq" },
+        { "value": "needs_further_review", "label": "需进一步鉴定", "cls": "review" }
+      ] }
+  ]
+}

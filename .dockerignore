@@ -1,0 +1,38 @@
+# 依赖
+node_modules/
+
+# 日志
+logs/
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Python（暂不部署）
+services/knowledge-ai/python/
+
+# 说明文件
+README.md
+屏损智能体设计框架.docx
+
+# 启动脚本
+start.bat
+start.ps1
+stop.bat
+
+# TypeScript 配置（运行时不需要）
+tsconfig.base.json
+services/*/tsconfig.json
+
+# 编译产物（不使用）
+services/*/dist/

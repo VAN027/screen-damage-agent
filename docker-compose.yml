@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+  # ============================================
+  # 管理中台（规则管理 + admin 页面）:8082
+  # ============================================
+  decision-admin:
+    build:
+      context: .
+      dockerfile: services/decision-admin/Dockerfile
+    container_name: screen-damage-admin
+    ports:
+      - "8082:8082"
+    volumes:
+      - admin-data:/app/services/decision-admin/data
+    networks:
+      - screen-damage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8082/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # 知识库（案例检索 + LLM 分析）:8083
+  # ============================================
+  knowledge-ai:
+    build:
+      context: .
+      dockerfile: services/knowledge-ai/Dockerfile
+    container_name: screen-damage-knowledge
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY:-}
+    volumes:
+      - knowledge-data:/app/services/knowledge-ai/data
+    networks:
+      - screen-damage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8083/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # 决策引擎（规则判定）:8081
+  # ============================================
+  decision-engine:
+    build:
+      context: .
+      dockerfile: services/decision-engine/Dockerfile
+    container_name: screen-damage-engine
+    depends_on:
+      decision-admin:
+        condition: service_healthy
+    networks:
+      - screen-damage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8081/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # BFF 网关（对外入口 + 前端页面）:8080
+  # ============================================
+  gateway-bff:
+    build:
+      context: .
+      dockerfile: services/gateway-bff/Dockerfile
+    container_name: screen-damage-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      decision-engine:
+        condition: service_healthy
+      knowledge-ai:
+        condition: service_healthy
+    networks:
+      - screen-damage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+# ============================================
+# 网络
+# ============================================
+networks:
+  screen-damage:
+    driver: bridge
+
+# ============================================
+# 持久化数据
+# ============================================
+volumes:
+  admin-data:
+  knowledge-data:

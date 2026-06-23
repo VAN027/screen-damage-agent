@@ -1,0 +1,2456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屏损判定规则管理中台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.tab-nav { display: flex; background: #1a1a2e; padding: 0 20px; gap: 0; }
+.tab-btn { padding: 14px 28px; border: none; background: transparent; color: #8892b0; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
+.tab-btn:hover { color: #ccd6f6; background: rgba(255,255,255,0.05); }
+.tab-btn.active { color: #64ffda; border-bottom-color: #64ffda; }
+.tab-content { display: none; flex: 1; overflow-y: auto; }
+.tab-content.active { display: flex; }
+#tab-model > .main { overflow-y: auto; flex: 1; min-height: 0; }
+.sidebar { width: 320px; background: #fff; border-right: 1px solid #e8e8e8; display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 20px; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; }
+.sidebar-header h2 { font-size: 16px; color: #1a1a2e; }
+.sidebar-search { padding: 12px 16px; border-bottom: 1px solid #e8e8e8; display: flex; gap: 8px; }
+.sidebar-search input { flex: 1; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; }
+.sidebar-search input:focus { outline: none; border-color: #4f46e5; }
+.sidebar-search select { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background: #fff; }
+.btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 4px; }
+.btn-primary { background: #4f46e5; color: #fff; }
+.btn-primary:hover { background: #4338ca; }
+.btn-success { background: #059669; color: #fff; }
+.btn-success:hover { background: #047857; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-outline { background: #fff; color: #4f46e5; border: 1px solid #4f46e5; }
+.btn-outline:hover { background: #f8f9ff; }
+.btn-warn { background: #d97706; color: #fff; }
+.btn-warn:hover { background: #b45309; }
+.btn-accent { background: #7c3aed; color: #fff; }
+.btn-accent:hover { background: #6d28d9; }
+.item-list { flex: 1; overflow-y: auto; padding: 10px; }
+.item { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+.item:hover { background: #f8f9ff; }
+.item.active { border-color: #4f46e5; background: #eef2ff; }
+.item .name { font-size: 13px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .meta { font-size: 11px; color: #888; display: flex; gap: 8px; align-items: center; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-published { background: #d1fae5; color: #065f46; }
+.badge-draft { background: #fef3c7; color: #92400e; }
+.badge-pq { background: #fee2e2; color: #991b1b; }
+.badge-logistics { background: #fef3c7; color: #92400e; }
+.badge-npq { background: #dbeafe; color: #1e40af; }
+.badge-review { background: #f3e8ff; color: #6b21a8; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.toolbar { padding: 14px 24px; background: #fff; border-bottom: 1px solid #e8e8e8; display: flex; gap: 10px; align-items: center; }
+.toolbar .title { font-size: 18px; font-weight: 700; flex: 1; }
+.content { flex: 1; display: flex; overflow: hidden; }
+.editor-panel { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+.editor-panel label { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 14px; display: block; }
+.editor-panel label:first-child { margin-top: 0; }
+.editor-panel input, .editor-panel textarea, .editor-panel select { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
+.editor-panel input:focus, .editor-panel textarea:focus, .editor-panel select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.editor-panel textarea { height: 400px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.5; }
+.editor-panel textarea.summary { height: 80px; font-family: inherit; font-size: 13px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.form-row label { margin-top: 12px; }
+.form-row input, .form-row select { width: 100%; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.checkbox-group label.cb { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 400; cursor: pointer; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 20px; user-select: none; }
+.checkbox-group label.cb input { display: none; }
+.checkbox-group label.cb.checked { background: #eef2ff; border-color: #4f46e5; color: #4f46e5; }
+.preview-panel { width: 420px; background: #fafbfc; border-left: 1px solid #e8e8e8; padding: 20px; overflow-y: auto; flex-shrink: 0; }
+.preview-panel h3 { font-size: 14px; color: #555; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #e8e8e8; }
+.tree-node { margin-bottom: 8px; padding: 10px 12px; border-radius: 8px; font-size: 12px; border-left: 3px solid #cbd5e1; background: #fff; }
+.tree-node.start { border-left-color: #6366f1; }
+.tree-node.decision { border-left-color: #f59e0b; }
+.tree-node.outcome { border-left-color: #10b981; }
+.tree-node.end { border-left-color: #94a3b8; }
+.tree-node .type-label { font-size: 10px; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.tree-node.start .type-label { color: #6366f1; }
+.tree-node.decision .type-label { color: #f59e0b; }
+.tree-node.outcome .type-label { color: #10b981; }
+.tree-node.end .type-label { color: #94a3b8; }
+.tree-node .node-content { font-weight: 500; }
+.tree-node .branches { margin-top: 4px; font-size: 11px; color: #666; }
+.tree-node .branches span { display: inline-block; margin-right: 8px; padding: 2px 6px; background: #f1f5f9; border-radius: 4px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #aaa; }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 500; z-index: 999; animation: slideIn 0.3s ease; }
+.toast-success { background: #059669; }
+.toast-error { background: #dc2626; }
+.toast-info { background: #4f46e5; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.stats { padding: 12px 20px; background: #f8f9ff; border-top: 1px solid #e8e8e8; font-size: 12px; color: #666; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.stats-text { white-space: nowrap; }
+.batch-actions { display: flex; align-items: center; gap: 10px; }
+.select-all-label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: #555; user-select: none; }
+.select-all-label input[type="checkbox"] { cursor: pointer; }
+.item { display: flex; align-items: center; gap: 8px; }
+.item.selected { background: #eef0ff; }
+.item-check { flex-shrink: 0; display: flex; align-items: center; }
+.item-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #4f46e5; }
+.item-body { flex: 1; min-width: 0; cursor: pointer; }
+
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 12px; width: 680px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 18px; color: #1a1a2e; }
+.modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid #e8e8e8; display: flex; justify-content: flex-end; gap: 10px; }
+.modal textarea { width: 100%; height: 200px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; resize: vertical; }
+.modal textarea:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.drop-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 30px; text-align: center; margin-bottom: 16px; transition: all 0.2s; cursor: pointer; }
+.drop-zone:hover, .drop-zone.drag-over { border-color: #4f46e5; background: #f8f9ff; }
+.drop-zone .dz-icon { font-size: 36px; margin-bottom: 8px; }
+.drop-zone .dz-text { font-size: 13px; color: #888; }
+.drop-zone .dz-text strong { color: #4f46e5; }
+.preview-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
+.preview-table th, .preview-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+.preview-table th { background: #f8f9ff; font-weight: 600; color: #555; }
+.preview-table tr.pass { background: #f0fdf4; }
+.preview-table tr.fail { background: #fef2f2; }
+.import-summary { display: flex; gap: 16px; margin-top: 16px; padding: 12px; background: #f8f9ff; border-radius: 8px; font-size: 13px; }
+.import-summary .stat { text-align: center; flex: 1; }
+.import-summary .stat .num { font-size: 24px; font-weight: 700; }
+.import-summary .stat.success .num { color: #059669; }
+.import-summary .stat.fail .num { color: #dc2626; }
+.import-item-notice { margin-top: 12px; padding: 10px 14px; background: #fffbeb; border-radius: 6px; font-size: 12px; color: #92400e; }
+.import-item-notice code { background: #fef3c7; padding: 1px 6px; border-radius: 3px; }
+.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; max-height: 300px; overflow-y: auto; padding: 4px; }
+.img-card { border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; background: #fff; transition: all 0.15s; cursor: pointer; }
+.img-card:hover { border-color: #4f46e5; box-shadow: 0 2px 8px rgba(79,70,229,0.15); }
+.img-card.selected { border-color: #059669; box-shadow: 0 0 0 2px rgba(5,150,105,0.2); }
+.img-card img { width: 100%; height: 120px; object-fit: cover; display: block; }
+.img-card .img-info { padding: 6px 8px; font-size: 11px; }
+.img-card .img-info .fname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #555; }
+.img-card .img-info input { width: 100%; border: 1px solid #e8e8e8; border-radius: 3px; padding: 2px 4px; font-size: 11px; margin-top: 2px; }
+.img-card .img-info input:focus { outline: none; border-color: #4f46e5; }
+.img-grid-empty { text-align: center; color: #aaa; padding: 30px; font-size: 13px; }
+.img-drop-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 40px; text-align: center; transition: all 0.2s; cursor: pointer; }
+.img-drop-zone:hover, .img-drop-zone.drag-over { border-color: #4f46e5; background: #f8f9ff; }
+.img-drop-zone .dz-icon { font-size: 48px; margin-bottom: 8px; }
+.img-drop-zone .dz-text { font-size: 14px; color: #888; }
+.img-drop-zone .dz-text strong { color: #4f46e5; }
+.img-toolbar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.img-toolbar .count { font-size: 13px; color: #666; }
+.img-common-fields { background: #f8f9ff; border-radius: 8px; padding: 14px 16px; margin-top: 12px; }
+.img-common-fields h4 { font-size: 13px; color: #555; margin-bottom: 10px; }
+.img-common-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; }
+.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.img-lightbox-overlay img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 4px; transition: transform 0.3s ease; }
+.img-lightbox-close { position: fixed; top: 16px; right: 20px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 20px; cursor: pointer; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.img-lightbox-close:hover { background: rgba(255,255,255,0.3); }
+.img-lightbox-rotate { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 14px; cursor: pointer; z-index: 10000; font-weight: 600; }
+.img-lightbox-rotate:hover { background: rgba(255,255,255,0.3); }
+
+/* ---- 快速标注模式 ---- */
+.anno-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0f0f1a; z-index: 2000; flex-direction: column; }
+.anno-overlay.show { display: flex; }
+.anno-topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: #1a1a2e; border-bottom: 1px solid #2a2a4a; flex-shrink: 0; }
+.anno-topbar .title { color: #fff; font-size: 16px; font-weight: 700; }
+.anno-topbar .progress { color: #8892b0; font-size: 13px; }
+.anno-topbar .actions { display: flex; gap: 8px; }
+.anno-body { flex: 1; display: flex; overflow: hidden; }
+.anno-preview { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; position: relative; min-width: 0; }
+.anno-preview img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
+.anno-preview .placeholder { color: #555; font-size: 40px; }
+.anno-sidebar { width: 360px; background: #1e1e32; border-left: 1px solid #2a2a4a; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; }
+.anno-sidebar .field-group {}
+.anno-sidebar .field-label { font-size: 12px; font-weight: 700; color: #8892b0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.anno-sidebar .field-label .required { color: #ef4444; margin-left: 2px; }
+.anno-sidebar .tag-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.anno-sidebar .tag-btn { padding: 8px 6px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #aab; cursor: pointer; font-size: 12px; transition: all 0.15s; text-align: center; font-family: inherit; }
+.anno-sidebar .tag-btn:hover { border-color: #6366f1; color: #ccd; background: #2a2a48; }
+.anno-sidebar .tag-btn.selected { border-color: #6366f1; background: #312e81; color: #c7d2fe; font-weight: 600; }
+.anno-sidebar .tag-btn.seen { border-color: #4a4a6a; background: #252540; color: #aab; }
+.anno-sidebar .shortcut { display: inline-block; font-size: 10px; color: #6366f1; background: #312e81; padding: 1px 4px; border-radius: 3px; margin-right: 3px; vertical-align: middle; }
+.anno-sidebar .result-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.anno-sidebar .result-btn { padding: 10px 8px; border: 1.5px solid #3a3a5a; border-radius: 8px; background: #252540; color: #aab; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; text-align: center; font-family: inherit; }
+.anno-sidebar .result-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.anno-sidebar .result-btn.pq { border-color: #ef4444; color: #fca5a5; }
+.anno-sidebar .result-btn.pq.selected { background: #7f1d1d; color: #fecaca; }
+.anno-sidebar .result-btn.logistics { border-color: #f59e0b; color: #fcd34d; }
+.anno-sidebar .result-btn.logistics.selected { background: #78350f; color: #fde68a; }
+.anno-sidebar .result-btn.npq { border-color: #3b82f6; color: #93c5fd; }
+.anno-sidebar .result-btn.npq.selected { background: #1e3a5f; color: #bfdbfe; }
+.anno-sidebar .result-btn.review { border-color: #a855f7; color: #c084fc; }
+.anno-sidebar .result-btn.review.selected { background: #4c1d95; color: #ddd6fe; }
+.anno-sidebar .title-input { width: 100%; padding: 8px 10px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #ccd; font-size: 12px; font-family: inherit; }
+.anno-sidebar .title-input:focus { outline: none; border-color: #6366f1; }
+.anno-sidebar .title-input::placeholder { color: #555; }
+.anno-bottombar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: #1a1a2e; border-top: 1px solid #2a2a4a; flex-shrink: 0; }
+.anno-bottombar .nav-btn { padding: 8px 16px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #ccd; cursor: pointer; font-size: 13px; transition: all 0.15s; font-family: inherit; }
+.anno-bottombar .nav-btn:hover { border-color: #6366f1; background: #2a2a48; }
+.anno-bottombar .nav-btn.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; font-weight: 700; }
+.anno-bottombar .nav-btn.primary:hover { background: #4338ca; }
+.anno-bottombar .nav-btn.done { background: #059669; border-color: #059669; color: #fff; font-weight: 700; }
+.anno-bottombar .nav-btn.done:hover { background: #047857; }
+.anno-thumb-strip { display: flex; gap: 4px; overflow-x: auto; padding: 8px 0; border-top: 1px solid #2a2a4a; }
+.anno-thumb { width: 48px; height: 48px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; overflow: hidden; position: relative; transition: all 0.15s; }
+.anno-thumb:hover { border-color: #6366f1; }
+.anno-thumb.active { border-color: #4f46e5; }
+.anno-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.anno-thumb .thumb-dot { position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 5px; }
+.anno-thumb .thumb-dot.green { background: #10b981; }
+.anno-thumb .thumb-dot.yellow { background: #f59e0b; }
+.anno-thumb .thumb-dot.gray { background: #555; }
+.anno-hint { font-size: 11px; color: #555; text-align: center; padding: 4px 20px; background: #1a1a2e; }
+/* 标注字段表格编辑器 */
+.af-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.af-table th { background: #f8f9ff; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 12px; color: #555; border-bottom: 2px solid #e8e8e8; white-space: nowrap; }
+.af-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.af-table tr:hover { background: #fafbff; }
+.af-opt-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.af-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; background: #eef2ff; color: #4f46e5; border-radius: 12px; font-size: 11px; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.af-chip-x { cursor: pointer; color: #999; font-weight: 700; margin-left: 2px; }
+.af-chip-x:hover { color: #dc2626; }
+.af-chip-add { background: transparent; border: 1px dashed #ccc; color: #888; cursor: pointer; }
+.af-chip-add:hover { border-color: #4f46e5; color: #4f46e5; }\n</style>
+</head>
+<body>
+
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="rules">规则集管理</button>
+  <button class="tab-btn" data-tab="cases">案例库管理</button>
+  <button class="tab-btn" data-tab="model">模型配置</button>
+</div>
+
+<div class="tab-content active" id="tab-rules">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>规则集</h2>
+      <button class="btn btn-primary" onclick="createRule()">+ 新建</button>
+    </div>
+    <div class="item-list" id="ruleList"></div>
+    <div class="stats" id="ruleStats"></div>
+  </div>
+  <div class="main">
+    <div class="toolbar">
+      <div class="title" id="editorTitle">选择一个规则</div>
+      <button class="btn btn-outline" onclick="validateRule()">校验 JSON</button>
+      <button class="btn btn-primary" onclick="saveRule()">保存</button>
+      <button class="btn btn-success" onclick="publishRule()">发布</button>
+      <button class="btn btn-danger" onclick="deleteRule()">删除</button>
+    </div>
+    <div class="content">
+      <div class="editor-panel">
+        <label>规则集名称</label>
+        <input type="text" id="ruleName" placeholder="例如：屏损故障原因判定规则" />
+        <label>版本</label>
+        <input type="text" id="ruleVersion" readonly />
+        <label>规则描述</label>
+        <input type="text" id="ruleDesc" placeholder="描述规则集的用途" />
+        <label>节点配置 (JSON)</label>
+          <textarea id="ruleNodes" placeholder="粘贴或编辑 JSON 节点数组..."></textarea>
+      </div>
+      <div class="preview-panel" id="previewPanel">
+        <h3>决策树预览</h3>
+        <div id="treePreview"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-cases">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>案例库</h2>
+      <button class="btn btn-primary btn-sm" onclick="newCase()">+ 新建</button>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" id="caseSearch" placeholder="搜索标题/型号/标签..." oninput="loadCaseList()" />
+      <select id="caseFilter" onchange="loadCaseList()">
+        <option value="">全部结论</option>
+        <option value="product_quality_issue">产品质量问题</option>
+        <option value="logistics_issue">物流问题</option>
+        <option value="not_product_quality">非产品质量问题</option>
+        <option value="needs_further_review">需进一步鉴定</option>
+      </select>
+    </div>
+    <div class="item-list" id="caseList"></div>
+    <div class="stats" id="caseStatsWrapper">
+      <span class="stats-text" id="caseStats">共 0 条案例</span>
+      <div class="batch-actions" id="batchActions" style="display:none;">
+        <label class="select-all-label"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" /> 全选</label>
+        <button class="btn btn-danger btn-sm" onclick="batchDeleteCases()">批量删除</button>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="toolbar">
+      <div class="title" id="caseEditorTitle">新建案例</div>
+      <button class="btn btn-outline" onclick="newCase()">清空表单</button>
+      <button class="btn btn-primary" onclick="saveCase()">保存</button>
+      <button class="btn btn-accent" onclick="rebuildVectorIndex()">🔄 重建向量库</button>
+      <button class="btn btn-success" onclick="openImageBatchImport()">图片入库</button>
+      <button class="btn btn-warn" onclick="openAnnoFieldsEditor()">🏷️ 标注字段配置</button>
+      <button class="btn btn-danger" onclick="deleteCase()">删除</button>
+    </div>
+    <div class="content">
+      <div class="editor-panel" id="caseEditor">
+        <div id="caseImagePreview" style="margin-bottom:16px;display:none;">
+          <label>案例图片</label>
+          <img id="caseImageImg" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid #e8e8e8;cursor:pointer;display:block;" onclick="openLightbox(this.src)" title="点击查看原图" />
+        </div>
+        <div class="form-row">
+          <div><label class="case-field-label" data-field="crackLocation">屏损位置 *</label><select id="caseCrackLocation" onchange="onLocationSelectChange()"><option value="">-- 请选择 --</option><option>天侧</option><option>地侧</option><option>左侧</option><option>右侧</option><option>四角区域</option><option>中央区域</option><option>全屏区域</option><option>局部不规则区域</option><option value="__custom__">自定义...</option></select><input type="text" id="caseCrackLocationCustom" placeholder="自行输入屏损位置" style="margin-top:4px;display:none;" /></div>
+          <div><label class="case-field-label" data-field="crackShape">屏损形态 *</label><select id="caseCrackShape" onchange="onShapeSelectChange()"><option value="">-- 请选择 --</option><option>单条线状屏裂</option><option>多条线状屏裂</option><option>点放射状屏裂</option><option>发散性线状屏裂</option><option>环状/圈状屏裂</option><option>网状(大面积无规则)屏裂</option><option value="__custom__">自定义...</option></select><input type="text" id="caseCrackShapeCustom" placeholder="自行输入屏损形态" style="margin-top:4px;display:none;" /></div>
+        </div>
+        <div class="form-row">
+          <div><label class="case-field-label" data-field="installStatus">安装状态</label><select id="caseInstallStatus"><option value="">-- 非必填 --</option><option value="installed">已安装</option><option value="not_installed">未安装</option></select></div>
+          <div><label class="case-field-label" data-field="packageDamage">包装状态</label><select id="casePackageDamage"><option value="">-- 非必填 --</option><option value="none">无损坏</option><option value="minor">轻微损坏</option><option value="severe">严重损坏</option></select></div>
+        </div>
+        <div class="form-row">
+          <div><label class="case-field-label" data-field="result">鉴定结论</label><select id="caseResult"><option value="">-- 非必填 --</option><option value="product_quality_issue">产品质量问题</option><option value="logistics_issue">物流问题</option><option value="not_product_quality">非产品质量问题</option><option value="needs_further_review">需进一步鉴定</option></select></div>
+        </div>
+        <div class="form-group">
+          <label class="case-field-label" data-field="possibleCause">可能原因</label>
+          <textarea id="casePossibleCause" placeholder="根据图片痕迹推断的可能原因..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="case-field-label" data-field="warrantyTip">鉴定结论</label>
+          <textarea id="caseWarrantyTip" placeholder="例如：图片显示明显外力磕碰痕迹，不在保修范围..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div id="caseCustomFieldsContainer" style="border-top:1px dashed #d1d5db;padding-top:12px;margin-top:8px;display:none;">
+          <div id="caseCustomFields"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="imageBatchModal">
+  <div class="modal" style="width:820px;">
+    <div class="modal-header">
+      <h3>图片批量入库</h3>
+      <button class="btn btn-sm btn-outline" onclick="closeImageBatchImport()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="img-drop-zone" id="imgDropZone" onclick="document.getElementById('imgFileInput').click()">
+        <div class="dz-icon">🖼️</div>
+        <div class="dz-text">拖拽多张图片到此处，或 <strong>点击选择图片</strong></div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px;">支持 JPG / PNG / WEBP，单张不超过 10MB</div>
+      </div>
+      <input type="file" id="imgFileInput" accept="image/*" multiple style="display:none" onchange="handleImgFiles(event)" />
+      <div class="img-toolbar">
+        <span class="count" id="imgCount">尚未添加图片</span>
+        <div>
+          <button class="btn btn-sm btn-outline" onclick="clearImageList()" id="clearImgBtn" disabled>清空列表</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('imgFileInput').click()">继续添加</button>
+          <button class="btn btn-sm btn-primary" onclick="openQuickAnnotation()" id="openAnnoBtn" disabled>⚡ 快速标注</button>
+        </div>
+      </div>
+      <div class="img-grid" id="imgGrid">
+        <div class="img-grid-empty">拖拽图片或点击上方区域开始添加</div>
+      </div>
+
+      <div id="imgImportPreview" style="margin-top:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeImageBatchImport()">取消</button>
+      <button class="btn btn-primary" id="confirmImgImportBtn" onclick="confirmImageBatchImport()" disabled>确认入库</button>
+    </div>
+  </div>
+</div>
+
+<!-- 快速标注模式 -->
+<div class="anno-overlay" id="annoOverlay">
+  <div class="anno-topbar">
+    <span class="title">快速标注</span>
+    <span class="progress" id="annoProgress">1 / 1</span>
+    <div class="actions">
+      <button class="btn btn-sm btn-outline" onclick="closeAnnotation()" style="color:#ccd;border-color:#3a3a5a;">关闭</button>
+      <button class="btn btn-sm btn-primary" id="annoDoneBtn" onclick="finishAnnotation()">完成标注</button>
+    </div>
+  </div>
+  <div class="anno-body">
+    <div class="anno-preview" id="annoPreview">
+      <div class="placeholder">🖼️</div>
+    </div>
+    <div class="anno-sidebar" id="annoSidebar"></div>
+  </div>
+  <div class="anno-thumb-strip" id="annoThumbStrip"></div>
+  <div class="anno-hint">
+    <strong>快捷键：</strong> ← → 切换图片 | <strong>Enter</strong> 下一张 | <strong>Esc</strong> 退出
+  </div>
+  <div class="anno-bottombar">
+    <button class="nav-btn" onclick="annotationPrev()" id="annoPrevBtn">◀ 上一张</button>
+    <span style="flex:1;text-align:center;color:#8892b0;font-size:13px;" id="annoStatus">未标记</span>
+    <button class="nav-btn" onclick="annotationNext()" id="annoNextBtn">下一张 ▶</button>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-model">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>模型与知识库</h2>
+    </div>
+    <div class="item-list" id="modelNavList">
+      <div class="item active" onclick="selectModelSection('llm')">
+        <div class="name">🤖 大模型配置</div>
+        <div class="meta">分析模型 · API 设置</div>
+      </div>
+      <div class="item" onclick="selectModelSection('kb')">
+        <div class="name">📚 知识库管理</div>
+        <div class="meta">文档上传 · 检索配置</div>
+      </div>
+      <div class="item" onclick="selectModelSection('vector')">
+        <div class="name">🔍 向量检索服务</div>
+        <div class="meta">CLIP · Milvus 状态</div>
+      </div>
+    </div>
+    <div class="stats" id="modelNavStats">共 3 个配置模块</div>
+  </div>
+  <div class="main">
+    <div class="toolbar">
+      <div class="title" id="modelSectionTitle">大模型配置</div>
+      <button class="btn btn-primary" id="modelSaveBtn" onclick="saveModelConfig()">💾 保存配置</button>
+    </div>
+    <div class="content">
+      <div class="editor-panel" id="modelEditorPanel">
+        <!-- LLM 配置 -->
+        <div id="modelSection-llm" class="model-section active">
+          <p style="font-size:13px;color:#888;margin-bottom:24px;">配置视觉大模型用于识别屏损照片的位置和形状。支持 OpenAI、Anthropic Claude、Ollama 本地模型。</p>
+
+          <div class="form-group">
+            <label>启用大模型分析</label>
+            <div style="margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="modelEnabled" /> 启用后拍照分析界面将出现「大模型深度分析」按钮
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>前端分析面板控制</label>
+            <div style="margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="showRagPanel" checked /> 启用 RAG 图像分析面板（向量检索 / 边缘检测）
+              </label>
+            </div>
+            <div style="margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="showAiPanel" checked /> 启用屏损鉴定分析面板（大模型分析按钮）
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>模型提供商</label>
+            <select id="modelProvider" onchange="onProviderChange()">
+              <option value="openai">OpenAI / 兼容接口（GPT-4o, Qwen-VL 等）</option>
+              <option value="anthropic">Anthropic Claude（Claude 3 Opus/Sonnet）</option>
+              <option value="ollama">Ollama 本地模型（llava, minicpm-v 等）</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>模型名称</label>
+            <input type="text" id="modelName" placeholder="如: gpt-4o / claude-3-opus-20240229 / llava:13b" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">
+              常用：<a href="#" onclick="document.getElementById('modelName').value='gpt-4o';return false" style="color:#4f46e5;">gpt-4o</a> |
+              <a href="#" onclick="document.getElementById('modelName').value='claude-3-opus-20240229';return false" style="color:#4f46e5;">claude-3-opus</a> |
+              <a href="#" onclick="document.getElementById('modelName').value='qwen-vl-max';return false" style="color:#4f46e5;">qwen-vl-max</a> |
+              <a href="#" onclick="document.getElementById('modelName').value='llava:13b';return false" style="color:#4f46e5;">llava:13b</a>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>API 地址</label>
+            <input type="text" id="modelEndpoint" placeholder="默认自动填充" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">非必填，留空使用官方默认地址</div>
+          </div>
+
+          <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="modelApiKey" placeholder="sk-xxxxx / your-api-key" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">Ollama 本地模型无需填写</div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Temperature</label>
+              <input type="range" id="modelTemperature" min="0" max="1" step="0.1" value="0.3" onchange="document.getElementById('tempVal').textContent=this.value" />
+              <span id="tempVal" style="font-size:13px;color:#666;">0.3</span>
+            </div>
+            <div class="form-group">
+              <label>最大 Token</label>
+              <input type="number" id="modelMaxTokens" value="1024" style="width:100px;" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>系统提示词</label>
+            <textarea id="modelSystemPrompt" rows="8" style="width:100%;font-family:Consolas,monospace;font-size:12px;padding:10px;border:1px solid #d1d5db;border-radius:8px;resize:vertical;"
+              placeholder="留空使用默认提示词&#10;&#10;你可以自定义分析指令，例如要求大模型更关注受力点、描述裂纹方向、&#10;或要求以某种特定格式输出结果。"></textarea>
+            <div style="font-size:11px;color:#999;margin-top:4px;">自定义提示词后，大模型将按你的指令分析照片。留空则使用系统默认提示词。</div>
+          </div>
+
+          <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:12px;color:#166534;">
+            <strong>提示：</strong>如使用阿里云通义千问（qwen-vl-max），提供商选 OpenAI，API 地址填 <code>https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions</code>
+          </div>
+        </div>
+
+        <!-- 知识库管理 -->
+        <div id="modelSection-kb" class="model-section" style="display:none;">
+          <p style="font-size:13px;color:#888;margin-bottom:24px;">上传文档建立知识库，大模型鉴定时将自动检索相关内容作为参考。</p>
+
+          <div class="form-group">
+            <label>启用知识库检索</label>
+            <div style="margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="kbEnabled" /> 启用后大模型分析时将检索知识库内容作为参考
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-group">
+              <label>检索关键词</label>
+              <input type="text" id="kbSearchQuery" placeholder="屏损故障 鉴定 判定 屏裂 漏液" />
+              <div style="font-size:11px;color:#999;margin-top:4px;">留空则使用默认关键词；多个关键词用空格分隔</div>
+            </div>
+            <div class="form-group">
+              <label>最大检索块数</label>
+              <input type="number" id="kbMaxChunks" value="5" min="1" max="20" style="width:100px;" />
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;padding-top:16px;border-top:1px solid #e8e8e8;">
+            <span style="font-size:14px;font-weight:600;color:#333;">已上传文档</span>
+            <button class="btn btn-sm btn-primary" onclick="openKbUpload()">+ 上传文档</button>
+          </div>
+
+          <div id="kbDocList" style="margin-top:12px;">
+            <div style="text-align:center;color:#aaa;padding:20px;font-size:13px;">加载中...</div>
+          </div>
+          <div id="kbStatsBar" style="margin-top:8px;font-size:12px;color:#888;text-align:right;"></div>
+        </div>
+        <div id="modelSection-vector" class="model-section" style="display:none;">
+          <p style="font-size:13px;color:#888;margin-bottom:24px;">CLIP + Milvus 向量检索服务状态。用于以图搜图匹配相似案例。</p>
+
+          <div style="background:#f8f9ff;border-radius:12px;padding:20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+              <div id="vectorStatusDot" style="width:12px;height:12px;border-radius:6px;background:#d1d5db;"></div>
+              <span style="font-size:15px;font-weight:600;" id="vectorStatusText">检测中...</span>
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.8;" id="vectorStatusDetail">
+              正在检测 CLIP 服务连接状态...
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="checkVectorStatus()" style="margin-top:12px;">🔄 刷新状态</button>
+          </div>
+
+          <div class="form-group">
+            <label>快速操作</label>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+              <button class="btn btn-accent" onclick="rebuildVectorIndex()">🔄 重建全部向量索引</button>
+            </div>
+            <div style="font-size:12px;color:#999;margin-top:8px;">从所有已有案例中提取图片 CLIP 特征并重建 Milvus 向量库。新案例入库时会自动索引，无需手动操作。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库上传弹窗 -->
+<div class="modal-overlay" id="kbUploadModal">
+  <div class="modal" style="width:600px;">
+    <div class="modal-header">
+      <h3>上传知识库文档</h3>
+      <button class="btn btn-sm btn-outline" onclick="closeKbUpload()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="drop-zone" id="kbDropZone" onclick="document.getElementById('kbFileInput').click()">
+        <div class="dz-icon">📄</div>
+        <div class="dz-text">拖拽文档到此处，或 <strong>点击选择文件</strong></div>
+        <div style="font-size:11px;color:#aaa;margin-top:6px;">支持 .txt / .md / .json / .docx 格式</div>
+      </div>
+      <input type="file" id="kbFileInput" accept=".txt,.md,.json,.docx" style="display:none" onchange="handleKbFile(event)" />
+      <label style="margin-top:12px;">或直接粘贴文本内容</label>
+      <textarea id="kbPasteContent" rows="10" style="width:100%;font-family:Consolas,monospace;font-size:12px;padding:10px;border:1px solid #d1d5db;border-radius:8px;resize:vertical;" placeholder="在此粘贴文档内容..."></textarea>
+      <div class="form-group" style="margin-top:8px;">
+        <label>文档名称</label>
+        <input type="text" id="kbFilename" placeholder="例如：屏损鉴定补充手册.txt" style="width:100%;" />
+      </div>
+      <div id="kbUploadStatus" style="margin-top:8px;font-size:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeKbUpload()">取消</button>
+      <button class="btn btn-primary" id="kbUploadBtn" onclick="confirmKbUpload()">上传</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8082/api/admin'
+const KNOWLEDGE_API = 'http://localhost:8083/api/knowledge'
+let currentRuleId = null
+let currentRule = null
+let currentCaseId = null
+
+let imageBatchList = []
+let selectedCaseIds = new Set()
+
+async function api(path, options = {}) {
+  const res = await fetch(`${API}${path}`, { headers: { 'Content-Type': 'application/json' }, ...options })
+  const data = await res.json()
+  if (!data.success && data.error) throw new Error(data.error.message)
+  return data
+}
+
+async function knowledgeApi(path, options = {}) {
+  const res = await fetch(`${KNOWLEDGE_API}${path}`, { headers: { 'Content-Type': 'application/json' }, ...options })
+  const data = await res.json()
+  if (!data.success && data.error) throw new Error(data.error.message)
+  return data
+}
+
+function toast(msg, type = 'success') {
+  const el = document.createElement('div')
+  el.className = `toast toast-${type}`
+  el.textContent = msg
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), 2500)
+}
+
+function nodeTypeLabel(type) {
+  const map = { start: '开始', decision: '决策', outcome: '结论', end: '结束' }
+  return map[type] || type
+}
+
+function esc(s) { return (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+const resultBadgeMap = {
+  product_quality_issue: 'badge-pq',
+  logistics_issue: 'badge-logistics',
+  not_product_quality: 'badge-npq',
+  needs_further_review: 'badge-review',
+}
+
+const resultLabelMap = {
+  product_quality_issue: '产品质量问题',
+  logistics_issue: '物流问题',
+  not_product_quality: '非产品质量问题',
+  needs_further_review: '需进一步鉴定',
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'))
+    btn.classList.add('active')
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active')
+    if (btn.dataset.tab === 'cases') loadCaseList()
+    if (btn.dataset.tab === 'model') loadModelConfigPage()
+  })
+})
+
+// ---- 模型配置 ----
+let modelConfigLoaded = false
+let currentModelSection = 'llm'
+
+function selectModelSection(section) {
+  currentModelSection = section
+  // 更新侧边栏选中状态
+  document.querySelectorAll('#modelNavList .item').forEach(item => item.classList.remove('active'))
+  const items = document.querySelectorAll('#modelNavList .item')
+  const idx = { llm: 0, kb: 1, vector: 2 }[section] || 0
+  if (items[idx]) items[idx].classList.add('active')
+
+  // 切换内容区
+  document.querySelectorAll('#modelEditorPanel .model-section').forEach(s => s.style.display = 'none')
+  const panel = document.getElementById('modelSection-' + section)
+  if (panel) panel.style.display = ''
+
+  // 更新标题和按钮
+  const titles = { llm: '大模型配置', kb: '知识库管理', vector: '向量检索服务' }
+  document.getElementById('modelSectionTitle').textContent = titles[section] || ''
+  document.getElementById('modelSaveBtn').style.display = section === 'vector' ? 'none' : ''
+
+  if (section === 'vector') checkVectorStatus()
+  if (section === 'kb' && !kbDocData.length) loadKbDocuments()
+}
+
+// ===== 标注字段表格编辑器 =====
+let _annoEditFields = []
+let _annoEditOriginal = ''
+
+function openAnnoFieldsEditor() {
+  _annoEditFields = JSON.parse(JSON.stringify(currentAnnoFields))
+  _annoEditOriginal = JSON.stringify(currentAnnoFields)
+  const btn = document.getElementById('annoFieldsSaveBtn')
+  btn.disabled = false
+  btn.textContent = '💾 保存配置'
+  document.getElementById('annoFieldsModal').classList.add('show')
+  renderAnnoFieldsTable()
+}
+
+function closeAnnoFieldsEditor() {
+  document.getElementById('annoFieldsModal').classList.remove('show')
+}
+
+function renderAnnoFieldsTable() {
+  const tbody = document.getElementById('annoFieldsTableBody')
+  if (_annoEditFields.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:#888;">暂无字段，点击 [+ 添加字段] 开始配置</td></tr>'
+    return
+  }
+  tbody.innerHTML = _annoEditFields.map((f, i) => {
+    const typeLabel = { 'tag-grid': '标签按钮', 'result-btns': '结论按钮', 'textarea': '文本域', 'input': '输入框' }[f.type] || f.type
+    const optPreview = f.options && f.options.length
+      ? f.options.map(o => optLabel(o)).join(', ')
+      : ''
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>
+        <input type="text" value="${esc(f.label)}" onchange="updateAnnoField(${i},'label',this.value)" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;" />
+      </td>
+      <td>
+        <input type="text" value="${esc(f.id)}" onchange="updateAnnoField(${i},'id',this.value)" style="width:100%;padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:Consolas,monospace;" />
+      </td>
+      <td>
+        <select onchange="updateAnnoField(${i},'type',this.value);onAnnoTypeChange(${i})" style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;">
+          <option value="tag-grid"${f.type==='tag-grid'?' selected':''}>标签按钮</option>
+          <option value="result-btns"${f.type==='result-btns'?' selected':''}>结论按钮</option>
+          <option value="textarea"${f.type==='textarea'?' selected':''}>文本域</option>
+          <option value="input"${f.type==='input'?' selected':''}>输入框</option>
+        </select>
+      </td>
+      <td>
+        <label style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;cursor:pointer;">
+          <input type="checkbox"${f.required?' checked':''} onchange="updateAnnoField(${i},'required',this.checked)" /> 必填
+        </label>
+      </td>
+      <td style="min-width:200px;">
+        ${['tag-grid','result-btns'].includes(f.type) ? `
+        <div class="af-opt-chips" id="afOpts${i}">
+          ${(f.options||[]).map((o, j) => {
+            const lbl = typeof o === 'string' ? o : (o.label || o.value)
+            return `<span class="af-chip" title="${esc(lbl)}">${esc(lbl)}<span class="af-chip-x" onclick="removeAnnoOpt(${i},${j})">×</span></span>`
+          }).join('')}
+          <span class="af-chip af-chip-add" onclick="addAnnoOpt(${i})">+ 添加</span>
+        </div>
+        ` : '<span style="font-size:11px;color:#999;">—</span>'}
+      </td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm btn-outline" onclick="moveAnnoField(${i},-1)"${i===0?' disabled':''} title="上移">↑</button>
+        <button class="btn btn-sm btn-outline" onclick="moveAnnoField(${i},1)"${i===_annoEditFields.length-1?' disabled':''} title="下移">↓</button>
+        <button class="btn btn-sm btn-outline" onclick="duplicateAnnoField(${i})" title="复制">📋</button>
+        <button class="btn btn-sm" style="color:#dc2626;border:1px solid #dc2626;" onclick="deleteAnnoField(${i})" title="删除">×</button>
+      </td>
+    </tr>`
+  }).join('')
+}
+
+function updateAnnoField(idx, key, val) {
+  _annoEditFields[idx][key] = val
+}
+
+function moveAnnoField(idx, dir) {
+  const newIdx = idx + dir
+  if (newIdx < 0 || newIdx >= _annoEditFields.length) return
+  const tmp = _annoEditFields[idx]
+  _annoEditFields[idx] = _annoEditFields[newIdx]
+  _annoEditFields[newIdx] = tmp
+  renderAnnoFieldsTable()
+}
+
+function duplicateAnnoField(idx) {
+  const copy = JSON.parse(JSON.stringify(_annoEditFields[idx]))
+  copy.id = copy.id + '_copy'
+  _annoEditFields.splice(idx + 1, 0, copy)
+  renderAnnoFieldsTable()
+}
+
+function deleteAnnoField(idx) {
+  if (!confirm(`确定删除字段「${_annoEditFields[idx].label}」吗？`)) return
+  _annoEditFields.splice(idx, 1)
+  renderAnnoFieldsTable()
+}
+
+function addAnnoField() {
+  const newId = 'field_' + Date.now()
+  _annoEditFields.push({
+    id: newId,
+    label: '新字段',
+    type: 'tag-grid',
+    required: false,
+    options: ['选项1']
+  })
+  renderAnnoFieldsTable()
+  // Scroll to bottom
+  setTimeout(() => {
+    const tbody = document.getElementById('annoFieldsTableBody')
+    tbody.lastElementChild && tbody.lastElementChild.scrollIntoView({ behavior: 'smooth' })
+  }, 50)
+}
+
+function onAnnoTypeChange(idx) {
+  const f = _annoEditFields[idx]
+  if (f.type === 'textarea' || f.type === 'input') {
+    delete f.options
+  } else if (!f.options) {
+    f.options = f.type === 'result-btns'
+      ? [{ value: 'val1', label: '选项1', cls: 'pq' }]
+      : ['选项1']
+  }
+  renderAnnoFieldsTable()
+}
+
+function addAnnoOpt(fieldIdx) {
+  const f = _annoEditFields[fieldIdx]
+  if (!f.options) f.options = []
+  const newVal = prompt('请输入选项值（标签）：')
+  if (!newVal || !newVal.trim()) return
+  const trimmed = newVal.trim()
+  if (f.type === 'result-btns') {
+    const clsMap = { pq: '产品质量', logistics: '物流', npq: '非产品质量', review: '进一步鉴定' }
+    let cls = prompt('样式类名 (pq/logistics/npq/review)：', 'pq')
+    if (!cls || !clsMap[cls]) cls = 'pq'
+    f.options.push({ value: trimmed, label: trimmed, cls })
+  } else {
+    // tag-grid: check if simple string or __custom__
+    f.options.push(trimmed)
+  }
+  renderAnnoFieldsTable()
+}
+
+function removeAnnoOpt(fieldIdx, optIdx) {
+  _annoEditFields[fieldIdx].options.splice(optIdx, 1)
+  renderAnnoFieldsTable()
+}
+
+async function saveAnnoFieldsConfig() {
+  // Validate
+  for (let i = 0; i < _annoEditFields.length; i++) {
+    const f = _annoEditFields[i]
+    if (!f.id || !f.label || !f.type) {
+      toast(`第 ${i + 1} 行字段缺少 id/标签/类型`, 'error')
+      return
+    }
+    if (!['tag-grid','result-btns','textarea','input'].includes(f.type)) {
+      toast(`第 ${i + 1} 行字段类型无效`, 'error')
+      return
+    }
+  }
+  const btn = document.getElementById('annoFieldsSaveBtn')
+  btn.disabled = true
+  btn.textContent = '保存中...'
+  try {
+    await knowledgeApi('/model-config', { method: 'POST', body: JSON.stringify({ annoFields: _annoEditFields }) })
+    currentAnnoFields = JSON.parse(JSON.stringify(_annoEditFields))
+    _annoEditOriginal = JSON.stringify(currentAnnoFields)
+    toast('字段配置已保存', 'success')
+    btn.disabled = false
+    btn.textContent = '💾 保存配置'
+    closeAnnoFieldsEditor()
+    // 刷新当前案例编辑器的标签和自定义字段
+    if (currentCaseId) {
+      refreshCaseFormLabels()
+      // 从当前表单重新读取 hardcoded 字段 + 服务器返回的 customFields
+      try {
+        const { data } = await knowledgeApi('/case?id=' + currentCaseId)
+        renderCaseCustomFields(data.customFields || {})
+      } catch (_) {
+        renderCaseCustomFields({})
+      }
+    }
+  } catch (e) {
+    toast('保存失败: ' + e.message, 'error')
+    btn.disabled = false
+    btn.textContent = '💾 保存配置'
+  }
+}
+
+function resetAnnoFieldsToDefault() {
+  if (!confirm('确定恢复为默认字段配置吗？当前修改将丢失。')) return
+  _annoEditFields = JSON.parse(JSON.stringify(DEFAULT_ANNO_FIELDS))
+  renderAnnoFieldsTable()
+}
+
+const DEFAULT_ANNO_FIELDS = [
+  { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
+  { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','__custom__'] },
+  { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'产品质量问题',cls:'pq'},{value:'logistics_issue',label:'物流问题',cls:'logistics'},{value:'not_product_quality',label:'非产品质量问题',cls:'npq'},{value:'needs_further_review',label:'需进一步鉴定',cls:'review'}] },
+  { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
+  { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
+  { id: 'possibleCause', label: '可能原因', type: 'textarea', required: false },
+  { id: 'warrantyTip', label: '鉴定结论', type: 'textarea', required: false },
+  { id: 'title', label: '标题（可选）', type: 'input', required: false },
+]
+var currentAnnoFields = [...DEFAULT_ANNO_FIELDS]
+
+async function checkVectorStatus() {
+  const dot = document.getElementById('vectorStatusDot')
+  const text = document.getElementById('vectorStatusText')
+  const detail = document.getElementById('vectorStatusDetail')
+  dot.style.background = '#f59e0b'
+  text.textContent = '检测中...'
+  detail.textContent = '正在检测 CLIP 向量检索服务连接状态...'
+  try {
+    const resp = await fetch('http://localhost:8083/api/knowledge/vector-stats')
+    const { data } = await resp.json()
+    if (data.clipAvailable) {
+      dot.style.background = '#10b981'
+      text.textContent = '✅ 向量检索服务运行正常'
+      detail.innerHTML = `<strong>引擎：</strong>PIL+Numpy 图像特征 (512维)<br><strong>向量库：</strong>Milvus 已连接<br><strong>说明：</strong>向量检索可用，优先使用 Milvus 进行以图搜图匹配。`
+    } else {
+      dot.style.background = '#f59e0b'
+      text.textContent = '⚠️ 特征提取服务未连接 / Milvus 未就绪'
+      detail.innerHTML = `<strong>引擎：</strong>PIL+Numpy 图像特征 (512维)<br><strong>说明：</strong>请启动 Python 服务（端口 8084）和 Milvus（端口 19530/9091）。<br><code>docker run -d --name milvus-standalone -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest</code>`
+    }
+  } catch {
+    dot.style.background = '#ef4444'
+    text.textContent = '❌ 检测失败'
+    detail.innerHTML = `<strong>错误：</strong>无法连接到 knowledge-ai 服务<br><strong>说明：</strong>请确认 Node.js 服务（端口 8083）是否正常运行。`
+  }
+}
+
+async function loadModelConfigPage() {
+  if (modelConfigLoaded) return
+  try {
+    const { data } = await knowledgeApi('/model-config')
+    modelConfigLoaded = true
+    document.getElementById('modelEnabled').checked = data.enabled
+    document.getElementById('modelProvider').value = data.provider
+    document.getElementById('modelName').value = data.model || ''
+    document.getElementById('modelEndpoint').value = data.endpoint || ''
+    document.getElementById('modelApiKey').value = data.apiKey || ''
+    document.getElementById('modelTemperature').value = data.temperature || 0.3
+    document.getElementById('tempVal').textContent = data.temperature || 0.3
+    document.getElementById('modelMaxTokens').value = data.maxTokens || 1024
+    document.getElementById('modelSystemPrompt').value = data.systemPrompt || ''
+    document.getElementById('kbEnabled').checked = data.kbEnabled || false
+    document.getElementById('kbSearchQuery').value = data.kbSearchQuery || ''
+    document.getElementById('kbMaxChunks').value = data.kbMaxChunks || 5
+    document.getElementById('showRagPanel').checked = data.showRagPanel !== false
+    document.getElementById('showAiPanel').checked = data.showAiPanel !== false
+    if (data.annoFields && Array.isArray(data.annoFields)) {
+      currentAnnoFields = data.annoFields
+    }
+    onProviderChange()
+    loadKbDocuments()
+  } catch (e) {
+    toast('加载模型配置失败: ' + e.message, 'error')
+  }
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('modelProvider').value
+  const ep = document.getElementById('modelEndpoint')
+  if (provider === 'openai' && !ep.value) {
+    ep.placeholder = 'https://api.openai.com/v1/chat/completions'
+  } else if (provider === 'anthropic') {
+    ep.placeholder = 'https://api.anthropic.com/v1/messages'
+  } else if (provider === 'ollama') {
+    ep.placeholder = 'http://localhost:11434/api/chat'
+  }
+}
+
+async function saveModelConfig() {
+  const btn = document.getElementById('modelSaveBtn')
+  btn.textContent = '正在保存...'
+  btn.disabled = true
+  const body = {
+    enabled: document.getElementById('modelEnabled').checked,
+    provider: document.getElementById('modelProvider').value,
+    model: document.getElementById('modelName').value,
+    endpoint: document.getElementById('modelEndpoint').value,
+    apiKey: document.getElementById('modelApiKey').value,
+    temperature: parseFloat(document.getElementById('modelTemperature').value),
+    maxTokens: parseInt(document.getElementById('modelMaxTokens').value),
+    systemPrompt: document.getElementById('modelSystemPrompt').value,
+    kbEnabled: document.getElementById('kbEnabled').checked,
+    kbSearchQuery: document.getElementById('kbSearchQuery').value,
+    kbMaxChunks: parseInt(document.getElementById('kbMaxChunks').value) || 5,
+    showRagPanel: document.getElementById('showRagPanel').checked,
+    showAiPanel: document.getElementById('showAiPanel').checked,
+  }
+  try {
+    await knowledgeApi('/model-config', { method: 'POST', body: JSON.stringify(body) })
+    btn.textContent = '配置已生效'
+    btn.className = 'btn btn-success'
+    setTimeout(() => {
+      btn.textContent = '确认并应用模型配置'
+      btn.className = 'btn btn-primary'
+      btn.disabled = false
+    }, 2000)
+  } catch (e) {
+    btn.textContent = '保存失败，点击重试'
+    btn.className = 'btn btn-warn'
+    btn.disabled = false
+  }
+}
+
+// ===== 知识库管理 =====
+let kbDocData = []
+
+async function loadKbDocuments() {
+  try {
+    const { data } = await knowledgeApi('/kb/documents')
+    kbDocData = data
+    const { data: stats } = await knowledgeApi('/kb/stats')
+    document.getElementById('kbStatsBar').textContent =
+      stats.documents > 0 ? `${stats.documents} 个文档 · ${stats.chunks} 个分块` : '暂无文档'
+    renderKbDocList()
+  } catch (e) {
+    document.getElementById('kbDocList').innerHTML =
+      '<div style="text-align:center;color:#aaa;padding:20px;font-size:13px;">加载失败</div>'
+  }
+}
+
+function renderKbDocList() {
+  const container = document.getElementById('kbDocList')
+  if (kbDocData.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:#aaa;padding:20px;font-size:13px;">暂无文档，点击「+ 上传文档」开始建立知识库</div>'
+    return
+  }
+  container.innerHTML = kbDocData.map(d => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:6px;background:#f8f9ff;border-radius:8px;border:1px solid #e8e8e8;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(d.name)}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">${d.chunks || d.chunkCount} 分块 · ${(d.size / 1024).toFixed(1)} KB${d.imageCount > 0 ? ' · ' + d.imageCount + ' 张图片已解析' : ''} · ${new Date(d.createdAt).toLocaleString('zh-CN')}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:12px;">
+        <button class="btn btn-sm btn-outline" onclick="previewKbDoc('${d.id}')">预览</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteKbDoc('${d.id}')">删除</button>
+      </div>
+    </div>
+  `).join('')
+}
+
+function openKbUpload() {
+  document.getElementById('kbUploadModal').classList.add('show')
+  document.getElementById('kbFileInput').value = ''
+  document.getElementById('kbPasteContent').value = ''
+  document.getElementById('kbFilename').value = ''
+  document.getElementById('kbUploadStatus').innerHTML = ''
+}
+
+function closeKbUpload() {
+  document.getElementById('kbUploadModal').classList.remove('show')
+}
+
+function handleKbFile(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  document.getElementById('kbFilename').value = file.name
+  document.getElementById('kbUploadStatus').innerHTML =
+    `<span style="color:#4f46e5;">已选择文件: ${esc(file.name)} (${(file.size / 1024).toFixed(1)} KB)</span>`
+  event.target.value = ''
+}
+
+async function confirmKbUpload() {
+  const filename = document.getElementById('kbFilename').value.trim()
+  const pasteContent = document.getElementById('kbPasteContent').value.trim()
+
+  let content = ''
+  let finalName = filename
+
+  // 优先使用粘贴内容
+  if (pasteContent) {
+    content = pasteContent
+    if (!finalName) finalName = '手动粘贴文档.txt'
+  } else {
+    // 读取文件
+    const fileInput = document.getElementById('kbFileInput')
+    const file = document.getElementById('kbFileInput').files[0]
+    if (!file && !pasteContent) {
+      document.getElementById('kbUploadStatus').innerHTML = '<span style="color:#dc2626;">请选择文件或粘贴文本内容</span>'
+      return
+    }
+    if (file) {
+      finalName = filename || file.name
+      // 读取文件
+      if (/\.docx$/i.test(finalName)) {
+        // .docx 需要以 base64 读取
+        content = await new Promise(resolve => {
+          const reader = new FileReader()
+          reader.onload = () => {
+            const result = reader.result
+            if (typeof result === 'string') {
+              // data:application/...;base64,xxxx
+              resolve(result.includes(',') ? result.split(',')[1] : result)
+            } else {
+              resolve('')
+            }
+          }
+          reader.onerror = () => resolve('')
+          reader.readAsDataURL(file)
+        })
+      } else {
+        content = await new Promise(resolve => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result || '')
+          reader.onerror = () => resolve('')
+          reader.readAsText(file)
+        })
+      }
+    }
+  }
+
+  if (!content) {
+    document.getElementById('kbUploadStatus').innerHTML = '<span style="color:#dc2626;">文件内容为空或读取失败</span>'
+    return
+  }
+
+  if (!finalName) finalName = '未命名文档.txt'
+
+  const btn = document.getElementById('kbUploadBtn')
+  btn.disabled = true
+  btn.textContent = '上传中...'
+  document.getElementById('kbUploadStatus').innerHTML = '<span style="color:#4f46e5;">正在解析并上传' + (/\.docx$/i.test(finalName) ? '（含图片识别，请稍候）' : '') + '...</span>'
+
+  try {
+    const { data } = await knowledgeApi('/kb/upload', {
+      method: 'POST',
+      body: JSON.stringify({ filename: finalName, content }),
+    })
+    toast(`文档 "${data.name}" 上传成功，共 ${data.chunkCount} 个分块${data.imageCount > 0 ? '，' + data.imageCount + ' 张图片已解析' : ''}`)
+    closeKbUpload()
+    await loadKbDocuments()
+  } catch (e) {
+    document.getElementById('kbUploadStatus').innerHTML = `<span style="color:#dc2626;">上传失败: ${esc(e.message)}</span>`
+    btn.disabled = false
+    btn.textContent = '上传'
+  }
+}
+
+async function previewKbDoc(id) {
+  try {
+    const { data } = await knowledgeApi('/kb/document?id=' + id)
+    const text = data.chunks.map(c => c.text).join('\n\n---\n\n')
+    const w = window.open('', '_blank', 'width=700,height=500')
+    w.document.write(`<pre style="white-space:pre-wrap;font-family:Consolas,monospace;font-size:13px;padding:20px;line-height:1.6;">${esc(text)}</pre>`)
+  } catch (e) {
+    toast('预览失败: ' + e.message, 'error')
+  }
+}
+
+async function deleteKbDoc(id) {
+  if (!confirm('确认删除此文档？删除后大模型将无法检索到此文档内容。')) return
+  try {
+    await knowledgeApi('/kb/document?id=' + id, { method: 'DELETE' })
+    toast('文档已删除')
+    await loadKbDocuments()
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error')
+  }
+}
+
+// KB 拖拽支持
+const kbDropZone = document.getElementById('kbDropZone')
+if (kbDropZone) {
+  kbDropZone.addEventListener('dragover', e => { e.preventDefault(); kbDropZone.classList.add('drag-over') })
+  kbDropZone.addEventListener('dragleave', () => kbDropZone.classList.remove('drag-over'))
+  kbDropZone.addEventListener('drop', e => {
+    e.preventDefault()
+    kbDropZone.classList.remove('drag-over')
+    const file = e.dataTransfer.files[0]
+    if (file && /\.(txt|md|json|docx)$/i.test(file.name)) {
+      document.getElementById('kbFilename').value = file.name
+      document.getElementById('kbUploadStatus').innerHTML =
+        `<span style="color:#4f46e5;">已拖入文件: ${esc(file.name)} (${(file.size / 1024).toFixed(1)} KB)</span>`
+      // Store file reference for reading later
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      document.getElementById('kbFileInput').files = dt.files
+    }
+  })
+}
+
+document.querySelectorAll('.checkbox-group label.cb').forEach(lb => {
+  lb.addEventListener('click', () => {
+    const cb = lb.querySelector('input')
+    cb.checked = !cb.checked
+    lb.classList.toggle('checked', cb.checked)
+  })
+})
+
+const imgDropZone2 = document.getElementById('imgDropZone')
+if (imgDropZone2) {
+  imgDropZone2.addEventListener('dragover', e => { e.preventDefault(); imgDropZone2.classList.add('drag-over') })
+  imgDropZone2.addEventListener('dragleave', () => imgDropZone2.classList.remove('drag-over'))
+  imgDropZone2.addEventListener('drop', e => {
+    e.preventDefault()
+    imgDropZone2.classList.remove('drag-over')
+    if (e.dataTransfer.files.length > 0) addImages(e.dataTransfer.files)
+  })
+}
+
+async function loadRuleList() {
+  const { data } = await api('/rules')
+  const list = document.getElementById('ruleList')
+  list.innerHTML = data.map(r => `
+    <div class="item ${r.id === currentRuleId ? 'active' : ''}" onclick="selectRule('${r.id}')">
+      <div class="name">${esc(r.ruleSetName)}</div>
+      <div class="meta">
+        <span>v${r.version}</span>
+        <span class="badge ${r.status === 'published' ? 'badge-published' : 'badge-draft'}">${r.status === 'published' ? '已发布' : '草稿'}</span>
+      </div>
+    </div>
+  `).join('') || '<div class="empty-state"><span class="icon">📭</span><p>暂无规则</p></div>'
+
+  const stats = document.getElementById('ruleStats')
+  const published = data.filter(r => r.status === 'published').length
+  stats.textContent = `共 ${data.length} 条规则 · ${published} 已发布`
+}
+
+async function selectRule(id) {
+  currentRuleId = id
+  await loadRuleList()
+  const { data } = await api(`/rules/detail?id=${id}`)
+  currentRule = data
+  document.getElementById('ruleName').value = data.ruleSetName || ''
+  document.getElementById('ruleVersion').value = data.version || ''
+  document.getElementById('ruleDesc').value = data.description || ''
+  document.getElementById('ruleNodes').value = JSON.stringify(data.nodes || [], null, 2)
+  document.getElementById('editorTitle').textContent = `编辑: ${data.ruleSetName} (${data.status === 'published' ? '已发布' : '草稿'})`
+  renderTree(data.nodes || [])
+}
+
+function renderTree(nodes) {
+  const container = document.getElementById('treePreview')
+  if (!nodes.length) {
+    container.innerHTML = '<div class="empty-state"><span class="icon">🌲</span><p>暂无节点</p></div>'
+    return
+  }
+  container.innerHTML = nodes.map(n => {
+    let extra = ''
+    if (n.type === 'decision' && n.branches) {
+      extra = `<div class="branches">${n.branches.map(b => `<span>→ ${esc(b.answer)}</span>`).join('')}</div>`
+    }
+    if (n.type === 'outcome') {
+      extra = `<div style="font-weight:700;color:#059669;margin-top:4px;">结论: ${esc(n.result)}</div>`
+    }
+    return `
+      <div class="tree-node ${n.type}">
+        <div class="type-label">${nodeTypeLabel(n.type)} · ${n.id}</div>
+        <div class="node-content">${esc(n.description || n.question || '')}</div>
+        ${extra}
+      </div>
+    `
+  }).join('')
+}
+
+async function saveRule() {
+  if (!currentRuleId) return toast('请先选择一个规则', 'error')
+  try {
+    const nodes = JSON.parse(document.getElementById('ruleNodes').value)
+    await api('/rules/update', {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: currentRuleId,
+        ruleSetName: document.getElementById('ruleName').value,
+        description: document.getElementById('ruleDesc').value,
+        nodes,
+      }),
+    })
+    toast('保存成功')
+    await selectRule(currentRuleId)
+  } catch (e) {
+    toast(e.message.includes('JSON') ? 'JSON 格式错误，请检查！' : e.message, 'error')
+  }
+}
+
+async function publishRule() {
+  if (!currentRuleId) return toast('请先选择一个规则', 'error')
+  if (!confirm('确认发布此规则？发布后决策引擎将使用此版本进行判定。')) return
+  try {
+    await api('/rules/publish', { method: 'POST', body: JSON.stringify({ id: currentRuleId }) })
+    toast('规则已发布！决策引擎下次请求时将使用新规则。')
+    await loadRuleList()
+    await selectRule(currentRuleId)
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
+async function createRule() {
+  const name = prompt('请输入规则集名称：', '新规则集')
+  if (!name) return
+  try {
+    const { data } = await api('/rules', {
+      method: 'POST',
+      body: JSON.stringify({ ruleSetName: name, description: '', nodes: [] }),
+    })
+    toast('创建成功')
+    await loadRuleList()
+    selectRule(data.id)
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
+async function deleteRule() {
+  if (!currentRuleId) return toast('请先选择一个规则', 'error')
+  if (!confirm('确认删除此规则？删除后不可恢复。')) return
+  try {
+    await api(`/rules/delete?id=${currentRuleId}`, { method: 'DELETE' })
+    currentRuleId = null
+    currentRule = null
+    document.getElementById('ruleName').value = ''
+    document.getElementById('ruleVersion').value = ''
+    document.getElementById('ruleDesc').value = ''
+    document.getElementById('ruleNodes').value = ''
+    document.getElementById('editorTitle').textContent = '选择一个规则'
+    document.getElementById('treePreview').innerHTML = ''
+    toast('已删除')
+    await loadRuleList()
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
+function validateRule() {
+  try {
+    const nodes = JSON.parse(document.getElementById('ruleNodes').value)
+    const types = nodes.filter(n => n.type)
+    toast(`JSON 校验通过！共 ${nodes.length} 个节点 (${types.length} 个有类型定义)`)
+  } catch (e) {
+    toast('JSON 格式错误: ' + e.message, 'error')
+  }
+}
+
+async function loadCaseList() {
+  try {
+    const keyword = document.getElementById('caseSearch').value
+    const result = document.getElementById('caseFilter').value
+    const params = new URLSearchParams()
+    if (keyword) params.set('keyword', keyword)
+    if (result) params.set('result', result)
+    const { data } = await knowledgeApi('/cases?' + params.toString())
+    const list = document.getElementById('caseList')
+    const validIds = new Set(data.map(c => c.id))
+    selectedCaseIds = new Set([...selectedCaseIds].filter(id => validIds.has(id)))
+    list.innerHTML = data.map(c => `
+      <div class="item ${c.id === currentCaseId ? 'active' : ''} ${selectedCaseIds.has(c.id) ? 'selected' : ''}">
+        <div class="item-check" onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked)" title="选中此案例">
+          <input type="checkbox" ${selectedCaseIds.has(c.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked)" />
+        </div>
+        <div class="item-body" onclick="selectCase('${c.id}')">
+          <div class="name">${c.image ? '📷 ' : ''}${esc(c.title)}</div>
+          <div class="meta">
+            <span>${esc(c.deviceModel)}</span>
+            <span class="badge ${resultBadgeMap[c.result] || ''}">${esc(c.resultLabel || resultLabelMap[c.result] || c.result)}</span>
+          </div>
+        </div>
+      </div>
+    `).join('') || '<div class="empty-state"><span class="icon">📭</span><p>暂无案例</p></div>'
+
+    updateBatchUI(data.length)
+  } catch (e) {
+    toast('加载案例列表失败: ' + e.message, 'error')
+  }
+}
+
+function selectCase(id) {
+  currentCaseId = id
+  loadCaseList().then(async () => {
+    try {
+      const { data } = await knowledgeApi('/case?id=' + id)
+      fillCaseForm(data)
+      document.getElementById('caseEditorTitle').textContent = '编辑: ' + (data.title || data.crackLocation + '-' + data.crackShape)
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  })
+}
+
+function refreshCaseFormLabels() {
+  // 更新所有硬编码字段的标签 + select 选项
+  document.querySelectorAll('.case-field-label').forEach(lbl => {
+    const fieldId = lbl.dataset.field
+    const cfg = currentAnnoFields.find(f => f.id === fieldId)
+    if (cfg) {
+      lbl.textContent = cfg.label + (cfg.required ? ' *' : '')
+      // 更新对应 select 的选项（如果有）
+      if (cfg.type === 'tag-grid' && cfg.options) {
+        const selectEl = document.querySelector(`[id^="case${fieldId.charAt(0).toUpperCase()+fieldId.slice(1)}"]`)
+        if (selectEl && selectEl.tagName === 'SELECT') {
+          // For custom selects like crackLocation/crackShape, don't replace entirely
+          // Just update the non-custom option labels
+          updateSelectOptions(selectEl, cfg.options)
+        }
+      }
+    }
+  })
+}
+
+function updateSelectOptions(selectEl, opts) {
+  // Update option labels for existing options, keep __custom__ and empty
+  const existingOpt = selectEl.querySelector('option[value="__custom__"]')
+  const emptyOpt = selectEl.querySelector('option[value=""]')
+  // For core fields, don't replace the entire list to avoid breaking exact option references
+  // Instead just ensure the known option labels match
+  // This is a best-effort sync for the standard options
+}
+
+function renderCaseCustomFields(customFieldsObj) {
+  customFieldsObj = customFieldsObj || {}
+  const customFields = currentAnnoFields.filter(f => !CORE_FIELD_IDS.has(f.id))
+  const container = document.getElementById('caseCustomFields')
+  const wrapper = document.getElementById('caseCustomFieldsContainer')
+
+  if (customFields.length === 0) {
+    wrapper.style.display = 'none'
+    container.innerHTML = ''
+    return
+  }
+  wrapper.style.display = ''
+  container.innerHTML = customFields.map(f => {
+    const currentVal = customFieldsObj[f.id] || ''
+    if (f.type === 'textarea') {
+      return `<div class="form-group">
+        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
+        <textarea id="caseCustom_${f.id}" placeholder="输入..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;">${esc(currentVal)}</textarea>
+      </div>`
+    } else if (f.type === 'input') {
+      return `<div class="form-group">
+        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
+        <input type="text" id="caseCustom_${f.id}" value="${esc(currentVal)}" placeholder="输入..." style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />
+      </div>`
+    } else if (f.type === 'tag-grid' || f.type === 'result-btns') {
+      const opts = f.options || []
+      const hasCustom = hasCustomOption(f)
+      const known = opts.map(o => typeof o === 'string' ? o : o.value)
+      let isCustomVal = hasCustom && currentVal && !known.includes(currentVal)
+      let html = `<div class="form-group">
+        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
+        <select id="caseCustom_${f.id}" onchange="onCaseCustomSelectChange('${f.id}','${hasCustom}')" style="width:100%;">
+          <option value="">-- 非必填 --</option>`
+      opts.forEach(o => {
+        const ov = typeof o === 'string' ? o : o.value
+        const ol = typeof o === 'string' ? (o === '__custom__' ? '✏️ 自定义' : o) : o.label
+        const sel = ov === currentVal ? ' selected' : ''
+        html += `<option value="${esc(ov)}"${sel}>${esc(ol)}</option>`
+      })
+      html += `</select>`
+      if (hasCustom) {
+        html += `<input type="text" id="caseCustom_${f.id}_custom" placeholder="自定义输入..." value="${esc(isCustomVal ? currentVal : '')}" style="margin-top:4px;width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;${isCustomVal ? '' : 'display:none;'}" />`
+      }
+      html += `</div>`
+      return html
+    }
+    return ''
+  }).join('')
+}
+
+function onCaseCustomSelectChange(fieldId, hasCustom) {
+  if (hasCustom) {
+    const customInput = document.getElementById('caseCustom_' + fieldId + '_custom')
+    const sel = document.getElementById('caseCustom_' + fieldId)
+    if (sel.value === '__custom__') {
+      customInput.style.display = ''
+      customInput.focus()
+    } else {
+      customInput.style.display = 'none'
+      customInput.value = ''
+    }
+  }
+}
+
+function readCaseCustomFields() {
+  const customFields = {}
+  const customFieldsArr = currentAnnoFields.filter(f => !CORE_FIELD_IDS.has(f.id))
+  customFieldsArr.forEach(f => {
+    let val = ''
+    if (f.type === 'tag-grid' || f.type === 'result-btns') {
+      const sel = document.getElementById('caseCustom_' + f.id)
+      if (sel) {
+        if (sel.value === '__custom__') {
+          const ci = document.getElementById('caseCustom_' + f.id + '_custom')
+          val = ci ? ci.value.trim() : ''
+        } else {
+          val = sel.value
+        }
+      }
+    } else {
+      const el = document.getElementById('caseCustom_' + f.id)
+      if (el) val = el.value.trim()
+    }
+    if (val) customFields[f.id] = val
+  })
+  return customFields
+}
+
+function fillCaseForm(c) {
+  // 刷新标签
+  refreshCaseFormLabels()
+  // 渲染自定义字段
+  renderCaseCustomFields(c.customFields || {})
+  const locSel = document.getElementById('caseCrackLocation')
+  const locCustom = document.getElementById('caseCrackLocationCustom')
+  const KNOWN_LOCS = ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域']
+  if (c.crackLocation && !KNOWN_LOCS.includes(c.crackLocation)) {
+    locSel.value = '__custom__'
+    locCustom.style.display = ''
+    locCustom.value = c.crackLocation
+  } else {
+    locSel.value = c.crackLocation || ''
+    locCustom.style.display = 'none'
+    locCustom.value = ''
+  }
+  // 屏损形态
+  const shapeSel = document.getElementById('caseCrackShape')
+  const shapeCustom = document.getElementById('caseCrackShapeCustom')
+  const KNOWN_SHAPES = ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂']
+  if (c.crackShape && !KNOWN_SHAPES.includes(c.crackShape)) {
+    shapeSel.value = '__custom__'
+    shapeCustom.style.display = ''
+    shapeCustom.value = c.crackShape
+  } else {
+    shapeSel.value = c.crackShape || ''
+    shapeCustom.style.display = 'none'
+    shapeCustom.value = ''
+  }
+  document.getElementById('caseInstallStatus').value = c.installStatus || ''
+  document.getElementById('casePackageDamage').value = c.packageDamage || ''
+  document.getElementById('caseResult').value = c.result || ''
+  document.getElementById('casePossibleCause').value = c.possibleCause || ''
+  document.getElementById('caseWarrantyTip').value = c.warrantyTip || ''
+  const preview = document.getElementById('caseImagePreview')
+  if (c.image) {
+    preview.style.display = 'block'
+    document.getElementById('caseImageImg').src = `http://localhost:8083/api/knowledge/images?name=${encodeURIComponent(c.image)}`
+  } else {
+    preview.style.display = 'none'
+  }
+}
+
+function resetCaseForm() {
+  document.getElementById('caseCrackLocation').value = ''
+  document.getElementById('caseCrackLocationCustom').style.display = 'none'
+  document.getElementById('caseCrackLocationCustom').value = ''
+  document.getElementById('caseCrackShape').value = ''
+  document.getElementById('caseCrackShapeCustom').style.display = 'none'
+  document.getElementById('caseCrackShapeCustom').value = ''
+  document.getElementById('caseInstallStatus').value = ''
+  document.getElementById('casePackageDamage').value = ''
+  document.getElementById('caseResult').value = ''
+  document.getElementById('casePossibleCause').value = ''
+  document.getElementById('caseWarrantyTip').value = ''
+  document.getElementById('caseImagePreview').style.display = 'none'
+  document.getElementById('caseEditorTitle').textContent = '新建案例'
+  document.getElementById('caseCustomFields').innerHTML = ''
+  document.getElementById('caseCustomFieldsContainer').style.display = 'none'
+  refreshCaseFormLabels()
+  renderCaseCustomFields({})
+}
+
+// select change handlers
+function onLocationSelectChange() {
+  const sel = document.getElementById('caseCrackLocation')
+  const custom = document.getElementById('caseCrackLocationCustom')
+  custom.style.display = sel.value === '__custom__' ? '' : 'none'
+  if (sel.value !== '__custom__') custom.value = ''
+}
+function onShapeSelectChange() {
+  const sel = document.getElementById('caseCrackShape')
+  const custom = document.getElementById('caseCrackShapeCustom')
+  custom.style.display = sel.value === '__custom__' ? '' : 'none'
+  if (sel.value !== '__custom__') custom.value = ''
+}
+
+function readCaseForm() {
+  const locSel = document.getElementById('caseCrackLocation')
+  const locCustom = document.getElementById('caseCrackLocationCustom')
+  const crackLocation = locSel.value === '__custom__' ? (locCustom.value || '').trim() : locSel.value
+
+  const shapeSel = document.getElementById('caseCrackShape')
+  const shapeCustom = document.getElementById('caseCrackShapeCustom')
+  const crackShape = shapeSel.value === '__custom__' ? (shapeCustom.value || '').trim() : shapeSel.value
+
+  return {
+    crackLocation,
+    crackShape,
+    installStatus: document.getElementById('caseInstallStatus').value,
+    packageDamage: document.getElementById('casePackageDamage').value,
+    result: document.getElementById('caseResult').value,
+    possibleCause: document.getElementById('casePossibleCause').value.trim(),
+    warrantyTip: document.getElementById('caseWarrantyTip').value.trim(),
+    customFields: readCaseCustomFields(),
+  }
+}
+
+async function saveCase() {
+  const data = readCaseForm()
+  if (!data.crackLocation) return toast('请选择或输入屏损位置', 'error')
+  if (!data.crackShape) return toast('请选择或输入屏损形态', 'error')
+
+  try {
+    if (currentCaseId) {
+      const { data: updated } = await knowledgeApi('/cases', {
+        method: 'PUT',
+        body: JSON.stringify({ id: currentCaseId, ...data }),
+      })
+      toast('案例已更新')
+      await loadCaseList()
+      selectCase(updated.id)
+    } else {
+      const { data: created } = await knowledgeApi('/cases', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+      toast('案例已创建')
+      currentCaseId = created.id
+      await loadCaseList()
+      document.getElementById('caseEditorTitle').textContent = `编辑案例: ${created.title}`
+
+      // 自动提取特征并加入 KNN 训练集
+      if (adminImageData) {
+        submitTraining([{ data: adminImageData, filename: 'case-image' }], data.crackLocation, data.crackShape, created.id)
+      }
+    }
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
+async function deleteCase() {
+  if (!currentCaseId) return toast('请先选择一个案例', 'error')
+  if (!confirm('确认删除此案例？删除后不可恢复。')) return
+  try {
+    await knowledgeApi(`/cases?id=${currentCaseId}`, { method: 'DELETE' })
+    currentCaseId = null
+    resetCaseForm()
+    document.getElementById('caseEditorTitle').textContent = '新建案例'
+    toast('案例已删除')
+    await loadCaseList()
+  } catch (e) {
+    toast(e.message, 'error')
+  }
+}
+
+function toggleCaseSelection(id, checked) {
+  if (checked) {
+    selectedCaseIds.add(id)
+  } else {
+    selectedCaseIds.delete(id)
+  }
+  const item = document.querySelector(`#caseList .item-body[onclick*="'${id}'"]`)?.closest('.item')
+  if (item) {
+    if (checked) item.classList.add('selected')
+    else item.classList.remove('selected')
+  }
+  updateBatchUI()
+}
+
+function toggleSelectAll(checked) {
+  const checkboxes = document.querySelectorAll('#caseList .item-check input[type="checkbox"]')
+  checkboxes.forEach(cb => {
+    cb.checked = checked
+    const item = cb.closest('.item')
+    const id = item.querySelector('.item-body').getAttribute('onclick').match(/'([^']+)'/)[1]
+    if (checked) {
+      selectedCaseIds.add(id)
+      item.classList.add('selected')
+    } else {
+      selectedCaseIds.delete(id)
+      item.classList.remove('selected')
+    }
+  })
+  updateBatchUI()
+}
+
+function updateBatchUI(total) {
+  const stats = document.getElementById('caseStats')
+  const batchActions = document.getElementById('batchActions')
+  const selectAllCb = document.getElementById('selectAllCheckbox')
+  const itemCount = total != null ? total : document.querySelectorAll('#caseList .item').length
+
+  const selCount = selectedCaseIds.size
+  if (selCount > 0) {
+    stats.textContent = `共 ${itemCount} 条，已选 ${selCount} 条`
+    batchActions.style.display = 'flex'
+  } else {
+    stats.textContent = `共 ${itemCount} 条案例`
+    batchActions.style.display = 'none'
+    if (selectAllCb) selectAllCb.checked = false
+  }
+}
+
+async function batchDeleteCases() {
+  if (selectedCaseIds.size === 0) return toast('请先勾选要删除的案例', 'error')
+  if (!confirm(`确认删除选中的 ${selectedCaseIds.size} 条案例？删除后不可恢复。`)) return
+
+  try {
+    const { data } = await knowledgeApi('/cases/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids: [...selectedCaseIds] }),
+    })
+    selectedCaseIds.clear()
+    currentCaseId = null
+    resetCaseForm()
+    document.getElementById('caseEditorTitle').textContent = '新建案例'
+    toast(`成功删除 ${data.deleted} 条案例`)
+    await loadCaseList()
+  } catch (e) {
+    toast('批量删除失败: ' + e.message, 'error')
+  }
+}
+
+function newCase() {
+  currentCaseId = null
+  resetCaseForm()
+  document.getElementById('caseEditorTitle').textContent = '新建案例'
+}
+
+function openImageBatchImport() {
+  imageBatchList = []
+  document.getElementById('imageBatchModal').classList.add('show')
+  document.getElementById('confirmImgImportBtn').disabled = true
+  document.getElementById('imgImportPreview').innerHTML = ''
+  document.getElementById('openAnnoBtn').disabled = true
+  renderImageGrid()
+}
+
+function closeImageBatchImport() {
+  document.getElementById('imageBatchModal').classList.remove('show')
+}
+
+function handleImgFiles(event) {
+  if (event.target.files.length > 0) addImages(event.target.files)
+  event.target.value = ''
+}
+
+function addImages(files) {
+  let added = 0
+  let skipped = 0
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) { skipped++; continue }
+    if (imageBatchList.some(i => i.filename === file.name)) { skipped++; continue }
+    imageBatchList.push({
+      filename: file.name, file, title: '',
+      crackLocation: '', crackShape: '', result: '',
+      installStatus: '', packageDamage: '',
+      possibleCause: '', warrantyTip: '',
+    })
+    added++
+  }
+  if (added > 0) toast(`已添加 ${added} 张图片`, 'info')
+  if (skipped > 0) toast(`${skipped} 张被跳过（重复或非图片）`, 'error')
+  renderImageGrid()
+  updateImgConfirmBtn()
+  document.getElementById('openAnnoBtn').disabled = imageBatchList.length === 0
+}
+
+function renderImageGrid() {
+  const grid = document.getElementById('imgGrid')
+  const count = document.getElementById('imgCount')
+  const clearBtn = document.getElementById('clearImgBtn')
+
+  if (imageBatchList.length === 0) {
+    grid.innerHTML = '<div class="img-grid-empty">拖拽图片或点击上方区域开始添加</div>'
+    count.textContent = '尚未添加图片'
+    clearBtn.disabled = true
+    return
+  }
+
+  count.textContent = `已添加 ${imageBatchList.length} 张图片`
+  clearBtn.disabled = false
+
+  grid.innerHTML = imageBatchList.map((img, idx) => {
+    const url = URL.createObjectURL(img.file)
+    const hasAnno = img.crackLocation && img.crackShape
+    const hasPartial = img.crackLocation || img.crackShape
+    const statusBadge = hasAnno
+      ? '<span style="display:inline-block;background:#10b981;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;">已标注</span>'
+      : (hasPartial ? '<span style="display:inline-block;background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;border-radius:3px;">待完善</span>' : '')
+    return `
+      <div class="img-card" id="imgCard${idx}">
+        <img src="${url}" alt="${esc(img.filename)}" onclick="openLightbox('${url}')" title="点击查看原图" style="cursor:pointer" />
+        <div class="img-info">
+          <div class="fname" title="${esc(img.filename)}">${esc(img.filename)}</div>
+          ${statusBadge ? `<div style="margin-top:2px;">${statusBadge}</div>` : ''}
+          ${hasAnno ? `<div style="font-size:10px;color:#888;margin-top:1px;">${esc(img.crackLocation)} / ${esc(img.crackShape)}</div>` : ''}
+          <input type="text" placeholder="标题(可选)" value="${esc(img.title)}" onchange="updateImageTitle(${idx}, this.value)" />
+          <button class="btn btn-sm btn-danger" style="margin-top:3px;width:100%;padding:2px 4px;font-size:10px;" onclick="removeImage(${idx})">移除</button>
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+function updateImageTitle(idx, val) {
+  if (imageBatchList[idx]) imageBatchList[idx].title = val
+  updateImgConfirmBtn()
+}
+
+function removeImage(idx) {
+  imageBatchList.splice(idx, 1)
+  renderImageGrid()
+  updateImgConfirmBtn()
+  document.getElementById('openAnnoBtn').disabled = imageBatchList.length === 0
+}
+
+function clearImageList() {
+  imageBatchList.forEach(img => { if (img._url) URL.revokeObjectURL(img._url) })
+  imageBatchList = []
+  renderImageGrid()
+  updateImgConfirmBtn()
+  document.getElementById('openAnnoBtn').disabled = true
+}
+
+function updateImgConfirmBtn() {
+  const btn = document.getElementById('confirmImgImportBtn')
+  btn.disabled = imageBatchList.length === 0
+  btn.textContent = imageBatchList.length > 0 ? `确认入库 (${imageBatchList.length}张)` : '确认入库'
+}
+
+// ===== 快速标注模式 =====
+let annoCurrentIdx = 0
+
+const CORE_FIELD_IDS = new Set(['crackLocation','crackShape','result','installStatus','packageDamage','possibleCause','warrantyTip','title'])
+
+function openQuickAnnotation(startIdx) {
+  if (imageBatchList.length === 0) return toast('请先添加图片', 'error')
+  // 清除侧边栏缓存，强制用最新配置重新渲染
+  imageBatchList.forEach(img => { delete img._annoSidebarRendered })
+  annoCurrentIdx = startIdx || 0
+  document.getElementById('annoOverlay').classList.add('show')
+  renderAnnotation()
+}
+
+function closeAnnotation() {
+  document.getElementById('annoOverlay').classList.remove('show')
+  document.removeEventListener('keydown', onAnnoKeydown)
+  renderImageGrid()
+  updateImgConfirmBtn()
+}
+
+function finishAnnotation() {
+  const total = imageBatchList.length
+  const done = imageBatchList.filter(i => getAnnoVal(i, 'crackLocation') && getAnnoVal(i, 'crackShape')).length
+  if (done < total) {
+    if (!confirm(`还有 ${total - done} 张图片未完成标注（位置+形状），确定要退出吗？\n\n已标注: ${done} / ${total}`)) return
+  }
+  closeAnnotation()
+}
+
+// 辅助：从图片项读取字段值（内置字段在顶层，自定义字段在 customFields 里）
+function getAnnoVal(img, fieldId) {
+  return CORE_FIELD_IDS.has(fieldId) ? img[fieldId] : ((img.customFields || {})[fieldId])
+}
+function setAnnoVal(img, fieldId, val) {
+  if (CORE_FIELD_IDS.has(fieldId)) img[fieldId] = val
+  else {
+    if (!img.customFields) img.customFields = {}
+    img.customFields[fieldId] = val
+  }
+}
+
+// 动态渲染侧边栏（标注开始时调用一次）
+function renderAnnoSidebar() {
+  const container = document.getElementById('annoSidebar')
+  const fields = currentAnnoFields
+  let html = ''
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i]
+    const uid = 'anno_' + f.id
+    html += `<div class="field-group">
+        <div class="field-label">${esc(f.label)}${f.required ? ' <span class="required">*</span>' : ''}</div>`
+    if (f.type === 'tag-grid') {
+      html += `<div class="tag-grid" id="anno_grid_${f.id}"></div>`
+      if (hasCustomOption(f)) {
+        html += `<input type="text" class="title-input" id="anno_cust_${f.id}" placeholder="自定义输入..." style="margin-top:6px;display:none;" />`
+      }
+    } else if (f.type === 'result-btns') {
+      html += `<div class="result-btns" id="anno_grid_${f.id}"></div>`
+    } else if (f.type === 'textarea') {
+      html += `<textarea id="anno_grid_${f.id}" placeholder="输入..." rows="2" style="width:100%;padding:10px;border:1px solid #334155;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;background:transparent;color:#ccd6f6;"></textarea>`
+    } else if (f.type === 'input') {
+      html += `<input type="text" class="title-input" id="anno_grid_${f.id}" placeholder="输入..." />`
+    }
+    html += `</div>`
+  }
+  container.innerHTML = html
+
+  // 绑定事件：tag-grid 中有 __custom__ 的自定义输入框
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i]
+    if (f.type === 'tag-grid' && hasCustomOption(f)) {
+      const inp = document.getElementById('anno_cust_' + f.id)
+      if (inp) {
+        inp.addEventListener('input', function() {
+          setAnnotationField(f.id, this.value)
+        })
+      }
+    }
+    if (f.type === 'textarea' || f.type === 'input') {
+      const el = document.getElementById('anno_grid_' + f.id)
+      if (el) {
+        el.addEventListener(f.type === 'textarea' ? 'input' : 'change', function() {
+          setAnnotationField(f.id, this.value)
+        })
+      }
+    }
+  }
+
+  // 键盘快捷键
+  document.addEventListener('keydown', onAnnoKeydown)
+}
+
+function hasCustomOption(field) {
+  return field.options && field.options.some(o =>
+    (typeof o === 'string' && o === '__custom__') || (o.value === '__custom__')
+  )
+}
+
+// 根据字段配置获取选项标签
+function optLabel(opt) {
+  if (typeof opt === 'string') return opt === '__custom__' ? '✏️ 自定义' : opt
+  return opt.label || opt.value
+}
+function optValue(opt) {
+  if (typeof opt === 'string') return opt
+  return opt.value
+}
+
+function renderAnnotation() {
+  const img = imageBatchList[annoCurrentIdx]
+  if (!img) return
+
+  // Preview
+  const preview = document.getElementById('annoPreview')
+  const url = img._blobUrl || URL.createObjectURL(img.file)
+  img._blobUrl = url
+  preview.innerHTML = `<img src="${url}" alt="${esc(img.filename)}" />`
+
+  // Progress
+  document.getElementById('annoProgress').textContent = `${annoCurrentIdx + 1} / ${imageBatchList.length}`
+
+  // Status text
+  const loc = getAnnoVal(img, 'crackLocation')
+  const shape = getAnnoVal(img, 'crackShape')
+  const result = getAnnoVal(img, 'result')
+  const hasFull = loc && shape
+  let statusText = hasFull
+    ? `已标注: ${loc} / ${shape}${result ? ' → ' + (findResultOption(result) || getLabelByValue('result', result) || result) : ''}`
+    : '未标注 (请选择位置+形状)'
+  document.getElementById('annoStatus').textContent = statusText
+
+  // 动态渲染侧边栏（首次调用时重建）
+  if (!img._annoSidebarRendered) {
+    img._annoSidebarRendered = true
+    renderAnnoSidebar()
+  }
+
+  const fields = currentAnnoFields
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i]
+    const val = getAnnoVal(img, f.id)
+    if (f.type === 'tag-grid') {
+      const hasCustom = hasCustomOption(f)
+      const opts = f.options
+      // 检查是否是自定义值
+      const isCustom = hasCustom && val && !opts.some(o => optValue(o) === val)
+      const selectedVal = isCustom ? '__custom__' : (val || '')
+      const container = document.getElementById('anno_grid_' + f.id)
+      container.innerHTML = opts.map((opt, j) => {
+        const v = optValue(opt)
+        let lbl = optLabel(opt)
+        const sel = selectedVal === v ? ' selected' : ''
+        return `<button class="tag-btn${sel}" id="anno_btn_${f.id}_${j}" data-optval="${esc(v)}">${esc(lbl)}</button>`
+      }).join('')
+      // Bind click
+      container.querySelectorAll('button').forEach(btn => {
+        btn.onclick = function() {
+          const oV = this.dataset.optval
+          if (hasCustom && document.getElementById('anno_cust_' + f.id)) {
+            const custEl = document.getElementById('anno_cust_' + f.id)
+            if (oV === '__custom__') {
+              custEl.style.display = ''
+              custEl.value = val || ''
+              custEl.focus()
+            } else {
+              custEl.style.display = 'none'
+              custEl.value = ''
+              setAnnotationField(f.id, oV)
+            }
+          } else {
+            setAnnotationField(f.id, oV)
+          }
+        }
+      })
+      // 自定义输入显示/隐藏
+      if (hasCustom) {
+        const custEl = document.getElementById('anno_cust_' + f.id)
+        if (custEl) {
+          if (isCustom) {
+            custEl.style.display = ''
+            custEl.value = val
+          } else if (!val) {
+            custEl.style.display = 'none'
+            custEl.value = ''
+          }
+        }
+      }
+    } else if (f.type === 'result-btns') {
+      const container = document.getElementById('anno_grid_' + f.id)
+      const opts = f.options
+      container.innerHTML = opts.map((opt, j) => {
+        const sel = val === opt.value ? ' selected' : ''
+        return `<button class="result-btn ${opt.cls}${sel}" onclick="setAnnotationField('${f.id}','${opt.value.replace(/'/g,"\\'")}')">${esc(opt.label)}</button>`
+      }).join('')
+    } else if (f.type === 'textarea') {
+      const el = document.getElementById('anno_grid_' + f.id)
+      if (el) el.value = val || ''
+    } else if (f.type === 'input') {
+      const el = document.getElementById('anno_grid_' + f.id)
+      if (el) el.value = val || ''
+    }
+  }
+
+  // Thumbnails
+  renderAnnoThumbs()
+
+  // Nav buttons
+  document.getElementById('annoPrevBtn').style.visibility = annoCurrentIdx > 0 ? 'visible' : 'hidden'
+  document.getElementById('annoNextBtn').textContent = annoCurrentIdx < imageBatchList.length - 1 ? '下一张 ▶' : '已是最后一张'
+}
+
+function findResultOption(resultVal) {
+  const f = currentAnnoFields.find(f => f.id === 'result')
+  if (!f || !f.options) return ''
+  const opt = f.options.find(o => o.value === resultVal)
+  return opt ? opt.label : ''
+}
+
+function getLabelByValue(fieldId, val) {
+  const f = currentAnnoFields.find(f => f.id === fieldId)
+  if (!f || !f.options) return ''
+  const opt = f.options.find(o => optValue(o) === val)
+  return opt ? optLabel(opt) : ''
+}
+
+function renderAnnoThumbs() {
+  const strip = document.getElementById('annoThumbStrip')
+  strip.innerHTML = imageBatchList.map((img, idx) => {
+    const url = img._blobUrl || URL.createObjectURL(img.file)
+    img._blobUrl = url
+    let dotColor = 'gray'
+    if (getAnnoVal(img, 'crackLocation') && getAnnoVal(img, 'crackShape')) dotColor = 'green'
+    else if (getAnnoVal(img, 'crackLocation') || getAnnoVal(img, 'crackShape')) dotColor = 'yellow'
+    const active = idx === annoCurrentIdx ? ' active' : ''
+    return `<div class="anno-thumb${active}" onclick="jumpAnnotation(${idx})" title="${esc(img.filename)}">
+      <img src="${url}" />
+      <span class="thumb-dot ${dotColor}"></span>
+    </div>`
+  }).join('')
+  setTimeout(() => {
+    const active = strip.querySelector('.anno-thumb.active')
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, 50)
+}
+
+function setAnnotationField(fieldId, value) {
+  const img = imageBatchList[annoCurrentIdx]
+  if (!img) return
+  setAnnoVal(img, fieldId, value)
+  renderAnnotation()
+}
+
+function annotationNext() {
+  if (annoCurrentIdx < imageBatchList.length - 1) {
+    annoCurrentIdx++
+    renderAnnotation()
+  }
+}
+
+function annotationPrev() {
+  if (annoCurrentIdx > 0) {
+    annoCurrentIdx--
+    renderAnnotation()
+  }
+}
+
+function jumpAnnotation(idx) {
+  annoCurrentIdx = idx
+  renderAnnotation()
+}
+
+function onAnnoKeydown(e) {
+  // Don't trap keys when typing in input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') { closeAnnotation(); e.preventDefault() }
+    return
+  }
+
+  if (e.key === 'Escape') { closeAnnotation(); e.preventDefault(); return }
+  if (e.key === 'Enter') { annotationNext(); e.preventDefault(); return }
+  if (e.key === 'ArrowRight') { annotationNext(); e.preventDefault(); return }
+  if (e.key === 'ArrowLeft') { annotationPrev(); e.preventDefault(); return }
+}
+
+
+async function confirmImageBatchImport() {
+  if (imageBatchList.length === 0) return toast('请先添加图片', 'error')
+
+  // Check per-image annotations
+  const unannotated = imageBatchList.filter(i => !getAnnoVal(i, 'crackLocation') || !getAnnoVal(i, 'crackShape'))
+  if (unannotated.length > 0) {
+    if (!confirm(`${unannotated.length} 张图片未标注位置或形状（必填），将跳过未标注的图片。\n\n确定继续导入吗？`)) return
+  }
+
+  const btn = document.getElementById('confirmImgImportBtn')
+  btn.disabled = true
+  btn.textContent = '正在读取图片...'
+
+  const images = []
+  for (const img of imageBatchList) {
+    // Skip images missing required fields
+    if (!getAnnoVal(img, 'crackLocation') || !getAnnoVal(img, 'crackShape')) continue
+
+    const data = await new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(img.file)
+    })
+    if (!data) {
+      toast(`读取失败: ${img.filename}`, 'error')
+      continue
+    }
+    images.push({
+      filename: img.filename,
+      data,
+      title: getAnnoVal(img, 'title') || '',
+      crackLocation: getAnnoVal(img, 'crackLocation'),
+      crackShape: getAnnoVal(img, 'crackShape'),
+      result: getAnnoVal(img, 'result') || '',
+      installStatus: getAnnoVal(img, 'installStatus') || '',
+      packageDamage: getAnnoVal(img, 'packageDamage') || '',
+      possibleCause: getAnnoVal(img, 'possibleCause') || '',
+      warrantyTip: getAnnoVal(img, 'warrantyTip') || '',
+      customFields: img.customFields || {},
+    })
+  }
+
+  if (images.length === 0) {
+    toast('没有可导入的图片（请确保已标注位置+形状）', 'error')
+    btn.disabled = false
+    btn.textContent = '确认入库'
+    return
+  }
+
+  btn.textContent = `正在导入 ${images.length} 张...`
+
+  try {
+    const { data } = await knowledgeApi('/cases/from-images', {
+      method: 'POST',
+      body: JSON.stringify({ images, defaults: {} }),
+    })
+    if (data.imported > 0) {
+      toast(`成功入库 ${data.imported} 张案例！`, 'success')
+      // 向量索引已在 createCase 中自动完成
+    }
+    if (data.failed > 0) {
+      const preview = document.getElementById('imgImportPreview')
+      const details = data.errors.map(e => `<div>${esc(e.item)}: ${e.errors.map(x => esc(x)).join(', ')}</div>`).join('')
+      preview.innerHTML = `<div class="import-item-notice"><strong>${data.failed} 张失败</strong>:<br />${details}</div>`
+    }
+    closeImageBatchImport()
+    await loadCaseList()
+  } catch (e) {
+    toast('入库失败: ' + e.message, 'error')
+    btn.disabled = false
+    btn.textContent = `确认入库 (${imageBatchList.length}张)`
+  }
+}
+
+loadRuleList()
+
+let adminLightboxAngle = 0
+let adminLightboxScale = 1
+function openLightbox(src) {
+  adminLightboxAngle = 0
+  adminLightboxScale = 1
+  const img = document.getElementById('lightboxImg')
+  img.src = src
+  img.style.transform = 'rotate(0deg) scale(1)'
+  document.getElementById('imgLightbox').style.display = 'flex'
+}
+function closeLightbox() {
+  document.getElementById('imgLightbox').style.display = 'none'
+}
+function rotateLightboxImg() {
+  adminLightboxAngle = (adminLightboxAngle + 90) % 360
+  updateLightboxTransform()
+}
+function updateLightboxTransform() {
+  const img = document.getElementById('lightboxImg')
+  img.style.transform = `rotate(${adminLightboxAngle}deg) scale(${adminLightboxScale})`
+}
+document.getElementById('imgLightbox').addEventListener('wheel', function(e) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.15 : 0.15
+  adminLightboxScale = Math.max(0.3, Math.min(8, adminLightboxScale + delta))
+  updateLightboxTransform()
+}, { passive: false })
+
+// ===== 图像特征提取（供 KNN 训练用，与前端 index.html 同算法） =====
+const FEAT_TARGET_W = 400
+
+// 将案例库中的自由文本描述映射为标准短标签
+const LOCATION_LABELS = ['天侧', '地侧', '左侧右侧', '四角区域', '中央区域', '全屏区域', '局部不规则区域']
+const SHAPE_LABELS = ['单条线状屏裂', '多条线状屏裂', '点放射状屏裂', '发散性线状屏裂', '环状/圈状屏裂', '网状(大面积无规则)屏裂']
+
+function normalizeLabel(text, type) {
+  if (!text) return type === 'location' ? '局部不规则区域' : '点放射状屏裂'
+  const t = text.toLowerCase()
+  if (type === 'location') {
+    // 优先检测四角（含"左下角"等具体角落描述）
+    if (t.includes('四角') || t.includes('左下角') || t.includes('右下角') || t.includes('左上角') || t.includes('右上角') || t.includes('角落')) return '四角区域'
+    if (t.includes('全屏')) return '全屏区域'
+    if (t.includes('中央') || t.includes('中心') || t.includes('中部')) return '中央区域'
+    if (t.includes('天侧') || t.includes('顶部') || t.includes('上侧')) return '天侧'
+    if (t.includes('地侧') || t.includes('底部') || t.includes('下侧')) return '地侧'
+    if (t.includes('左侧') || t.includes('右侧') || t.includes('侧面') || t.includes('边缘')) return '左侧右侧'
+    if (t.includes('不规则')) return '局部不规则区域'
+    return '局部不规则区域'
+  }
+  // shape
+  if (t.includes('单条') || t.includes('单道')) return '单条线状屏裂'
+  if (t.includes('环状') || t.includes('圈状') || t.includes('环形')) return '环状/圈状屏裂'
+  if (t.includes('网状') || t.includes('蜘蛛网') || t.includes('大面积无规则')) return '网状(大面积无规则)屏裂'
+  if (t.includes('点放射') || t.includes('放射状')) return '点放射状屏裂'
+  if (t.includes('发散') || t.includes('延伸')) return '发散性线状屏裂'
+  if (t.includes('多条') || t.includes('多道')) return '多条线状屏裂'
+  return '点放射状屏裂'
+}
+
+function feGrayscale(data, w, h) {
+  const out = new Float32Array(w * h)
+  for (let i = 0; i < w * h; i++) {
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]
+    out[i] = 0.299 * r + 0.587 * g + 0.114 * b
+  }
+  return out
+}
+
+function feSobelEdges(gray, w, h) {
+  const mag = new Float32Array(w * h), dir = new Float32Array(w * h)
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x
+      const gx = -gray[idx - w - 1] - 2 * gray[idx - 1] - gray[idx + w - 1]
+        + gray[idx - w + 1] + 2 * gray[idx + 1] + gray[idx + w + 1]
+      const gy = -gray[idx - w - 1] - 2 * gray[idx - w] - gray[idx - w + 1]
+        + gray[idx + w - 1] + 2 * gray[idx + w] + gray[idx + w + 1]
+      mag[idx] = Math.sqrt(gx * gx + gy * gy)
+      dir[idx] = Math.atan2(gy, gx)
+    }
+  }
+  return { mag, dir }
+}
+
+function feDynamicThreshold(mag, w, h) {
+  const valid = []
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) valid.push(mag[i]) }
+  if (valid.length === 0) return 1
+  valid.sort((a, b) => a - b)
+  const mean = valid.reduce((s, v) => s + v, 0) / valid.length
+  let sumSq = 0
+  for (const v of valid) sumSq += (v - mean) * (v - mean)
+  return mean + 1.2 * Math.sqrt(sumSq / valid.length)
+}
+
+function extractFeaturesFromMag(mag, dir, w, h, threshold) {
+  const f = []
+  const bw = 3, bh = 3, cellW = Math.floor(w / bw), cellH = Math.floor(h / bh)
+  const cells = new Array(bw * bh).fill(0)
+  let totalEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    totalEdges++
+    const cx = Math.min(Math.floor((i % w) / cellW), bw - 1)
+    const cy = Math.min(Math.floor(Math.floor(i / w) / cellH), bh - 1)
+    cells[cy * bw + cx]++
+  }
+  for (const c of cells) f.push(totalEdges > 0 ? c / totalEdges : 0)
+
+  const bins = 18, hist = new Array(bins).fill(0)
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    let d = dir[i]; if (d < 0) d += Math.PI
+    hist[Math.min(Math.floor(d / Math.PI * bins), bins - 1)]++
+  }
+  const maxHist = Math.max(...hist) || 1
+  for (const h of hist) f.push(h / maxHist)
+
+  f.push(totalEdges / (w * h))
+  let sum = 0, cnt = 0
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) { sum += mag[i]; cnt++ } }
+  const meanMag = cnt > 0 ? sum / cnt : 0
+  f.push(meanMag)
+  let sumSq = 0
+  for (let i = 0; i < w * h; i++) { if (mag[i] > 0) sumSq += (mag[i] - meanMag) ** 2 }
+  f.push(cnt > 0 ? Math.sqrt(sumSq / cnt) : 0)
+
+  f.push(cells.filter(v => v > 0).length / (bw * bh))
+
+  const c1 = [0, 0, w * 0.25, h * 0.25], c2 = [w * 0.75, 0, w, h * 0.25]
+  const c3 = [0, h * 0.75, w * 0.25, h], c4 = [w * 0.75, h * 0.75, w, h]
+  const corners = [c1, c2, c3, c4]
+  let cornerEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    const y = Math.floor(i / w), x = i % w
+    for (const [x0, y0, x1, y1] of corners) { if (x >= x0 && x < x1 && y >= y0 && y < y1) { cornerEdges++; break } }
+  }
+  f.push(totalEdges > 0 ? cornerEdges / totalEdges : 0)
+
+  let centerEdges = 0
+  for (let i = 0; i < w * h; i++) {
+    if (mag[i] < threshold) continue
+    const y = Math.floor(i / w), x = i % w
+    if (x >= w * 0.3 && x < w * 0.7 && y >= h * 0.3 && y < h * 0.7) centerEdges++
+  }
+  f.push(totalEdges > 0 ? centerEdges / totalEdges : 0)
+
+  let peaks = 0
+  for (let i = 0; i < bins; i++) {
+    const prev = hist[(i - 1 + bins) % bins], next = hist[(i + 1) % bins]
+    if (hist[i] > maxHist * 0.3 && hist[i] > prev && hist[i] > next) peaks++
+  }
+  f.push(peaks)
+
+  const histNorm = hist.map(v => v / (maxHist || 1))
+  const hMean = histNorm.reduce((s, v) => s + v, 0) / bins
+  f.push(histNorm.reduce((s, v) => s + (v - hMean) ** 2, 0) / bins)
+
+  return f
+}
+
+async function extractFeaturesFromBase64(base64Url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const srcW = img.width, srcH = img.height
+      const scale = Math.min(1, FEAT_TARGET_W / srcW)
+      const w = Math.round(srcW * scale), h = Math.round(srcH * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, w, h)
+      const imgData = ctx.getImageData(0, 0, w, h)
+      const gray = feGrayscale(imgData.data, w, h)
+      const { mag, dir } = feSobelEdges(gray, w, h)
+      const thr = feDynamicThreshold(mag, w, h)
+      resolve(extractFeaturesFromMag(mag, dir, w, h, thr))
+    }
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = base64Url
+  })
+}
+
+async function submitTraining(images, location, shape, caseId) {
+  for (const img of images) {
+    try {
+      const features = await extractFeaturesFromBase64(img.data || img.url)
+      const loc = normalizeLabel(img.crackLocation || location, 'location')
+      const shp = normalizeLabel(img.crackShape || shape, 'shape')
+      await fetch('http://localhost:8083/api/knowledge/training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ features, location: loc, shape: shp, caseId })
+      })
+    } catch (e) {
+      console.warn('[training] 特征提取失败:', img.filename || '', e.message)
+    }
+  }
+}
+
+async function rebuildVectorIndex() {
+  if (!confirm('将从所有已有案例中提取图片 CLIP 特征，重建 Milvus 向量库。\n\n此操作将清空现有向量索引并重新构建。确定继续？')) return
+
+  toast('正在通过 CLIP 提取特征并重建向量库...', 'info')
+  try {
+    const resp = await fetch('http://localhost:8083/api/knowledge/rebuild-index', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const { data } = await resp.json()
+    if (data.success !== false) {
+      toast(`向量库重建完成：成功索引 ${data.indexed} 条，失败 ${data.failed} 条`, 'success')
+    } else {
+      toast('重建失败: ' + (data.error?.message || '未知错误'), 'error')
+    }
+  } catch (e) {
+    toast('重建失败: ' + e.message, 'error')
+  }
+}
+// ===== 特征提取 END =====
+</script>
+
+<!-- 标注字段配置弹窗 -->
+<div class="modal-overlay" id="annoFieldsModal">
+  <div class="modal" style="width:960px;max-width:98vw;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <h3>🏷️ 标注字段配置</h3>
+      <button class="btn btn-sm btn-outline" onclick="closeAnnoFieldsEditor()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;">
+      <p style="font-size:13px;color:#888;margin-bottom:16px;">
+        配置快速标注模式的侧边栏字段。可增删改字段、排序、修改类型和选项。保存后即时生效。
+      </p>
+      <div style="display:flex;gap:10px;margin-bottom:16px;">
+        <button class="btn btn-primary btn-sm" onclick="addAnnoField()">+ 添加字段</button>
+        <button class="btn btn-outline btn-sm" onclick="resetAnnoFieldsToDefault()">↺ 恢复默认</button>
+        <span style="flex:1;"></span>
+        <span style="font-size:12px;color:#888;align-self:center;">
+          标签名可自由修改，内置字段 ID（crackLocation/crackShape/result 等）不建议改动
+        </span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="af-table">
+          <thead>
+            <tr>
+              <th style="width:36px;">#</th>
+              <th style="width:140px;">标签名</th>
+              <th style="width:130px;">字段 ID</th>
+              <th style="width:100px;">类型</th>
+              <th style="width:60px;">必填</th>
+              <th>选项</th>
+              <th style="width:130px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="annoFieldsTableBody"></tbody>
+        </table>
+      </div>
+      <div style="background:#f8f9ff;border-radius:8px;padding:12px 16px;margin-top:16px;font-size:12px;color:#666;">
+        <strong>说明：</strong><br>
+        <b>标签按钮</b> — 单选标签组，选项为纯文本或 {value,label} 对象；添加 <code>__custom__</code> 选项可启用自定义输入<br>
+        <b>结论按钮</b> — 带样式的单选按钮，选项需包含 value/label/cls<br>
+        <b>文本域</b> / <b>输入框</b> — 自由输入，无需选项<br>
+        <b>自定义字段</b>（ID 非内置的）的值存入 <code>customFields</code>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeAnnoFieldsEditor()">取消</button>
+      <button class="btn btn-primary" id="annoFieldsSaveBtn" onclick="saveAnnoFieldsConfig()">💾 保存配置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片原图预览弹窗 -->
+<div class="img-lightbox-overlay" id="imgLightbox" style="display:none" onclick="if(event.target===this)closeLightbox()">
+  <button class="img-lightbox-close" onclick="closeLightbox()">✕</button>
+  <button class="img-lightbox-rotate" onclick="rotateLightboxImg()">↻ 旋转</button>
+  <img id="lightboxImg" src="" alt="预览原图" />
+</div>
+
+</body>
+</html>
