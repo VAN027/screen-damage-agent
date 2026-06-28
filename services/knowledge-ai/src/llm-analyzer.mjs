@@ -21,14 +21,14 @@ const DEFAULT_CONFIG = {
   showRagPanel: true,
   showAiPanel: true,
   annoFields: [
+    { id: 'title', label: '标题（可选）', type: 'input', required: false },
     { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
     { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','__custom__'] },
+    { id: 'crackStage', label: '屏损环节', type: 'tag-grid', required: false, options: ['产品因素','物流运输搬运','拆机验机安装','使用保管不当','__custom__'] },
     { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'产品质量问题',cls:'pq'},{value:'logistics_issue',label:'物流问题',cls:'logistics'},{value:'not_product_quality',label:'非产品质量问题',cls:'npq'},{value:'needs_further_review',label:'需进一步鉴定',cls:'review'}] },
     { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
     { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
-    { id: 'possibleCause', label: '可能原因', type: 'textarea', required: false },
-    { id: 'warrantyTip', label: '鉴定结论', type: 'textarea', required: false },
-    { id: 'title', label: '标题（可选）', type: 'input', required: false },
+    { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
   ],
 }
 
@@ -52,6 +52,43 @@ export async function saveModelConfig(config) {
   const { mkdir } = await import('node:fs/promises')
   await mkdir(dir, { recursive: true })
   await writeFile(CONFIG_PATH, JSON.stringify({ ...DEFAULT_CONFIG, ...config }, null, 2), 'utf8')
+}
+
+// ===== 标注模型独立配置 =====
+
+const ANNO_CONFIG_PATH = join(__dirname, '..', 'data', 'annotation-config.json')
+
+const DEFAULT_ANNO_CONFIG = {
+  provider: 'openai',
+  model: 'deepseek-chat',
+  apiKey: '',
+  endpoint: 'https://api.deepseek.com',
+  temperature: 0.3,
+  maxTokens: 1024,
+  enabled: true,
+  systemPrompt: '',
+}
+
+export async function loadAnnotationConfig() {
+  let config = { ...DEFAULT_ANNO_CONFIG }
+  try {
+    const raw = await readFile(ANNO_CONFIG_PATH, 'utf8')
+    config = { ...config, ...JSON.parse(raw) }
+  } catch {
+    // 配置文件不存在，使用默认值
+  }
+  // apiKey 为空时回退到环境变量
+  if (!config.apiKey) {
+    config.apiKey = process.env.LLM_ANNO_API_KEY || process.env.LLM_API_KEY || ''
+  }
+  return config
+}
+
+export async function saveAnnotationConfig(config) {
+  const dir = dirname(ANNO_CONFIG_PATH)
+  const { mkdir } = await import('node:fs/promises')
+  await mkdir(dir, { recursive: true })
+  await writeFile(ANNO_CONFIG_PATH, JSON.stringify({ ...DEFAULT_ANNO_CONFIG, ...config }, null, 2), 'utf8')
 }
 
 // 构建分析 Prompt
@@ -100,11 +137,19 @@ function buildContextFromForm(ctx) {
   return `\n\n【现场人工提供的信息】\n${parts.join('\n')}\n以上安装与故障信息仅供辅助参考，请优先依据图片本身进行专业分析。`
 }
 
+// 自动拼接 /chat/completions — 兼容用户只填 base URL 的情况
+function normalizeEndpoint(endpoint) {
+  const trimmed = (endpoint || '').replace(/\/+$/, '')
+  if (trimmed.endsWith('/chat/completions')) return trimmed
+  if (trimmed.endsWith('/v1')) return trimmed + '/chat/completions'
+  return trimmed + '/v1/chat/completions'
+}
+
 // 调用 OpenAI 兼容 API（GPT-4V / Qwen-VL / Ollama 等）
 async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = '', formContext = '') {
   const promptText = buildPrompt(config, imageBase64s.length) + caseContext + kbContext + formContext
   const imageBlocks = imageBase64s.map(img => ({ type: 'image_url', image_url: { url: img, detail: 'high' } }))
-  const resp = await fetch(config.endpoint, {
+  const resp = await fetch(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -136,7 +181,7 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
 async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, onProgress, formContext = '') {
   const promptText = buildPrompt(config, imageBase64s.length) + caseContext + kbContext + formContext
   const imageBlocks = imageBase64s.map(img => ({ type: 'image_url', image_url: { url: img, detail: 'high' } }))
-  const resp = await fetch(config.endpoint, {
+  const resp = await fetch(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -190,10 +235,10 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
         if (delta) {
           tokenCount++
           fullContent += delta
-          // token 进度: 25% ~ 88%，按已生成 token 占总上限比例映射
-          if (tokenCount % 20 === 0) {
+          // 每 10 tokens 推送一次 token 流 + 进度
+          if (tokenCount % 10 === 0) {
             const pct = Math.min(88, 25 + Math.round(tokenCount / maxTokens * 63))
-            onProgress({ stage: 'llm', percent: pct, message: `大模型正在分析... 已生成 ${tokenCount} tokens` })
+            onProgress({ stage: 'token', percent: pct, token: fullContent.slice(-200), message: `大模型正在分析... 已生成 ${tokenCount} tokens` })
           }
         }
       } catch {
@@ -229,7 +274,7 @@ async function callAnthropic(config, imageBase64s, kbContext = '', caseContext =
     return { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
   })
 
-  const resp = await fetch(config.endpoint, {
+  const resp = await fetch(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -415,8 +460,7 @@ async function buildSimilarCaseContext(imageBase64, config) {
         similarity: r.similarity,
         crackLocation: c.crackLocation || r.meta?.crack_location || '',
         crackShape: c.crackShape || r.meta?.crack_shape || '',
-        possibleCause: c.possibleCause || '',
-        warrantyTip: c.warrantyTip || '',
+        crackPrinciple: c.crackPrinciple || '',
         resultLabel: c.resultLabel || r.meta?.result_label || '',
       })
     }
@@ -432,8 +476,7 @@ async function buildSimilarCaseContext(imageBase64, config) {
         result.caseContext += `案例${i + 1}（图像相似度: ${simPct}%）:\n`
         if (c.crackLocation) result.caseContext += `  - 屏损位置: ${c.crackLocation}\n`
         if (c.crackShape) result.caseContext += `  - 屏损形态: ${c.crackShape}\n`
-        if (c.possibleCause) result.caseContext += `  - 屏损原理: ${c.possibleCause}\n`
-        if (c.warrantyTip) result.caseContext += `  - 保修提示: ${c.warrantyTip}\n`
+        if (c.crackPrinciple) result.caseContext += `  - 屏损原理: ${c.crackPrinciple}\n`
         if (c.resultLabel) result.caseContext += `  - 鉴定结论: ${c.resultLabel}\n`
       }
 
@@ -543,4 +586,138 @@ export async function analyzeWithLLMStream(imageBase64s, onProgress, contextObj)
 
   onProgress({ stage: 'parse', percent: 92, message: '正在解析分析结果...' })
   return { ...result, elapsed: Date.now() - start, model: config.model }
+}
+
+// ===== 案例标注专用 Prompt（返回管理后台所需的 tags 字段） =====
+function buildAnnotationPrompt(config = {}) {
+  const systemPrompt = config.systemPrompt && config.systemPrompt.trim()
+    ? config.systemPrompt.trim()
+    : `你是一个专业的屏幕故障案例标注专家。请分析这张屏幕照片，为案例库生成标注信息，严格以 JSON 格式返回：
+
+{
+  "crackLocation": "屏损位置（从以下选择一个：天侧、地侧、左侧、右侧、四角区域、中央区域、全屏区域、局部不规则区域）",
+  "crackShape": "屏损形态（从以下选择一个：单条线状屏裂、多条线状屏裂、点放射状屏裂、发散性线状屏裂、环状/圈状屏裂、网状(大面积无规则)屏裂）",
+  "crackPrinciple": "屏损原理（30-80字，仅基于图片可见痕迹推断，格式如"右下角存在明显磕碰点，放射状裂纹由此发散"）",
+  "crackStage": "屏损环节（从以下选择一个：产品因素、物流运输搬运、拆机验机安装、使用保管不当）",
+  "result": "鉴定结论（从以下选择一个：product_quality_issue、logistics_issue、not_product_quality、needs_further_review）",
+  "summary": "一句话摘要（格式："屏损位置: XX, 形状: XX"，15-30字）",
+  "confidence": 0-100的置信度数字
+}
+
+注意：
+- crackLocation 和 crackShape 必须从给定选项中选择，不得编造
+- result 映射关系：外力痕迹明显 → not_product_quality；无外力痕迹且有产品缺陷特征 → product_quality_issue；包装相关问题 → logistics_issue；无法确定 → needs_further_review
+- crackPrinciple 仅描述图片可见痕迹（如"右下角存在明显磕碰点，放射状裂纹由此发散"），不要写"可能是用户..."这类猜测`;
+  const userMessage = '请分析这张屏幕照片生成标注。注意：crackPrinciple 是分析"为什么会坏"（成因推断），不是描述"坏了什么样子"（状态描述）。严格只返回 JSON，不要包含其他文字。'
+  return { systemPrompt, userMessage }
+}
+
+// 调用大模型生成案例标注
+async function callLLMForAnnotation(config, imageBase64) {
+  const { systemPrompt, userMessage } = buildAnnotationPrompt(config)
+  const messages = []
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt })
+  }
+  messages.push({
+    role: 'user',
+    content: [
+      { type: 'text', text: userMessage },
+      { type: 'image_url', image_url: { url: imageBase64, detail: 'high' } },
+    ],
+  })
+  const resp = await fetch(normalizeEndpoint(config.endpoint), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: messages,
+      temperature: config.temperature,
+      max_tokens: Math.min(config.maxTokens, 2048),
+    }),
+  })
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '')
+    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+  }
+  const data = await resp.json()
+  const raw = data.choices?.[0]?.message?.content || ''
+  return extractAnnotationJSON(raw)
+}
+
+function extractAnnotationJSON(raw) {
+  let text = raw.trim()
+  text = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+
+  let result = null
+  const tries = [
+    text,
+    text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1),
+  ]
+
+  for (const t of tries) {
+    if (!t || !t.includes('{')) continue
+    try { result = JSON.parse(t); break } catch {
+      try {
+        const fixed = t.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']').replace(/[\u0000-\u001F]/g, ' ')
+        result = JSON.parse(fixed); break
+      } catch { continue }
+    }
+  }
+
+  if (!result) {
+    return { crackLocation: '', crackShape: '', crackPrinciple: '', crackStage: '', result: '', summary: '', confidence: 50 }
+  }
+
+  // 透传 LLM 返回的所有字段，保持与前端 annoFields 的 id 对齐
+  return {
+    crackLocation: result.crackLocation || '',
+    crackShape: result.crackShape || '',
+    crackPrinciple: result.crackPrinciple || '',
+    crackStage: result.crackStage || '',
+    result: result.result || '',
+    summary: result.summary || '',
+    confidence: Math.min(100, Math.max(0, parseInt(result.confidence) || 50)),
+  }
+}
+
+/**
+ * 单张图片 AI 辅助标注（供案例编辑器使用）
+ */
+export async function annotateSingle(imageBase64) {
+  const config = await loadAnnotationConfig()
+  if (!config.enabled || !config.apiKey) {
+    throw new Error('标注模型未启用或未配置 API Key')
+  }
+  const start = Date.now()
+  const result = await callLLMForAnnotation(config, imageBase64)
+  return { ...result, elapsed: Date.now() - start, model: config.model }
+}
+
+/**
+ * 批量图片 AI 预标注
+ * @param {string[]} imageBase64List - base64 图片数组
+ * @returns {Promise<{annotations: object[], elapsed: number, total: number}>}
+ */
+export async function annotateBatch(imageBase64List) {
+  const config = await loadAnnotationConfig()
+  if (!config.enabled || !config.apiKey) {
+    throw new Error('标注模型未启用或未配置 API Key')
+  }
+  const start = Date.now()
+  const annotations = []
+
+  for (let i = 0; i < imageBase64List.length; i++) {
+    try {
+      const result = await callLLMForAnnotation(config, imageBase64List[i])
+      annotations.push({ index: i, ...result, success: true })
+    } catch (e) {
+      annotations.push({ index: i, success: false, error: e.message })
+    }
+  }
+
+  return { annotations, elapsed: Date.now() - start, total: imageBase64List.length }
 }

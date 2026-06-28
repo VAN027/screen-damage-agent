@@ -101,22 +101,4 @@ export class DecisionTree {
   }
 }
 
-export function calculateConfidence({ evaluationResult, symptomCount, hasImpactPoint, hasButterflyPattern, hasLeakIrregular, unknownCount = 0 }) {
-  let baseScore = 70
 
-  baseScore -= unknownCount < 4 ? unknownCount * 15 : 0
-
-  if (hasImpactPoint && hasButterflyPattern) baseScore += 15
-  else if (hasImpactPoint || hasButterflyPattern) baseScore += 7
-
-  if (hasLeakIrregular) baseScore += 8
-  if (evaluationResult.path.length >= 3) baseScore += 5
-  if (symptomCount >= 3) baseScore += 5
-  else if (symptomCount >= 1) baseScore += 2
-
-  return Math.max(Math.min(baseScore, 100), 10)
-}
-
-export function needsExpertReview(confidence) {
-  return confidence < 70
-}

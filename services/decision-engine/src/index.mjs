@@ -1,5 +1,5 @@
 import { createServer, json, fetchJson } from './server-utils.mjs'
-import { DecisionTree, calculateConfidence, needsExpertReview } from './decision-tree.mjs'
+import { DecisionTree } from './decision-tree.mjs'
 
 const PORT = parseInt(process.env.ENGINE_PORT || '8081', 10)
 const ADMIN_URL = process.env.ADMIN_URL || 'http://localhost:8082'
@@ -101,15 +101,6 @@ const routes = [
       const { answers, unknownCount } = buildAnswers(req)
       const evalResult = decisionTree.evaluate(answers)
 
-      const confidence = calculateConfidence({
-        evaluationResult: evalResult,
-        symptomCount: (req.symptoms || []).length,
-        hasImpactPoint: req.hasImpactPoint,
-        hasButterflyPattern: req.hasButterflyPattern,
-        hasLeakIrregular: !!req.crackLocation,
-        unknownCount,
-      })
-
       let result = outcomeToEnum(evalResult.outcome)
       let resultLabel = evalResult.outcome
       if (unknownCount >= 2 && unknownCount < 4) {
@@ -123,11 +114,8 @@ const routes = [
           caseId: req.caseId,
           result,
           resultLabel,
-          confidence,
-          needExpertReview: needsExpertReview(confidence),
           decisionPath: evalResult.path,
           ruleVersion: decisionTree.currentVersion,
-          uncertainty: unknownCount > 0 ? { fields: unknownCount, message: unknownCount >= 4 ? '非现场判定：全部信息标注为不确定，置信度未扣减' : unknownCount >= 2 ? '多项信息不确定，建议转人工复核' : '部分信息不确定，置信度已降低' } : null,
         },
       })
     },

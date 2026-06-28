@@ -1,0 +1,9 @@
+{
+  "provider": "openai",
+  "model": "deepseek-chat",
+  "apiKey": "",
+  "endpoint": "https://api.deepseek.com",
+  "temperature": 0.3,
+  "maxTokens": 1024,
+  "enabled": true
+}

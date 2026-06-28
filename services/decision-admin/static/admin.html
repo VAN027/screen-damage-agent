@@ -48,8 +48,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .badge-logistics { background: #fef3c7; color: #92400e; }
 .badge-npq { background: #dbeafe; color: #1e40af; }
 .badge-review { background: #f3e8ff; color: #6b21a8; }
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.main { flex: 1; display: flex; flex-direction: column; }
 .toolbar { padding: 14px 24px; background: #fff; border-bottom: 1px solid #e8e8e8; display: flex; gap: 10px; align-items: center; }
+.gear-wrapper { position: relative; display: inline-flex; }
+.gear-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; font-size: 18px; transition: all 0.15s; line-height: 1; }
+.gear-btn:hover { background: #f8f9ff; border-color: #4f46e5; }
+.gear-dropdown { display: none; position: absolute; top: 100%; right: 0; margin-top: 6px; min-width: 180px; background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 500; overflow: hidden; }
+.gear-dropdown.show { display: block; }
+.gear-dropdown .gear-item { display: block; width: 100%; padding: 10px 16px; border: none; background: transparent; font-size: 13px; color: #333; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.1s; white-space: nowrap; }
+.gear-dropdown .gear-item:hover { background: #f8f9ff; color: #4f46e5; }
+.gear-dropdown .gear-item.danger { color: #dc2626; }
+.gear-dropdown .gear-item.danger:hover { background: #fef2f2; }
+.gear-divider { height: 1px; background: #e8e8e8; margin: 4px 0; }
 .toolbar .title { font-size: 18px; font-weight: 700; flex: 1; }
 .content { flex: 1; display: flex; overflow: hidden; }
 .editor-panel { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
@@ -204,6 +214,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .anno-thumb .thumb-dot.yellow { background: #f59e0b; }
 .anno-thumb .thumb-dot.gray { background: #555; }
 .anno-hint { font-size: 11px; color: #555; text-align: center; padding: 4px 20px; background: #1a1a2e; }
+.anno-ai-banner { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; background: #1e1a2e; border-bottom: 1px solid #2a2a4a; color: #c4b5fd; font-size: 13px; flex-shrink: 0; }
+.anno-ai-banner .btn-sm { font-size: 11px; padding: 4px 10px; }
+.anno-progress-bar-wrap { flex-shrink: 0; padding: 6px 20px; background: #1a1a2e; border-bottom: 1px solid #2a2a4a; display: flex; align-items: center; gap: 10px; }
+.anno-progress-bar-wrap .bar-label { font-size: 12px; color: #a5b4fc; white-space: nowrap; min-width: 70px; }
+.anno-progress-bar-track { flex: 1; height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden; }
+.anno-progress-bar-track .fill { height: 100%; background: linear-gradient(90deg, #6366f1, #818cf8); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+.anno-test-drop { border: 2px dashed #d1d5db; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; min-width: 220px; min-height: 140px; display: flex; align-items: center; justify-content: center; }
+.anno-test-drop:hover { border-color: #4f46e5; background: #f8f9ff; }
+.anno-test-success { color: #059669; font-weight: 600; }
+.anno-test-fail { color: #dc2626; font-weight: 600; }
+.anno-test-key { color: #4f46e5; font-weight: 600; }
 /* 标注字段表格编辑器 */
 .af-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .af-table th { background: #f8f9ff; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 12px; color: #555; border-bottom: 2px solid #e8e8e8; white-space: nowrap; }
@@ -290,16 +311,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="title" id="caseEditorTitle">新建案例</div>
       <button class="btn btn-outline" onclick="newCase()">清空表单</button>
       <button class="btn btn-primary" onclick="saveCase()">保存</button>
-      <button class="btn btn-accent" onclick="rebuildVectorIndex()">🔄 重建向量库</button>
       <button class="btn btn-success" onclick="openImageBatchImport()">图片入库</button>
-      <button class="btn btn-warn" onclick="openAnnoFieldsEditor()">🏷️ 标注字段配置</button>
       <button class="btn btn-danger" onclick="deleteCase()">删除</button>
+      <span class="gear-wrapper">
+        <span class="gear-btn" id="caseGearBtn" onclick="toggleCaseGearMenu()" title="更多操作">⚙</span>
+        <div class="gear-dropdown" id="caseGearDropdown">
+          <button class="gear-item" onclick="openAnnoFieldsEditor();closeAllGearMenus()">🏷️ 标注字段配置</button>
+          <div class="gear-divider"></div>
+          <button class="gear-item" onclick="rebuildVectorIndex();closeAllGearMenus()">🔄 重建向量库</button>
+        </div>
+      </span>
     </div>
     <div class="content">
       <div class="editor-panel" id="caseEditor">
-        <div id="caseImagePreview" style="margin-bottom:16px;display:none;">
-          <label>案例图片</label>
-          <img id="caseImageImg" style="max-width:100%;max-height:260px;border-radius:8px;border:1px solid #e8e8e8;cursor:pointer;display:block;" onclick="openLightbox(this.src)" title="点击查看原图" />
+        <div id="caseImagesSection" style="margin-bottom:16px;">
+          <label>案例图片 <span style="font-weight:normal;color:#888;font-size:11px;">（可上传多张，支持拖拽）</span></label>
+          <div id="caseImagesGallery" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="btn btn-sm btn-outline" onclick="document.getElementById('caseImageFileInput').click()">＋ 添加图片</button>
+            <span style="font-size:11px;color:#999;align-self:center;" id="caseImageCount">未添加图片</span>
+          </div>
+          <input type="file" id="caseImageFileInput" accept="image/*" multiple style="display:none" onchange="onCaseImageFilesSelected(event)" />
         </div>
         <div class="form-row">
           <div><label class="case-field-label" data-field="crackLocation">屏损位置 *</label><select id="caseCrackLocation" onchange="onLocationSelectChange()"><option value="">-- 请选择 --</option><option>天侧</option><option>地侧</option><option>左侧</option><option>右侧</option><option>四角区域</option><option>中央区域</option><option>全屏区域</option><option>局部不规则区域</option><option value="__custom__">自定义...</option></select><input type="text" id="caseCrackLocationCustom" placeholder="自行输入屏损位置" style="margin-top:4px;display:none;" /></div>
@@ -313,12 +345,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           <div><label class="case-field-label" data-field="result">鉴定结论</label><select id="caseResult"><option value="">-- 非必填 --</option><option value="product_quality_issue">产品质量问题</option><option value="logistics_issue">物流问题</option><option value="not_product_quality">非产品质量问题</option><option value="needs_further_review">需进一步鉴定</option></select></div>
         </div>
         <div class="form-group">
-          <label class="case-field-label" data-field="possibleCause">可能原因</label>
-          <textarea id="casePossibleCause" placeholder="根据图片痕迹推断的可能原因..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="case-field-label" data-field="warrantyTip">鉴定结论</label>
-          <textarea id="caseWarrantyTip" placeholder="例如：图片显示明显外力磕碰痕迹，不在保修范围..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
+          <label class="case-field-label" data-field="crackPrinciple">屏损原理</label>
+          <textarea id="casePossibleCause" placeholder="例如：外力冲击导致液晶层破裂，裂纹从受力点向四周放射..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
         </div>
         <div id="caseCustomFieldsContainer" style="border-top:1px dashed #d1d5db;padding-top:12px;margin-top:8px;display:none;">
           <div id="caseCustomFields"></div>
@@ -373,6 +401,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <button class="btn btn-sm btn-primary" id="annoDoneBtn" onclick="finishAnnotation()">完成标注</button>
     </div>
   </div>
+  <div class="anno-ai-banner" id="annoAiBanner" style="display:none;">
+    <span id="annoAiBannerText"></span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm btn-accent" id="annoBatchAiBtn" onclick="startBatchAnnotation()">🤖 AI 批量预填</button>
+      <button class="btn btn-sm btn-outline" onclick="dismissAiBanner()" style="color:#8892b0;border-color:#3a3a5a;">跳过</button>
+    </div>
+  </div>
+  <div class="anno-progress-bar-wrap" id="annoProgressWrap" style="display:none;">
+    <span class="bar-label" id="annoProgressLabel">⏳ 分析中...</span>
+    <div class="anno-progress-bar-track"><div class="fill" id="annoProgressFill"></div></div>
+  </div>
   <div class="anno-body">
     <div class="anno-preview" id="annoPreview">
       <div class="placeholder">🖼️</div>
@@ -400,6 +439,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="name">🤖 大模型配置</div>
         <div class="meta">分析模型 · API 设置</div>
       </div>
+      <div class="item" onclick="selectModelSection('annotation')">
+        <div class="name">🏷️ 标注模型配置</div>
+        <div class="meta">案例标注 · 独立模型</div>
+      </div>
       <div class="item" onclick="selectModelSection('kb')">
         <div class="name">📚 知识库管理</div>
         <div class="meta">文档上传 · 检索配置</div>
@@ -409,7 +452,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="meta">CLIP · Milvus 状态</div>
       </div>
     </div>
-    <div class="stats" id="modelNavStats">共 3 个配置模块</div>
+    <div class="stats" id="modelNavStats">共 4 个配置模块</div>
   </div>
   <div class="main">
     <div class="toolbar">
@@ -498,6 +541,94 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
           <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:12px;color:#166534;">
             <strong>提示：</strong>如使用阿里云通义千问（qwen-vl-max），提供商选 OpenAI，API 地址填 <code>https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions</code>
+          </div>
+        </div>
+
+        <!-- 标注模型配置 -->
+        <div id="modelSection-annotation" class="model-section" style="display:none;">
+          <p style="font-size:13px;color:#888;margin-bottom:24px;">独立配置案例标注所用的视觉模型。可与分析模型不同（例如分析用高端模型、标注用便宜模型控制成本）。</p>
+
+          <div class="form-group">
+            <label>启用标注模型</label>
+            <div style="margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                <input type="checkbox" id="annoEnabled" checked /> 启用后 AI 辅助标注和批量预标注将使用此模型
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>模型名称</label>
+            <input type="text" id="annoModelName" placeholder="如: deepseek-chat / gpt-4o-mini" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">
+              推荐便宜模型：<a href="#" onclick="document.getElementById('annoModelName').value='deepseek-chat';return false" style="color:#4f46e5;">deepseek-chat</a> |
+              <a href="#" onclick="document.getElementById('annoModelName').value='gpt-4o-mini';return false" style="color:#4f46e5;">gpt-4o-mini</a>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>API 地址</label>
+            <input type="text" id="annoEndpoint" placeholder="https://api.deepseek.com" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">支持 OpenAI 兼容接口，与主模型可共用同一 API 网关</div>
+          </div>
+
+          <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="annoApiKey" placeholder="留空则使用主模型 Key" />
+            <div style="font-size:11px;color:#999;margin-top:4px;">留空会自动回退到主模型的 API Key</div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Temperature</label>
+              <input type="range" id="annoTemperature" min="0" max="1" step="0.1" value="0.3" onchange="document.getElementById('annoTempVal').textContent=this.value" />
+              <span id="annoTempVal" style="font-size:13px;color:#666;">0.3</span>
+            </div>
+            <div class="form-group">
+              <label>最大 Token</label>
+              <input type="number" id="annoMaxTokens" value="1024" style="width:100px;" />
+            </div>
+          </div>
+
+          <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:12px;color:#166534;">
+            <strong>提示：</strong>标注任务只需输出结构化 JSON，token 消耗少。推荐用 1024 tokens 的便宜模型（如 deepseek-chat），分析任务用主模型的高配版本。
+          </div>
+
+          <div class="form-group" style="margin-top:16px;">
+            <label>系统提示词</label>
+            <textarea id="annoSystemPrompt" rows="6" style="width:100%;font-family:Consolas,monospace;font-size:12px;padding:10px;border:1px solid #d1d5db;border-radius:8px;resize:vertical;"
+              placeholder="留空使用默认标注提示词&#10;&#10;你可以自定义标注指令，例如调整 crackShape 的候选值、&#10;修改 result 的判定逻辑、或要求大模型以特定格式输出。"></textarea>
+            <div style="font-size:11px;color:#999;margin-top:4px;">自定义提示词后，标注模型将按你的指令生成标注。留空则使用系统默认提示词。</div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <button class="btn btn-primary" id="annoSaveBtn" onclick="saveAnnotationConfigHandler()">💾 保存标注模型配置</button>
+          </div>
+
+          <div style="margin-top:32px;padding-top:24px;border-top:2px solid #e8e8e8;">
+            <h4 style="font-size:15px;color:#1a1a2e;margin-bottom:16px;">🧪 测试标注模型</h4>
+            <p style="font-size:12px;color:#888;margin-bottom:16px;">上传一张屏幕照片，使用当前配置的标注模型进行分析，验证配置是否正确。</p>
+
+            <div style="display:flex;gap:16px;align-items:flex-start;">
+              <div style="flex-shrink:0;">
+                <div id="annoTestDropZone" class="anno-test-drop" onclick="document.getElementById('annoTestFileInput').click()">
+                  <div id="annoTestPreview" style="display:none;">
+                    <img id="annoTestImg" style="max-width:260px;max-height:200px;border-radius:8px;" />
+                  </div>
+                  <div id="annoTestPlaceholder">
+                    <div style="font-size:32px;margin-bottom:6px;">📷</div>
+                    <div style="font-size:12px;color:#999;">点击上传测试图片</div>
+                  </div>
+                </div>
+                <input type="file" id="annoTestFileInput" accept="image/*" style="display:none" onchange="onAnnoTestFileSelected(event)" />
+                <button class="btn btn-sm btn-accent" id="annoTestBtn" onclick="runAnnotationTest()" style="margin-top:8px;width:100%;" disabled>▶ 开始测试</button>
+                <button class="btn btn-sm btn-outline" id="annoTestClearBtn" onclick="clearAnnotationTest()" style="margin-top:6px;width:100%;display:none;">清除</button>
+              </div>
+              <div id="annoTestResult" style="flex:1;display:none;">
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px;">分析结果：</div>
+                <div id="annoTestContent" style="font-size:12px;background:#f8f9ff;border-radius:8px;padding:14px;line-height:1.8;"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -593,11 +724,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 
 <script>
-const API = 'http://localhost:8082/api/admin'
-const KNOWLEDGE_API = 'http://localhost:8083/api/knowledge'
+const API = '/api/admin'
+const KNOWLEDGE_API = '/api/knowledge'
 let currentRuleId = null
 let currentRule = null
 let currentCaseId = null
+
+// ===== 齿轮下拉菜单 =====
+function toggleCaseGearMenu() {
+  document.getElementById('caseGearDropdown').classList.toggle('show')
+}
+function closeAllGearMenus() {
+  document.querySelectorAll('.gear-dropdown.show').forEach(d => d.classList.remove('show'))
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.gear-wrapper') && !e.target.closest('.gear-dropdown')) {
+    closeAllGearMenus()
+  }
+})
 
 let imageBatchList = []
 let selectedCaseIds = new Set()
@@ -665,7 +809,7 @@ function selectModelSection(section) {
   // 更新侧边栏选中状态
   document.querySelectorAll('#modelNavList .item').forEach(item => item.classList.remove('active'))
   const items = document.querySelectorAll('#modelNavList .item')
-  const idx = { llm: 0, kb: 1, vector: 2 }[section] || 0
+  const idx = { llm: 0, annotation: 1, kb: 2, vector: 3 }[section] || 0
   if (items[idx]) items[idx].classList.add('active')
 
   // 切换内容区
@@ -674,12 +818,16 @@ function selectModelSection(section) {
   if (panel) panel.style.display = ''
 
   // 更新标题和按钮
-  const titles = { llm: '大模型配置', kb: '知识库管理', vector: '向量检索服务' }
+  const titles = { llm: '大模型配置', annotation: '标注模型配置', kb: '知识库管理', vector: '向量检索服务' }
   document.getElementById('modelSectionTitle').textContent = titles[section] || ''
-  document.getElementById('modelSaveBtn').style.display = section === 'vector' ? 'none' : ''
+  // 标注面板用独立保存按钮，其他面板用通用保存按钮
+  const isAnno = section === 'annotation'
+  const isVector = section === 'vector'
+  document.getElementById('modelSaveBtn').style.display = (isVector || isAnno) ? 'none' : ''
 
   if (section === 'vector') checkVectorStatus()
   if (section === 'kb' && !kbDocData.length) loadKbDocuments()
+  if (section === 'annotation') loadAnnotationConfigPage()
 }
 
 // ===== 标注字段表格编辑器 =====
@@ -880,14 +1028,14 @@ function resetAnnoFieldsToDefault() {
 }
 
 const DEFAULT_ANNO_FIELDS = [
+  { id: 'title', label: '标题（可选）', type: 'input', required: false },
   { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
-  { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','__custom__'] },
+  { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','漏液（有缺角、裂纹、腐蚀）','漏液（无缺角、裂纹、腐蚀）','熔屏（有缺角、裂纹、腐蚀）','熔屏（无缺角、裂纹、腐蚀）','__custom__'] },
+  { id: 'crackStage', label: '屏损环节', type: 'tag-grid', required: false, options: ['产品因素','物流运输搬运','拆机验机安装','使用保管不当','__custom__'] },
   { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'产品质量问题',cls:'pq'},{value:'logistics_issue',label:'物流问题',cls:'logistics'},{value:'not_product_quality',label:'非产品质量问题',cls:'npq'},{value:'needs_further_review',label:'需进一步鉴定',cls:'review'}] },
   { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
   { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
-  { id: 'possibleCause', label: '可能原因', type: 'textarea', required: false },
-  { id: 'warrantyTip', label: '鉴定结论', type: 'textarea', required: false },
-  { id: 'title', label: '标题（可选）', type: 'input', required: false },
+  { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
 ]
 var currentAnnoFields = [...DEFAULT_ANNO_FIELDS]
 
@@ -899,7 +1047,7 @@ async function checkVectorStatus() {
   text.textContent = '检测中...'
   detail.textContent = '正在检测 CLIP 向量检索服务连接状态...'
   try {
-    const resp = await fetch('http://localhost:8083/api/knowledge/vector-stats')
+    const resp = await fetch(`${KNOWLEDGE_API}/vector-stats`)
     const { data } = await resp.json()
     if (data.clipAvailable) {
       dot.style.background = '#10b981'
@@ -991,6 +1139,150 @@ async function saveModelConfig() {
     btn.className = 'btn btn-warn'
     btn.disabled = false
   }
+}
+
+// ===== 标注模型配置 =====
+
+let annotationConfigLoaded = false
+
+async function loadAnnotationConfigPage() {
+  if (annotationConfigLoaded) return
+  try {
+    const [annoResp, modelResp] = await Promise.all([
+      knowledgeApi('/annotation-config'),
+      knowledgeApi('/model-config'),
+    ])
+    annotationConfigLoaded = true
+    const data = annoResp.data
+    document.getElementById('annoEnabled').checked = data.enabled !== false
+    document.getElementById('annoModelName').value = data.model || ''
+    document.getElementById('annoEndpoint').value = data.endpoint || ''
+    document.getElementById('annoApiKey').value = data.apiKey || ''
+    document.getElementById('annoTemperature').value = data.temperature || 0.3
+    document.getElementById('annoTempVal').textContent = data.temperature || 0.3
+    document.getElementById('annoMaxTokens').value = data.maxTokens || 1024
+    document.getElementById('annoSystemPrompt').value = data.systemPrompt || ''
+    // 同步加载标注字段配置
+    if (modelResp.data.annoFields && Array.isArray(modelResp.data.annoFields)) {
+      currentAnnoFields = modelResp.data.annoFields
+    }
+  } catch (e) {
+    toast('加载标注模型配置失败: ' + (e.message || e), 'error')
+  }
+}
+
+async function saveAnnotationConfigHandler() {
+  const btn = document.getElementById('annoSaveBtn')
+  btn.textContent = '正在保存...'
+  btn.disabled = true
+  const body = {
+    enabled: document.getElementById('annoEnabled').checked,
+    model: document.getElementById('annoModelName').value,
+    endpoint: document.getElementById('annoEndpoint').value,
+    apiKey: document.getElementById('annoApiKey').value,
+    temperature: parseFloat(document.getElementById('annoTemperature').value),
+    maxTokens: parseInt(document.getElementById('annoMaxTokens').value),
+    systemPrompt: document.getElementById('annoSystemPrompt').value,
+  }
+  try {
+    await knowledgeApi('/annotation-config', { method: 'POST', body: JSON.stringify(body) })
+    btn.textContent = '配置已生效'
+    btn.className = 'btn btn-success'
+    setTimeout(() => {
+      btn.textContent = '💾 保存标注模型配置'
+      btn.className = 'btn btn-primary'
+      btn.disabled = false
+    }, 2000)
+  } catch (e) {
+    toast('保存失败: ' + (e.message || e), 'error')
+    btn.textContent = '保存失败，点击重试'
+    btn.className = 'btn btn-warn'
+    btn.disabled = false
+  }
+}
+
+// ===== 标注模型测试 =====
+let _annoTestImageBase64 = ''
+
+function onAnnoTestFileSelected(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  if (file.size > 10 * 1024 * 1024) { toast('图片不能超过 10MB', 'error'); return }
+  const reader = new FileReader()
+  reader.onload = () => {
+    _annoTestImageBase64 = reader.result
+    document.getElementById('annoTestImg').src = reader.result
+    document.getElementById('annoTestPreview').style.display = ''
+    document.getElementById('annoTestPlaceholder').style.display = 'none'
+    document.getElementById('annoTestBtn').disabled = false
+    document.getElementById('annoTestClearBtn').style.display = ''
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+function clearAnnotationTest() {
+  _annoTestImageBase64 = ''
+  document.getElementById('annoTestImg').src = ''
+  document.getElementById('annoTestPreview').style.display = 'none'
+  document.getElementById('annoTestPlaceholder').style.display = ''
+  document.getElementById('annoTestBtn').disabled = true
+  document.getElementById('annoTestClearBtn').style.display = 'none'
+  document.getElementById('annoTestResult').style.display = 'none'
+  document.getElementById('annoTestContent').innerHTML = ''
+}
+
+async function runAnnotationTest() {
+  if (!_annoTestImageBase64) return toast('请先上传测试图片', 'error')
+  const btn = document.getElementById('annoTestBtn')
+  const content = document.getElementById('annoTestContent')
+  const resultDiv = document.getElementById('annoTestResult')
+
+  btn.disabled = true
+  btn.textContent = '⏳ 分析中...'
+  resultDiv.style.display = ''
+  content.innerHTML = '<span style="color:#999;">正在调用标注模型...</span>'
+
+  const t0 = performance.now()
+  try {
+    const res = await fetch('/api/knowledge/annotate-single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: _annoTestImageBase64 }),
+    })
+    const json = await res.json()
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1)
+
+    if (!json.success) {
+      content.innerHTML = `<div class="anno-test-fail">❌ 分析失败</div>
+        <div style="margin-top:8px;color:#555;">${esc(json.error?.message || '未知错误')}</div>
+        <div style="margin-top:4px;color:#999;font-size:11px;">耗时 ${elapsed}s</div>`
+    } else {
+      const d = json.data
+      content.innerHTML = `
+        <div class="anno-test-success">✓ 分析成功（${elapsed}s，置信度 ${d.confidence || '-'}%）</div>
+        <table style="margin-top:10px;width:100%;font-size:12px;border-collapse:collapse;">
+          ${row('屏损位置', d.crackLocation)}
+          ${row('屏损形态', d.crackShape)}
+          ${row('屏损原理', d.crackPrinciple || d.possibleCause)}
+          ${row('屏损环节', d.crackStage)}
+          ${row('鉴定结论', (d.resultLabel || resultLabelMap[d.result] || d.result))}
+          ${row('摘要', d.summary)}
+          ${row('模型', d.model)}
+        </table>`
+    }
+  } catch (e) {
+    content.innerHTML = `<div class="anno-test-fail">❌ 网络错误</div>
+      <div style="margin-top:8px;color:#555;">${esc(e.message)}</div>`
+  } finally {
+    btn.disabled = false
+    btn.textContent = '▶ 开始测试'
+  }
+}
+
+function row(label, value) {
+  if (!value) return ''
+  return `<tr><td style="padding:4px 8px;color:#888;white-space:nowrap;vertical-align:top;">${label}</td><td style="padding:4px 8px;color:#333;">${esc(String(value))}</td></tr>`
 }
 
 // ===== 知识库管理 =====
@@ -1485,9 +1777,81 @@ function readCaseCustomFields() {
   return customFields
 }
 
+// ===== 案例图片管理 =====
+let _caseImages = []  // { file, data, name }
+
+function onCaseImageFilesSelected(event) {
+  const files = event.target.files
+  if (!files.length) return
+  ;(async () => {
+    let added = 0
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > 10 * 1024 * 1024) { toast(`${file.name} 超过 10MB 上限，已跳过`, 'error'); continue }
+      const data = await new Promise(resolve => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => resolve('')
+        reader.readAsDataURL(file)
+      })
+      if (!data) continue
+      _caseImages.push({ file, data, name: file.name })
+      added++
+    }
+    event.target.value = ''
+    if (added > 0) toast(`已添加 ${added} 张图片`, 'info')
+    renderCaseImages()
+  })()
+}
+
+function renderCaseImages() {
+  const gallery = document.getElementById('caseImagesGallery')
+  const count = document.getElementById('caseImageCount')
+  if (!gallery) return
+
+  if (_caseImages.length === 0) {
+    gallery.innerHTML = '<div style="color:#aaa;font-size:12px;padding:8px;">暂无图片</div>'
+    count.textContent = '未添加图片'
+    return
+  }
+  count.textContent = `共 ${_caseImages.length} 张`
+
+  gallery.innerHTML = _caseImages.map((img, idx) => `
+    <div style="position:relative;display:inline-block;border-radius:6px;overflow:hidden;border:1px solid #e8e8e8;width:120px;height:90px;flex-shrink:0;">
+      <img src="${img.data}" style="width:100%;height:100%;object-fit:cover;cursor:pointer;" onclick="openLightbox('${img.data}')" title="${esc(img.name)}" />
+      <button onclick="removeCaseImage(${idx})" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:3px;font-size:10px;width:18px;height:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+  `).join('')
+}
+
+function removeCaseImage(idx) {
+  _caseImages.splice(idx, 1)
+  renderCaseImages()
+}
+
+/**
+ * 从已有案例对象加载图片列表（编辑案例时使用）
+ */
+function loadCaseImages(c) {
+  _caseImages = []
+  if (!c) { renderCaseImages(); return }
+  const imgList = c.images || (c.image ? [c.image] : [])
+  for (const imgName of imgList) {
+    _caseImages.push({
+      file: null,
+      data: `/api/knowledge/images?name=${encodeURIComponent(imgName)}`,
+      name: imgName,
+      existing: true,
+    })
+  }
+  renderCaseImages()
+}
+
 function fillCaseForm(c) {
   // 刷新标签
   refreshCaseFormLabels()
+  // 加载已有图片
+  loadCaseImages(c)
   // 渲染自定义字段
   renderCaseCustomFields(c.customFields || {})
   const locSel = document.getElementById('caseCrackLocation')
@@ -1518,15 +1882,7 @@ function fillCaseForm(c) {
   document.getElementById('caseInstallStatus').value = c.installStatus || ''
   document.getElementById('casePackageDamage').value = c.packageDamage || ''
   document.getElementById('caseResult').value = c.result || ''
-  document.getElementById('casePossibleCause').value = c.possibleCause || ''
-  document.getElementById('caseWarrantyTip').value = c.warrantyTip || ''
-  const preview = document.getElementById('caseImagePreview')
-  if (c.image) {
-    preview.style.display = 'block'
-    document.getElementById('caseImageImg').src = `http://localhost:8083/api/knowledge/images?name=${encodeURIComponent(c.image)}`
-  } else {
-    preview.style.display = 'none'
-  }
+  document.getElementById('casePossibleCause').value = c.crackPrinciple || ''
 }
 
 function resetCaseForm() {
@@ -1540,8 +1896,8 @@ function resetCaseForm() {
   document.getElementById('casePackageDamage').value = ''
   document.getElementById('caseResult').value = ''
   document.getElementById('casePossibleCause').value = ''
-  document.getElementById('caseWarrantyTip').value = ''
-  document.getElementById('caseImagePreview').style.display = 'none'
+  _caseImages = []
+  renderCaseImages()
   document.getElementById('caseEditorTitle').textContent = '新建案例'
   document.getElementById('caseCustomFields').innerHTML = ''
   document.getElementById('caseCustomFieldsContainer').style.display = 'none'
@@ -1572,15 +1928,18 @@ function readCaseForm() {
   const shapeCustom = document.getElementById('caseCrackShapeCustom')
   const crackShape = shapeSel.value === '__custom__' ? (shapeCustom.value || '').trim() : shapeSel.value
 
+  // 收集新上传的图片 base64（非已有图片）
+  const imageDataList = _caseImages.filter(img => !img.existing && img.data && img.data.startsWith('data:image/')).map(img => img.data)
+
   return {
     crackLocation,
     crackShape,
     installStatus: document.getElementById('caseInstallStatus').value,
     packageDamage: document.getElementById('casePackageDamage').value,
     result: document.getElementById('caseResult').value,
-    possibleCause: document.getElementById('casePossibleCause').value.trim(),
-    warrantyTip: document.getElementById('caseWarrantyTip').value.trim(),
+    crackPrinciple: document.getElementById('casePossibleCause').value.trim(),
     customFields: readCaseCustomFields(),
+    imageDataList,
   }
 }
 
@@ -1608,9 +1967,10 @@ async function saveCase() {
       await loadCaseList()
       document.getElementById('caseEditorTitle').textContent = `编辑案例: ${created.title}`
 
-      // 自动提取特征并加入 KNN 训练集
-      if (adminImageData) {
-        submitTraining([{ data: adminImageData, filename: 'case-image' }], data.crackLocation, data.crackShape, created.id)
+      // 自动提取特征并加入 KNN 训练集（每张新上传的图片）
+      const newImages = _caseImages.filter(img => !img.existing && img.data && img.data.startsWith('data:image/'))
+      if (newImages.length > 0) {
+        submitTraining(newImages.map(img => ({ data: img.data, filename: img.name })), data.crackLocation, data.crackShape, created.id)
       }
     }
   } catch (e) {
@@ -1735,7 +2095,7 @@ function addImages(files) {
       filename: file.name, file, title: '',
       crackLocation: '', crackShape: '', result: '',
       installStatus: '', packageDamage: '',
-      possibleCause: '', warrantyTip: '',
+      crackPrinciple: '',
     })
     added++
   }
@@ -1812,15 +2172,198 @@ function updateImgConfirmBtn() {
 // ===== 快速标注模式 =====
 let annoCurrentIdx = 0
 
-const CORE_FIELD_IDS = new Set(['crackLocation','crackShape','result','installStatus','packageDamage','possibleCause','warrantyTip','title'])
+const CORE_FIELD_IDS = new Set(['crackLocation','crackShape','result','installStatus','packageDamage','crackPrinciple','title'])
 
-function openQuickAnnotation(startIdx) {
+async function openQuickAnnotation(startIdx) {
   if (imageBatchList.length === 0) return toast('请先添加图片', 'error')
+
   // 清除侧边栏缓存，强制用最新配置重新渲染
   imageBatchList.forEach(img => { delete img._annoSidebarRendered })
   annoCurrentIdx = startIdx || 0
   document.getElementById('annoOverlay').classList.add('show')
   renderAnnotation()
+
+  // 进入标注后，展示 AI 批量预填引导横幅
+  showAiBannerIfNeeded()
+}
+
+/**
+ * 如果有未标注图片，展示横幅引导用户使用 AI 批量预填
+ */
+function showAiBannerIfNeeded() {
+  const banner = document.getElementById('annoAiBanner')
+  const text = document.getElementById('annoAiBannerText')
+  const btn = document.getElementById('annoBatchAiBtn')
+  const unannotated = imageBatchList.filter(img => !getAnnoVal(img, 'crackLocation') || !getAnnoVal(img, 'crackShape'))
+  if (unannotated.length === 0) { banner.style.display = 'none'; return }
+  text.textContent = `还有 ${unannotated.length} 张未标注，是否用 AI 自动预填？（约需 ${unannotated.length * 3} 秒）`
+  btn.disabled = false
+  btn.textContent = '🤖 AI 批量预填'
+  banner.style.display = 'flex'
+}
+
+function dismissAiBanner() {
+  document.getElementById('annoAiBanner').style.display = 'none'
+}
+
+/**
+ * 横幅中的「AI 批量预填」按钮：对未标注图片逐张调 LLM，实时刷新当前视图
+ */
+async function startBatchAnnotation() {
+  const banner = document.getElementById('annoAiBanner')
+  const btn = document.getElementById('annoBatchAiBtn')
+  btn.disabled = true
+  btn.textContent = '⏳ 分析中...'
+
+  const unannotated = imageBatchList.filter(img => !getAnnoVal(img, 'crackLocation') || !getAnnoVal(img, 'crackShape'))
+  showAnnoProgress('🤖 AI 批量分析中...')
+  const done = await runBatchAnnotation(unannotated, (i, total) => {
+    updateAnnoProgress(i, total, `⏳ AI 分析 ${i}/${total}`)
+  })
+  hideAnnoProgress()
+
+  if (done === 0) {
+    toast('AI 批量预填未成功，请检查模型配置', 'error')
+  } else {
+    // 清除侧边栏缓存，强制重建 tag-grid 显示标注结果
+    const img = imageBatchList[annoCurrentIdx]
+    if (img) delete img._annoSidebarRendered
+    renderAnnotation()
+  }
+
+  banner.style.display = 'none'
+}
+
+function showAnnoProgress(label) {
+  const wrap = document.getElementById('annoProgressWrap')
+  document.getElementById('annoProgressLabel').textContent = label || '⏳ 分析中...'
+  document.getElementById('annoProgressFill').style.width = '0%'
+  wrap.style.display = 'flex'
+}
+
+function updateAnnoProgress(current, total, label) {
+  document.getElementById('annoProgressLabel').textContent = label || `⏳ ${current}/${total}`
+  document.getElementById('annoProgressFill').style.width = total > 0 ? ((current / total) * 100) + '%' : '0%'
+}
+
+function hideAnnoProgress() {
+  document.getElementById('annoProgressWrap').style.display = 'none'
+}
+
+/**
+ * 对指定图片列表逐张调用 LLM 生成标注，自动填入字段
+ */
+async function runBatchAnnotation(images, onProgress) {
+  let done = 0
+  const total = images.length
+  for (const img of images) {
+    const imageBase64 = await new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(img.file)
+    })
+    if (!imageBase64) continue
+
+    try {
+      const res = await fetch('/api/knowledge/annotate-single', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageBase64 }),
+      })
+      const result = await res.json()
+      if (!result.success || !result.data) continue
+      const data = result.data
+
+      const fieldMap = {
+        crackLocation: data.crackLocation, crackShape: data.crackShape,
+        crackPrinciple: data.crackPrinciple,
+        crackStage: data.crackStage, result: data.result, summary: data.summary,
+      }
+      for (const [fid, val] of Object.entries(fieldMap)) {
+        if (val) setAnnoVal(img, fid, val)
+      }
+      if (!img.title && data.summary) img.title = data.summary
+      else if (!img.title && data.crackLocation && data.crackShape) img.title = data.crackLocation + '-' + data.crackShape
+      done++
+      // 如果当前视图正好在看这张图，实时刷新侧边栏
+      if (imageBatchList[annoCurrentIdx] === img) {
+        delete img._annoSidebarRendered
+        renderAnnotation()
+      }
+      if (onProgress) onProgress(done, total)
+    } catch {
+      // 单张失败不影响其他
+    }
+  }
+  if (done > 0) toast(`AI 预标注完成：${done}/${images.length} 张`, 'success')
+  return done
+}
+
+/**
+ * 标注模式：对当前图片调用 LLM 分析并填入侧边栏字段
+ */
+async function annotateCurrentImage() {
+  const img = imageBatchList[annoCurrentIdx]
+  if (!img) return
+  const btn = document.getElementById('annoAiBtn')
+  btn.disabled = true
+  btn.textContent = '⏳ AI 分析中...'
+  showAnnoProgress('🤖 AI 正在分析当前图片...')
+
+  const imageBase64 = await new Promise(resolve => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(img.file)
+  })
+  if (!imageBase64) { btn.disabled = false; btn.textContent = '🤖 AI 分析此图'; return }
+
+  try {
+    const res = await fetch('/api/knowledge/annotate-single', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageBase64 }),
+    })
+    const result = await res.json()
+    if (!result.success || !result.data) throw new Error('返回空结果')
+    const data = result.data
+
+    const fieldMap = {
+      crackLocation: data.crackLocation, crackShape: data.crackShape,
+      crackPrinciple: data.crackPrinciple,
+      crackStage: data.crackStage, result: data.result,
+    }
+      for (const [fid, val] of Object.entries(fieldMap)) {
+        if (val) setAnnoVal(img, fid, val)
+      }
+    if (!img.title && data.summary) img.title = data.summary
+    else if (!img.title && data.crackLocation && data.crackShape) img.title = data.crackLocation + '-' + data.crackShape
+
+    // 调试：打印 AI 返回的字段
+    console.log('[AI标注] 返回:', {
+      位置: data.crackLocation, 形态: data.crackShape,
+      原理: data.crackPrinciple, 环节: data.crackStage,
+      结论: data.result, 置信度: data.confidence
+    })
+    console.log('[AI标注] 写入后:', {
+      位置: getAnnoVal(img, 'crackLocation'),
+      形态: getAnnoVal(img, 'crackShape'),
+      原理: getAnnoVal(img, 'crackPrinciple'),
+    })
+
+    // 清除侧边栏缓存，强制重建 tag-grid 按钮以显示 AI 标注结果
+    delete img._annoSidebarRendered
+
+    // 刷新侧边栏（renderAnnotation 会正确高亮匹配的 tag-grid 按钮）
+    renderAnnotation()
+
+    toast(`AI 分析完成 (${data.confidence}% 置信度)`, 'success')
+  } catch (e) {
+    toast('AI 分析失败: ' + (e.message || e), 'error')
+  } finally {
+    hideAnnoProgress()
+    btn.disabled = false
+    btn.textContent = '🤖 AI 分析此图'
+  }
 }
 
 function closeAnnotation() {
@@ -1855,7 +2398,7 @@ function setAnnoVal(img, fieldId, val) {
 function renderAnnoSidebar() {
   const container = document.getElementById('annoSidebar')
   const fields = currentAnnoFields
-  let html = ''
+  let html = `<button class="btn btn-sm btn-accent" id="annoAiBtn" onclick="annotateCurrentImage()" style="width:100%;margin-bottom:12px;">🤖 AI 分析此图</button>`
   for (let i = 0; i < fields.length; i++) {
     const f = fields[i]
     const uid = 'anno_' + f.id
@@ -1964,7 +2507,7 @@ function renderAnnotation() {
         const sel = selectedVal === v ? ' selected' : ''
         return `<button class="tag-btn${sel}" id="anno_btn_${f.id}_${j}" data-optval="${esc(v)}">${esc(lbl)}</button>`
       }).join('')
-      // Bind click
+      // Bind click（已选中则取消选中）
       container.querySelectorAll('button').forEach(btn => {
         btn.onclick = function() {
           const oV = this.dataset.optval
@@ -1977,10 +2520,12 @@ function renderAnnotation() {
             } else {
               custEl.style.display = 'none'
               custEl.value = ''
-              setAnnotationField(f.id, oV)
+              // 已选中则取消，否则选中
+              setAnnotationField(f.id, val === oV ? '' : oV)
             }
           } else {
-            setAnnotationField(f.id, oV)
+            // 已选中则取消，否则选中
+            setAnnotationField(f.id, val === oV ? '' : oV)
           }
         }
       })
@@ -2132,8 +2677,7 @@ async function confirmImageBatchImport() {
       result: getAnnoVal(img, 'result') || '',
       installStatus: getAnnoVal(img, 'installStatus') || '',
       packageDamage: getAnnoVal(img, 'packageDamage') || '',
-      possibleCause: getAnnoVal(img, 'possibleCause') || '',
-      warrantyTip: getAnnoVal(img, 'warrantyTip') || '',
+      crackPrinciple: getAnnoVal(img, 'crackPrinciple') || '',
       customFields: img.customFields || {},
     })
   }
@@ -2362,7 +2906,7 @@ async function submitTraining(images, location, shape, caseId) {
       const features = await extractFeaturesFromBase64(img.data || img.url)
       const loc = normalizeLabel(img.crackLocation || location, 'location')
       const shp = normalizeLabel(img.crackShape || shape, 'shape')
-      await fetch('http://localhost:8083/api/knowledge/training', {
+      await fetch('/api/knowledge/training', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ features, location: loc, shape: shp, caseId })
@@ -2378,7 +2922,7 @@ async function rebuildVectorIndex() {
 
   toast('正在通过 CLIP 提取特征并重建向量库...', 'info')
   try {
-    const resp = await fetch('http://localhost:8083/api/knowledge/rebuild-index', {
+    const resp = await fetch(`${KNOWLEDGE_API}/rebuild-index`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })

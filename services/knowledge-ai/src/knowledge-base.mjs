@@ -307,8 +307,17 @@ async function describeImageWithLLM(imageBytes, mimeType) {
   }
 }
 
+// 自动拼接 /chat/completions — 兼容用户只填 base URL 的情况
+function normalizeEndpoint(endpoint) {
+  const trimmed = (endpoint || '').replace(/\/+$/, '')
+  if (trimmed.endsWith('/chat/completions')) return trimmed
+  if (trimmed.endsWith('/v1')) return trimmed + '/chat/completions'
+  return trimmed + '/v1/chat/completions'
+}
+
 async function describeWithOpenAI(config, dataUri) {
-  const resp = await fetch(config.endpoint, {
+  const endpoint = normalizeEndpoint(config.endpoint)
+  const resp = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
     body: JSON.stringify({
@@ -331,7 +340,8 @@ async function describeWithOpenAI(config, dataUri) {
 
 async function describeWithAnthropic(config, dataUri, mimeType) {
   const base64Data = dataUri.replace(/^data:image\/\w+;base64,/, '')
-  const resp = await fetch(config.endpoint, {
+  const endpoint = normalizeEndpoint(config.endpoint)
+  const resp = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({

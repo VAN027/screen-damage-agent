@@ -66,6 +66,33 @@ function proxyStreamToKnowledge(path, body, clientReq, clientRes) {
   proxyReq.end()
 }
 
+// 二进制通用代理（图片等非 JSON 资源透传）
+function pipeProxyToKnowledge(method, path, body, clientReq, clientRes) {
+  const url = new URL(`${KNOWLEDGE_AI_URL}${path}`)
+  const opts = {
+    hostname: url.hostname,
+    port: url.port || 80,
+    path: url.pathname + (url.search || ''),
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  }
+  const proxyReq = http.request(opts, upstreamRes => {
+    const headers = {
+      'Content-Type': upstreamRes.headers['content-type'] || 'application/octet-stream',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': upstreamRes.headers['cache-control'] || 'public, max-age=86400',
+    }
+    if (upstreamRes.headers['content-length']) headers['Content-Length'] = upstreamRes.headers['content-length']
+    clientRes.writeHead(upstreamRes.statusCode, headers)
+    upstreamRes.pipe(clientRes)
+  })
+  proxyReq.on('error', () => {
+    if (!clientRes.headersSent) { clientRes.writeHead(502); clientRes.end() }
+  })
+  if (body) proxyReq.write(JSON.stringify(body))
+  proxyReq.end()
+}
+
 function buildDecisionRequest(submission, caseId) {
   return {
     caseId,
@@ -159,9 +186,34 @@ const routes = [
     handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/model-config', body, res),
   },
   {
+    method: 'GET',
+    path: '/api/knowledge/annotation-config',
+    handler: (_req, res) => proxyToKnowledge('GET', '/api/knowledge/annotation-config', null, res),
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/annotation-config',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/annotation-config', body, res),
+  },
+  {
     method: 'POST',
     path: '/api/knowledge/search-vector',
     handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/search-vector', body, res),
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/correction',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/correction', body, res),
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/annotate-single',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/annotate-single', body, res),
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/annotate-batch',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/annotate-batch', body, res),
   },
   // SSE 流式分析 —— 特殊处理，不能走 fetchJson（会缓冲）
   {
@@ -169,10 +221,24 @@ const routes = [
     path: '/api/knowledge/analyze-llm-stream',
     handler: (req, res, { body }) => proxyStreamToKnowledge('/api/knowledge/analyze-llm-stream', body, req, res),
   },
+  // 案例图片代理（二进制透传，供前端展示相似案例缩略图）
+  {
+    method: 'GET',
+    path: '/api/knowledge/images',
+    handler: (req, res, { query }) => {
+      const qs = query.name ? `?name=${encodeURIComponent(query.name)}` : ''
+      pipeProxyToKnowledge('GET', `/api/knowledge/images${qs}`, null, req, res)
+    },
+  },
   // OPTIONS 预检（CORS）
   {
     method: 'OPTIONS',
     path: '/api/knowledge/model-config',
+    handler: (_req, res) => { res.writeHead(204, corsHeaders()); res.end() },
+  },
+  {
+    method: 'OPTIONS',
+    path: '/api/knowledge/annotation-config',
     handler: (_req, res) => { res.writeHead(204, corsHeaders()); res.end() },
   },
   {

@@ -13,16 +13,24 @@
   "showRagPanel": true,
   "showAiPanel": true,
   "annoFields": [
+    { "id": "title", "label": "标题（可选）", "type": "input", "required": false },
     { "id": "crackLocation", "label": "屏损位置", "type": "tag-grid", "required": true,
       "options": ["天侧","地侧","左侧","右侧","四角区域","中央区域","全屏区域","局部不规则区域","__custom__"] },
     { "id": "crackShape", "label": "屏损形态", "type": "tag-grid", "required": true,
-      "options": ["单条线状屏裂","多条线状屏裂","点放射状屏裂","发散性线状屏裂","环状/圈状屏裂","网状(大面积无规则)屏裂","__custom__"] },
+      "options": ["单条线状屏裂","多条线状屏裂","点放射状屏裂","发散性线状屏裂","环状/圈状屏裂","网状(大面积无规则)屏裂","漏液（有缺角、裂纹、腐蚀）","漏液（无缺角、裂纹、腐蚀）","熔屏（有缺角、裂纹、腐蚀）","熔屏（无缺角、裂纹、腐蚀）","__custom__"] },
+    { "id": "crackStage", "label": "屏损环节", "type": "tag-grid", "required": false,
+      "options": ["产品因素","物流运输搬运","拆机验机安装","使用保管不当","__custom__"] },
     { "id": "result", "label": "鉴定结论", "type": "result-btns", "required": false,
       "options": [
         { "value": "product_quality_issue", "label": "产品质量问题", "cls": "pq" },
         { "value": "logistics_issue", "label": "物流问题", "cls": "logistics" },
         { "value": "not_product_quality", "label": "非产品质量问题", "cls": "npq" },
         { "value": "needs_further_review", "label": "需进一步鉴定", "cls": "review" }
-      ] }
+      ] },
+    { "id": "installStatus", "label": "安装状态", "type": "tag-grid", "required": false,
+      "options": [{ "value": "installed", "label": "已安装" }, { "value": "not_installed", "label": "未安装" }] },
+    { "id": "packageDamage", "label": "包装状态", "type": "tag-grid", "required": false,
+      "options": [{ "value": "none", "label": "无损坏" }, { "value": "minor", "label": "轻微损坏" }, { "value": "severe", "label": "严重损坏" }] },
+    { "id": "crackPrinciple", "label": "屏损原理", "type": "textarea", "required": false }
   ]
 }

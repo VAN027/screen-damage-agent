@@ -7,6 +7,12 @@ __pycache__/
 .env
 *.env
 services/knowledge-ai/data/model-config.json
+services/knowledge-ai/data/annotation-config.json
+
+# Python 虚拟环境
+venv/
+.venv/
+env/
 
 # 运行时生成的数据
 services/knowledge-ai/data/vector-index.json

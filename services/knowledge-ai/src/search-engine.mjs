@@ -35,17 +35,43 @@ async function saveCases(cases) {
   await writeFile(CASES_FILE, JSON.stringify(cases, null, 2), 'utf-8')
 }
 
+// 向后兼容：从案例对象读取图片列表（image 字符串 → images 数组）
+export function getCaseImages(c) {
+  if (c.images && Array.isArray(c.images)) return c.images
+  if (c.image) return [c.image]
+  return []
+}
+
 export async function saveImage(id, base64DataUrl) {
+  const filenames = await saveImages(id, [base64DataUrl])
+  return filenames[0] || ''
+}
+
+/**
+ * 保存多张图片，返回文件名数组
+ * @param {string} caseId - 案例 ID
+ * @param {string[]} dataUrls - base64 data URL 数组，可为空
+ * @returns {Promise<string[]>} 保存后的文件名列表
+ */
+export async function saveImages(caseId, dataUrls) {
   await ensureDir(IMAGES_DIR)
-  const match = base64DataUrl.match(/^data:image\/(\w+);base64,(.+)$/)
-  if (!match) throw new Error('无效的 base64 图片格式')
-  const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
-  const data = Buffer.from(match[2], 'base64')
-  if (data.length > MAX_IMAGE_BYTES) throw new Error(`图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 限制`)
-  const filename = `${id}.${ext}`
-  const filepath = join(IMAGES_DIR, filename)
-  await writeFile(filepath, data)
-  return filename
+  if (!dataUrls || !Array.isArray(dataUrls)) return []
+  const filenames = []
+  for (let i = 0; i < dataUrls.length; i++) {
+    const dataUrl = dataUrls[i]
+    if (!dataUrl || !dataUrl.startsWith('data:image/')) continue
+    const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/)
+    if (!match) continue
+    const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
+    const data = Buffer.from(match[2], 'base64')
+    if (data.length > MAX_IMAGE_BYTES) continue
+    const suffix = i > 0 ? `_${i}` : ''
+    const filename = `${caseId}${suffix}.${ext}`
+    const filepath = join(IMAGES_DIR, filename)
+    await writeFile(filepath, data)
+    filenames.push(filename)
+  }
+  return filenames
 }
 
 export function getImagePath(filename) {
@@ -69,6 +95,10 @@ export async function addTraining(entry) {
     location: entry.location,
     shape: entry.shape,
     caseId: entry.caseId || '',
+    originalLocation: entry.originalLocation || '',
+    originalShape: entry.originalShape || '',
+    source: entry.source || 'manual',
+    imageBase64: entry.imageBase64 || '',
     createdAt: new Date().toISOString(),
   })
   await writeFile(TRAINING_FILE, JSON.stringify(data, null, 2), 'utf-8')
@@ -99,7 +129,18 @@ function exactMatch(a, b) {
 
 const VALID_SYMPTOMS = ['linear_streak', 'dot_star', 'patch_leak', 'rainbow_melt', 'polarizer_scratch']
 const VALID_RESULTS = ['product_quality_issue', 'logistics_issue', 'not_product_quality', 'needs_further_review']
-const REQUIRED_FIELDS = ['crackLocation', 'crackShape']
+
+// 从模型配置中动态读取必填字段
+async function getRequiredFields() {
+  try {
+    const { loadModelConfig } = await import('./llm-analyzer.mjs')
+    const config = await loadModelConfig()
+    const annoFields = config.annoFields || []
+    return annoFields.filter(f => f.required).map(f => f.id)
+  } catch {
+    return ['crackLocation', 'crackShape']  // 回退到硬编码
+  }
+}
 
 const RESULT_LABELS = {
   product_quality_issue: '产品质量问题',
@@ -122,9 +163,10 @@ function autoSummary(data) {
   return `屏损位置: ${data.crackLocation || '未知'}, 形状: ${data.crackShape || '未知'}`
 }
 
-export function validateCase(c, idx) {
+export async function validateCase(c, idx) {
   const errors = []
-  for (const f of REQUIRED_FIELDS) {
+  const requiredFields = await getRequiredFields()
+  for (const f of requiredFields) {
     if (!c[f]) errors.push(`第${idx + 1}条缺少必填字段: ${f}`)
   }
   if (c.result && !VALID_RESULTS.includes(c.result)) {
@@ -187,10 +229,11 @@ export async function listCases(filter) {
 export async function createCase(data) {
   const cases = await loadCases()
   const id = 'case-' + crypto.randomUUID().slice(0, 8)
-  let imageName = ''
-  if (data.imageData) {
-    imageName = await saveImage(id, data.imageData)
-  }
+
+  // 支持旧单图字段 imageData 和新多图字段 imageDataList
+  const imageDataList = data.imageDataList || (data.imageData ? [data.imageData] : data.images || [])
+  const imageNames = await saveImages(id, imageDataList)
+
   const newCase = {
     id,
     title: autoTitle(data),
@@ -207,17 +250,17 @@ export async function createCase(data) {
     confidence: data.confidence || 0,
     summary: autoSummary(data),
     tags: data.tags || [],
-    image: imageName || data.image || '',
+    images: imageNames.length > 0 ? imageNames : [],
     possibleCause: data.possibleCause || '',
     warrantyTip: data.warrantyTip || '',
   }
   cases.push(newCase)
   await saveCases(cases)
 
-  // 如果有图片，自动索引到向量库
-  if (imageName) {
-    const imageBase64 = data.imageData || ''
-    if (imageBase64) {
+  // 如果有图片，索引第一张到向量库（向量检索以 case_id 为键，索引全部会重复）
+  if (imageDataList.length > 0 && imageDataList[0]) {
+    const imageBase64 = imageDataList[0]
+    if (imageBase64 && imageBase64.startsWith('data:image/')) {
       indexCaseVector(id, imageBase64, {
         symptoms: newCase.symptoms,
         resultLabel: newCase.resultLabel,
@@ -245,7 +288,7 @@ export async function batchImportFromImages(images, defaults) {
     if (!merged.title && img.filename) {
       merged.title = img.filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
     }
-    const errs = validateCase(merged, valid.length)
+    const errs = await validateCase(merged, valid.length)
     if (errs.length > 0) {
       errors.push({ index: i, errors: errs, item: img.filename || merged.title || `图片${i + 1}` })
     } else {
@@ -266,7 +309,21 @@ export async function updateCase(id, data) {
   const cases = await loadCases()
   const idx = cases.findIndex(c => c.id === id)
   if (idx === -1) throw new Error(`案例 ${id} 不存在`)
-  cases[idx] = { ...cases[idx], ...data, id }
+
+  // 处理新上传的图片（base64 data URLs）
+  const imageDataList = data.imageDataList || []
+  let mergedData = { ...data }
+  if (imageDataList.length > 0) {
+    const newNames = await saveImages(id, imageDataList)
+    if (newNames.length > 0) {
+      // 替换为新图片列表
+      mergedData.images = newNames
+    }
+  }
+  // 清理不需要存储的字段
+  delete mergedData.imageDataList
+
+  cases[idx] = { ...cases[idx], ...mergedData, id }
   await saveCases(cases)
   return cases[idx]
 }
@@ -299,7 +356,7 @@ export async function batchImport(items) {
   const errors = []
   const valid = []
   for (let i = 0; i < items.length; i++) {
-    const errs = validateCase(items[i], i)
+    const errs = await validateCase(items[i], i)
     if (errs.length > 0) {
       errors.push({ index: i, errors: errs, item: items[i].title || '(无标题)' })
     } else {
@@ -375,7 +432,7 @@ export async function searchSimilarVector(imageBase64, topK = 5, excludeCaseId =
         tags: c?.tags || [],
         possibleCause: c?.possibleCause || '',
         warrantyTip: c?.warrantyTip || '',
-        image: c?.image || '',
+        image: getCaseImages(c)[0] || '',
         crackLocation: c?.crackLocation || r.crack_location || '',
         crackShape: c?.crackShape || r.crack_shape || '',
       }
@@ -422,11 +479,14 @@ export async function rebuildVectorIndex() {
   const items = []
 
   for (const c of cases) {
-    if (!c.image) continue
+    const imgs = getCaseImages(c)
+    if (imgs.length === 0) continue
+    // 只索引第一张图（向量检索以 case_id 为键）
+    const imageName = imgs[0]
     try {
-      const filepath = getImagePath(c.image)
+      const filepath = getImagePath(imageName)
       const data = await readFile(filepath)
-      const ext = c.image.split('.').pop().toLowerCase()
+      const ext = imageName.split('.').pop().toLowerCase()
       const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }
       const base64 = `data:${mime[ext] || 'image/jpeg'};base64,${data.toString('base64')}`
       items.push({
@@ -447,4 +507,62 @@ export async function rebuildVectorIndex() {
   }
 
   return clipRebuildIndex(items)
+}
+
+// ===== 纠正反馈闭环 =====
+
+/**
+ * 保存一线售后前端纠正数据
+ * - 写入 training.json（KNN 训练数据 +1）
+ * - 关联到具体案例的 corrections 数组
+ */
+export async function saveCorrection(entry) {
+  const { caseId, originalLocation, originalShape, correctedLocation, correctedShape, imageBase64 } = entry || {}
+
+  // 1. 写入训练数据
+  const trainingEntry = {
+    location: correctedLocation || '',
+    shape: correctedShape || '',
+    originalLocation: originalLocation || '',
+    originalShape: originalShape || '',
+    caseId: caseId || '',
+    source: 'manual_correction',
+    createdAt: new Date().toISOString(),
+  }
+
+  // 如果有图，写入 base64（前端压缩后的小图）
+  if (imageBase64) {
+    trainingEntry.imageBase64 = imageBase64
+  }
+
+  const totalTraining = await addTraining(trainingEntry)
+
+  // 2. 如果关联了具体案例，更新案例的 corrections 数组
+  let caseUpdated = false
+  if (caseId) {
+    try {
+      const cases = await loadCases()
+      const c = cases.find(c => c.id === caseId)
+      if (c) {
+        if (!Array.isArray(c.corrections)) c.corrections = []
+        c.corrections.push({
+          originalLocation: originalLocation || '',
+          originalShape: originalShape || '',
+          correctedLocation: correctedLocation || '',
+          correctedShape: correctedShape || '',
+          createdAt: new Date().toISOString(),
+        })
+        // 案例被纠正 3 次以上，标记「需审核」
+        if (c.corrections.length >= 3 && !c.needsReview) {
+          c.needsReview = true
+        }
+        await saveCases(cases)
+        caseUpdated = true
+      }
+    } catch {
+      // 案例更新失败不影响训练数据写入
+    }
+  }
+
+  return { success: true, totalTraining, caseUpdated }
 }

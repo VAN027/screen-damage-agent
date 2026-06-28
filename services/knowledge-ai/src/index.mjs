@@ -1,9 +1,12 @@
 import { createServer, json } from './server-utils.mjs'
-import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable } from './search-engine.mjs'
-import { analyzeWithLLM, analyzeWithLLMStream, loadModelConfig, saveModelConfig } from './llm-analyzer.mjs'
+import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable, saveCorrection } from './search-engine.mjs'
+import { analyzeWithLLM, analyzeWithLLMStream, loadModelConfig, saveModelConfig, loadAnnotationConfig, saveAnnotationConfig, annotateSingle, annotateBatch } from './llm-analyzer.mjs'
 import { uploadDocument, listDocuments, getDocument, deleteDocument, getKBStats, searchKB } from './knowledge-base.mjs'
-import { readFile } from 'node:fs/promises'
-import { extname } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { extname, join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PORT = parseInt(process.env.KNOWLEDGE_PORT || '8083', 10)
 const startTime = Date.now()
@@ -102,6 +105,7 @@ const routes = [
 
       // 回退：标签加权匹配
       const q = normalizeQuery(body)
+      const { getCaseImages } = await import('./search-engine.mjs')
       const results = await searchSimilar(q, q.topK)
       json(res, 200, {
         success: true,
@@ -120,6 +124,7 @@ const routes = [
             tags: r.tags,
             possibleCause: r.possibleCause || '',
             warrantyTip: r.warrantyTip || '',
+            image: getCaseImages(r)[0] || r.image || '',
           })),
         },
       })
@@ -226,7 +231,7 @@ const routes = [
     method: 'POST',
     path: '/api/knowledge/cases',
     handler: async (_req, res, { body }) => {
-      const errs = validateCase(body, 0)
+      const errs = await validateCase(body, 0)
       if (errs.length > 0) return json(res, 400, { success: false, error: { code: 'VALIDATION_ERROR', message: errs.join('; ') } })
       const c = await createCase(body)
       json(res, 201, { success: true, data: c })
@@ -325,6 +330,21 @@ const routes = [
   },
   {
     method: 'POST',
+    path: '/api/knowledge/correction',
+    handler: async (_req, res, { body }) => {
+      if (!body.correctedLocation || !body.correctedShape) {
+        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少 correctedLocation 或 correctedShape' } })
+      }
+      try {
+        const result = await saveCorrection(body)
+        json(res, 201, { success: true, data: result })
+      } catch (err) {
+        json(res, 500, { success: false, error: { code: 'SAVE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
     path: '/api/knowledge/analyze-llm',
     handler: async (_req, res, { body }) => {
       const images = body.images || (body.image ? [body.image] : null)
@@ -375,6 +395,36 @@ const routes = [
     },
   },
   {
+    method: 'POST',
+    path: '/api/knowledge/annotate-single',
+    handler: async (_req, res, { body }) => {
+      if (!body.image || !body.image.startsWith('data:image/')) {
+        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少有效的 base64 图片' } })
+      }
+      try {
+        const result = await annotateSingle(body.image)
+        json(res, 200, { success: true, data: result })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'LLM_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/annotate-batch',
+    handler: async (_req, res, { body }) => {
+      if (!body.images || !Array.isArray(body.images) || body.images.length === 0) {
+        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少有效的图片数组' } })
+      }
+      try {
+        const result = await annotateBatch(body.images)
+        json(res, 200, { success: true, data: result })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'LLM_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
     method: 'GET',
     path: '/api/knowledge/model-config',
     handler: async (_req, res) => {
@@ -397,6 +447,29 @@ const routes = [
       }
       await saveModelConfig(updated)
       json(res, 200, { success: true, data: { message: '模型配置已保存' } })
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/annotation-config',
+    handler: async (_req, res) => {
+      const config = await loadAnnotationConfig()
+      const masked = { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 8) + '****' + config.apiKey.substring(config.apiKey.length - 4) : '' }
+      json(res, 200, { success: true, data: masked })
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/annotation-config',
+    handler: async (_req, res, { body }) => {
+      const config = await loadAnnotationConfig()
+      const updated = { ...config, ...body }
+      if (body.apiKey && body.apiKey.includes('****')) {
+        delete updated.apiKey
+        updated.apiKey = config.apiKey
+      }
+      await saveAnnotationConfig(updated)
+      json(res, 200, { success: true, data: { message: '标注模型配置已保存' } })
     },
   },
   // ===== 知识库管理 =====
@@ -456,6 +529,65 @@ const routes = [
       if (!body.query) return json(res, 400, { success: false, error: { code: 'MISSING_QUERY', message: '请提供查询内容 query' } })
       const results = await searchKB(body.query, body.topK || 5)
       json(res, 200, { success: true, data: { query: body.query, results } })
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/dashboard',
+    handler: async (_req, res) => {
+      try {
+        const DATA_DIR = join(__dirname, '..', 'data')
+        const IMAGES_DIR = join(DATA_DIR, 'images')
+        const CASES_FILE = join(DATA_DIR, 'cases.json')
+        const TRAINING_FILE = join(DATA_DIR, 'training.json')
+        const KB_FILE = join(DATA_DIR, 'knowledge-base.json')
+
+        // 并发获取所有统计
+        const [caseStats, trainingStats, kbStats, clipOk] = await Promise.all([
+          getStats(),
+          getTrainingStats(),
+          getKBStats(),
+          isClipAvailable(),
+        ])
+
+        // 获取文件大小和图片数
+        const getFileSize = async (f) => { try { const s = await stat(f); return s.size } catch { return 0 } }
+        const countImageFiles = async () => {
+          try {
+            const { readdir } = await import('node:fs/promises')
+            const files = await readdir(IMAGES_DIR)
+            return files.filter(f => /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(f)).length
+          } catch { return 0 }
+        }
+
+        const [casesSize, trainingSize, kbSize, imageCount] = await Promise.all([
+          getFileSize(CASES_FILE),
+          getFileSize(TRAINING_FILE),
+          getFileSize(KB_FILE),
+          countImageFiles(),
+        ])
+
+        // 获取 Python 向量服务状态
+        let vectorStats = null
+        try {
+          const { clipStats } = await import('./clip-client.mjs')
+          vectorStats = await clipStats()
+        } catch { vectorStats = null }
+
+        json(res, 200, {
+          success: true,
+          data: {
+            uptime: Date.now() - startTime,
+            cases: { ...caseStats, fileSize: casesSize, filePath: CASES_FILE },
+            training: { ...trainingStats, fileSize: trainingSize, filePath: TRAINING_FILE },
+            knowledgeBase: { ...kbStats, fileSize: kbSize, filePath: KB_FILE },
+            images: { count: imageCount, dir: IMAGES_DIR },
+            vector: { clipAvailable: clipOk, ...(vectorStats || {}) },
+          },
+        })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'DASHBOARD_ERROR', message: e.message } })
+      }
     },
   },
 ]
