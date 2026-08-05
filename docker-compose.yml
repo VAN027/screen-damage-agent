@@ -32,6 +32,10 @@ services:
     container_name: screen-damage-knowledge
     environment:
       - LLM_API_KEY=${LLM_API_KEY:-}
+      - CLIP_SERVICE_URL=http://python-features:8084
+    depends_on:
+      python-features:
+        condition: service_started
     volumes:
       - knowledge-data:/app/services/knowledge-ai/data
     networks:
@@ -60,6 +64,25 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8081/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
       interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # Python 特征提取服务（DINOv2 向量）:8084
+  # ============================================
+  python-features:
+    build:
+      context: .
+      dockerfile: services/knowledge-ai/Dockerfile.python
+    container_name: screen-damage-python
+    ports:
+      - "8084:8084"
+    networks:
+      - screen-damage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; import json; r = urllib.request.urlopen('http://localhost:8084/api/health'); exit(0 if json.loads(r.read()).get('status') == 'ok' else 1)\""]
+      interval: 30s
       timeout: 5s
       retries: 3
 

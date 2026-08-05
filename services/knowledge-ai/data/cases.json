@@ -121,7 +121,10 @@
       "case-0f033980.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-16ae8507",
@@ -134,7 +137,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 天侧, 形状: 点放射状屏裂",
@@ -143,7 +146,10 @@
       "case-16ae8507.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-f33418ce",
@@ -156,7 +162,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 全屏区域, 形状: 网状(大面积无规则)屏裂",
@@ -165,7 +171,10 @@
       "case-f33418ce.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-a72be669",
@@ -178,7 +187,7 @@
     "liquidState": "",
     "installStatus": "",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 地侧, 形状: 网状(大面积无规则)屏裂",
@@ -187,7 +196,10 @@
       "case-a72be669.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-f3f63055",
@@ -200,7 +212,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 右侧, 形状: 发散性线状屏裂",
@@ -209,7 +221,10 @@
       "case-f3f63055.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-cd9d97b5",
@@ -222,7 +237,7 @@
     "liquidState": "",
     "installStatus": "",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 天侧, 形状: 网状(大面积无规则)屏裂",
@@ -231,7 +246,10 @@
       "case-cd9d97b5.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-7713846f",
@@ -244,7 +262,7 @@
     "liquidState": "",
     "installStatus": "",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 天侧, 形状: 多条线状屏裂",
@@ -253,7 +271,10 @@
       "case-7713846f.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-3d80a7da",
@@ -266,7 +287,7 @@
     "liquidState": "",
     "installStatus": "",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 全屏区域, 形状: 网状(大面积无规则)屏裂",
@@ -275,7 +296,10 @@
       "case-3d80a7da.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-c5e6e94e",
@@ -288,7 +312,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 中央区域, 形状: 点放射状屏裂",
@@ -299,7 +323,8 @@
     "possibleCause": "",
     "warrantyTip": "",
     "crackPrinciple": "",
-    "customFields": {}
+    "customFields": {},
+    "crackStage": ""
   },
   {
     "id": "case-b60ad7b9",
@@ -312,7 +337,7 @@
     "liquidState": "",
     "installStatus": "",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 四角区域, 形状: 点放射状屏裂",
@@ -321,7 +346,10 @@
       "case-b60ad7b9.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-4da6fa5a",
@@ -334,7 +362,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 地侧, 形状: 点放射状屏裂",
@@ -343,7 +371,10 @@
       "case-4da6fa5a.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-3fe9e78d",
@@ -356,7 +387,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 中央区域, 形状: 多条线状屏裂",
@@ -365,7 +396,10 @@
       "case-3fe9e78d.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-b6977c37",
@@ -378,7 +412,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 中央区域, 形状: 点放射状屏裂",
@@ -387,7 +421,10 @@
       "case-b6977c37.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-49559b0f",
@@ -400,7 +437,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 右上角区域, 形状: 点放射状屏裂",
@@ -409,7 +446,10 @@
       "case-49559b0f.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-7215317a",
@@ -422,7 +462,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 天侧, 形状: 单条线状屏裂",
@@ -431,7 +471,10 @@
       "case-7215317a.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   },
   {
     "id": "case-08175b53",
@@ -444,7 +487,7 @@
     "liquidState": "",
     "installStatus": "not_installed",
     "packageDamage": "",
-    "result": "logistics_issue",
+    "result": "",
     "resultLabel": "物流问题",
     "confidence": 0,
     "summary": "屏损位置: 全屏区域, 形状: 网状(大面积无规则)屏裂",
@@ -453,6 +496,9 @@
       "case-08175b53.jpg"
     ],
     "possibleCause": "",
-    "warrantyTip": ""
+    "warrantyTip": "",
+    "crackStage": "",
+    "crackPrinciple": "",
+    "customFields": {}
   }
 ]

@@ -93,10 +93,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tree-node .branches span { display: inline-block; margin-right: 8px; padding: 2px 6px; background: #f1f5f9; border-radius: 4px; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #aaa; }
 .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
-.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 500; z-index: 999; animation: slideIn 0.3s ease; }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 500; z-index: 999; animation: slideIn 0.3s ease; display:flex;align-items:center;gap:10px;max-width:400px; }
 .toast-success { background: #059669; }
 .toast-error { background: #dc2626; }
 .toast-info { background: #4f46e5; }
+.toast-persist { padding-right: 8px; }
+.toast-close { cursor:pointer;font-size:18px;line-height:1;opacity:0.7;flex-shrink:0; } .toast-close:hover { opacity:1; }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .stats { padding: 12px 20px; background: #f8f9ff; border-top: 1px solid #e8e8e8; font-size: 12px; color: #666; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .stats-text { white-space: nowrap; }
@@ -155,71 +157,136 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .img-common-fields { background: #f8f9ff; border-radius: 8px; padding: 14px 16px; margin-top: 12px; }
 .img-common-fields h4 { font-size: 13px; color: #555; margin-bottom: 10px; }
 .img-common-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; }
-.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-.img-lightbox-overlay img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 4px; transition: transform 0.3s ease; }
+.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .img-lightbox-close { position: fixed; top: 16px; right: 20px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 20px; cursor: pointer; z-index: 10000; display: flex; align-items: center; justify-content: center; }
 .img-lightbox-close:hover { background: rgba(255,255,255,0.3); }
-.img-lightbox-rotate { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 14px; cursor: pointer; z-index: 10000; font-weight: 600; }
-.img-lightbox-rotate:hover { background: rgba(255,255,255,0.3); }
 
 /* ---- 快速标注模式 ---- */
-.anno-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0f0f1a; z-index: 2000; flex-direction: column; }
+/* 主题：深色（默认） */
+.anno-overlay { --bg-overlay: #0f0f1a; --bg-topbar: #1a1a2e; --bg-sidebar: #1e1e32; --bg-preview: #111;
+  --border: #2a2a4a; --border-btn: #3a3a5a; --border-btn-hover: #6366f1; --border-btn-seen: #4a4a6a;
+  --text-title: #fff; --text-secondary: #8892b0; --text-btn: #aab; --text-btn-hover: #ccd; --text-btn-selected: #c7d2fe;
+  --text-placeholder: #555; --accent: #6366f1; --accent-bg: #312e81; --btn-bg: #252540; --btn-bg-hover: #2a2a48;
+  --tag-selected-bg: #312e81; --tag-selected-border: #6366f1; --result-pq-border: #ef4444; --result-pq-color: #fca5a5;
+  --result-pq-bg: #7f1d1d; --result-pq-selcolor: #fecaca;
+  --result-logistics-border: #f59e0b; --result-logistics-color: #fcd34d;
+  --result-logistics-bg: #78350f; --result-logistics-selcolor: #fde68a;
+  --result-npq-border: #3b82f6; --result-npq-color: #93c5fd;
+  --result-npq-bg: #1e3a5f; --result-npq-selcolor: #bfdbfe;
+  --result-review-border: #a855f7; --result-review-color: #c084fc;
+  --result-review-bg: #4c1d95; --result-review-selcolor: #ddd6fe;
+}
+/* 主题：浅色 */
+.anno-theme-light { --bg-overlay: #f5f5f7; --bg-topbar: #ffffff; --bg-sidebar: #ffffff; --bg-preview: #e8e8ec;
+  --border: #d1d5db; --border-btn: #d1d5db; --border-btn-hover: #6366f1; --border-btn-seen: #e5e7eb;
+  --text-title: #1f2937; --text-secondary: #6b7280; --text-btn: #4b5563; --text-btn-hover: #1f2937; --text-btn-selected: #1f2937;
+  --text-placeholder: #9ca3af; --accent: #6366f1; --accent-bg: #eef2ff; --btn-bg: #f9fafb; --btn-bg-hover: #f3f4f6;
+  --tag-selected-bg: #eef2ff; --tag-selected-border: #6366f1;
+  --result-pq-border: #ef4444; --result-pq-color: #dc2626;
+  --result-pq-bg: #fee2e2; --result-pq-selcolor: #991b1b;
+  --result-logistics-border: #d97706; --result-logistics-color: #d97706;
+  --result-logistics-bg: #fef3c7; --result-logistics-selcolor: #92400e;
+  --result-npq-border: #2563eb; --result-npq-color: #2563eb;
+  --result-npq-bg: #dbeafe; --result-npq-selcolor: #1e40af;
+  --result-review-border: #9333ea; --result-review-color: #9333ea;
+  --result-review-bg: #ede9fe; --result-review-selcolor: #6b21a8;
+}
+/* 主题：绿调 */
+.anno-theme-green { --bg-overlay: #0a120e; --bg-topbar: #0f1f15; --bg-sidebar: #112218; --bg-preview: #080c09;
+  --border: #1a3a2a; --border-btn: #1f4a32; --border-btn-hover: #22c55e; --border-btn-seen: #1a3a2a;
+  --text-title: #fff; --text-secondary: #6b9e7e; --text-btn: #8bb8a0; --text-btn-hover: #ccf0d8; --text-btn-selected: #d4f5e0;
+  --text-placeholder: #2f5f45; --accent: #22c55e; --accent-bg: #14532d; --btn-bg: #173a25; --btn-bg-hover: #1c4a30;
+  --tag-selected-bg: #14532d; --tag-selected-border: #22c55e;
+  --result-pq-border: #ef4444; --result-pq-color: #fca5a5;
+  --result-pq-bg: #7f1d1d; --result-pq-selcolor: #fecaca;
+  --result-logistics-border: #f59e0b; --result-logistics-color: #fcd34d;
+  --result-logistics-bg: #78350f; --result-logistics-selcolor: #fde68a;
+  --result-npq-border: #3b82f6; --result-npq-color: #93c5fd;
+  --result-npq-bg: #1e3a5f; --result-npq-selcolor: #bfdbfe;
+  --result-review-border: #a855f7; --result-review-color: #c084fc;
+  --result-review-bg: #4c1d95; --result-review-selcolor: #ddd6fe;
+}
+/* 主题：暖调 */
+.anno-theme-warm { --bg-overlay: #1a1410; --bg-topbar: #2a1f15; --bg-sidebar: #2d2218; --bg-preview: #14100c;
+  --border: #4a3a2a; --border-btn: #5a4a35; --border-btn-hover: #f97316; --border-btn-seen: #4a3a2a;
+  --text-title: #fff; --text-secondary: #b8a088; --text-btn: #bba890; --text-btn-hover: #f0e0cc; --text-btn-selected: #fde6cc;
+  --text-placeholder: #5a4a35; --accent: #f97316; --accent-bg: #7c3a0f; --btn-bg: #3a2f22; --btn-bg-hover: #4a3f2f;
+  --tag-selected-bg: #7c3a0f; --tag-selected-border: #f97316;
+  --result-pq-border: #ef4444; --result-pq-color: #fca5a5;
+  --result-pq-bg: #7f1d1d; --result-pq-selcolor: #fecaca;
+  --result-logistics-border: #f59e0b; --result-logistics-color: #fcd34d;
+  --result-logistics-bg: #78350f; --result-logistics-selcolor: #fde68a;
+  --result-npq-border: #3b82f6; --result-npq-color: #93c5fd;
+  --result-npq-bg: #1e3a5f; --result-npq-selcolor: #bfdbfe;
+  --result-review-border: #a855f7; --result-review-color: #c084fc;
+  --result-review-bg: #4c1d95; --result-review-selcolor: #ddd6fe;
+}
+.anno-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-overlay); z-index: 2000; flex-direction: column; }
 .anno-overlay.show { display: flex; }
-.anno-topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: #1a1a2e; border-bottom: 1px solid #2a2a4a; flex-shrink: 0; }
-.anno-topbar .title { color: #fff; font-size: 16px; font-weight: 700; }
-.anno-topbar .progress { color: #8892b0; font-size: 13px; }
+.anno-topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: var(--bg-topbar); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.anno-topbar .title { color: var(--text-title); font-size: 16px; font-weight: 700; }
+.anno-topbar .progress { color: var(--text-secondary); font-size: 13px; }
 .anno-topbar .actions { display: flex; gap: 8px; }
 .anno-body { flex: 1; display: flex; overflow: hidden; }
-.anno-preview { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; position: relative; min-width: 0; }
+.anno-preview { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg-preview); position: relative; min-width: 0; }
 .anno-preview img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
-.anno-preview .placeholder { color: #555; font-size: 40px; }
-.anno-sidebar { width: 360px; background: #1e1e32; border-left: 1px solid #2a2a4a; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; }
+.anno-preview .placeholder { color: var(--text-placeholder); font-size: 40px; }
+.ipreview-wrap { position: absolute; inset: 0; overflow: hidden; cursor: grab; user-select: none; }
+.ipreview-wrap.grabbing { cursor: grabbing; }
+.ipreview-wrap img { position: absolute; top: 0; left: 0; transform-origin: center center; max-width: none; max-height: none; border-radius: 4px; }
+.ipreview-controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 10; opacity: 0; transition: opacity 0.2s; }
+.ipreview-wrap:hover .ipreview-controls, .ipreview-wrap.grabbing .ipreview-controls { opacity: 1; }
+.ipreview-btn { width: 32px; height: 32px; border-radius: 16px; border: none; background: rgba(0,0,0,0.5); color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; transition: background 0.15s; }
+.ipreview-btn:hover { background: rgba(0,0,0,0.75); }
+.ipreview-info { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.7); background: rgba(0,0,0,0.4); padding: 2px 10px; border-radius: 10px; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
+.ipreview-wrap:hover .ipreview-info { opacity: 1; }
+.anno-sidebar { width: 360px; background: var(--bg-sidebar); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; }
 .anno-sidebar .field-group {}
-.anno-sidebar .field-label { font-size: 12px; font-weight: 700; color: #8892b0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.anno-sidebar .field-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .anno-sidebar .field-label .required { color: #ef4444; margin-left: 2px; }
 .anno-sidebar .tag-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.anno-sidebar .tag-btn { padding: 8px 6px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #aab; cursor: pointer; font-size: 12px; transition: all 0.15s; text-align: center; font-family: inherit; }
-.anno-sidebar .tag-btn:hover { border-color: #6366f1; color: #ccd; background: #2a2a48; }
-.anno-sidebar .tag-btn.selected { border-color: #6366f1; background: #312e81; color: #c7d2fe; font-weight: 600; }
-.anno-sidebar .tag-btn.seen { border-color: #4a4a6a; background: #252540; color: #aab; }
-.anno-sidebar .shortcut { display: inline-block; font-size: 10px; color: #6366f1; background: #312e81; padding: 1px 4px; border-radius: 3px; margin-right: 3px; vertical-align: middle; }
+.anno-sidebar .tag-btn { padding: 8px 6px; border: 1.5px solid var(--border-btn); border-radius: 6px; background: var(--btn-bg); color: var(--text-btn); cursor: pointer; font-size: 12px; transition: all 0.15s; text-align: center; font-family: inherit; }
+.anno-sidebar .tag-btn:hover { border-color: var(--border-btn-hover); color: var(--text-btn-hover); background: var(--btn-bg-hover); }
+.anno-sidebar .tag-btn.selected { border-color: var(--tag-selected-border); background: var(--tag-selected-bg); color: var(--text-btn-selected); font-weight: 600; }
+.anno-sidebar .tag-btn.seen { border-color: var(--border-btn-seen); background: var(--btn-bg); color: var(--text-btn); }
+.anno-sidebar .shortcut { display: inline-block; font-size: 10px; color: var(--accent); background: var(--accent-bg); padding: 1px 4px; border-radius: 3px; margin-right: 3px; vertical-align: middle; }
 .anno-sidebar .result-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.anno-sidebar .result-btn { padding: 10px 8px; border: 1.5px solid #3a3a5a; border-radius: 8px; background: #252540; color: #aab; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; text-align: center; font-family: inherit; }
+.anno-sidebar .result-btn { padding: 10px 8px; border: 1.5px solid var(--border-btn); border-radius: 8px; background: var(--btn-bg); color: var(--text-btn); cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; text-align: center; font-family: inherit; }
 .anno-sidebar .result-btn:hover { opacity: 0.85; transform: translateY(-1px); }
-.anno-sidebar .result-btn.pq { border-color: #ef4444; color: #fca5a5; }
-.anno-sidebar .result-btn.pq.selected { background: #7f1d1d; color: #fecaca; }
-.anno-sidebar .result-btn.logistics { border-color: #f59e0b; color: #fcd34d; }
-.anno-sidebar .result-btn.logistics.selected { background: #78350f; color: #fde68a; }
-.anno-sidebar .result-btn.npq { border-color: #3b82f6; color: #93c5fd; }
-.anno-sidebar .result-btn.npq.selected { background: #1e3a5f; color: #bfdbfe; }
-.anno-sidebar .result-btn.review { border-color: #a855f7; color: #c084fc; }
-.anno-sidebar .result-btn.review.selected { background: #4c1d95; color: #ddd6fe; }
-.anno-sidebar .title-input { width: 100%; padding: 8px 10px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #ccd; font-size: 12px; font-family: inherit; }
-.anno-sidebar .title-input:focus { outline: none; border-color: #6366f1; }
-.anno-sidebar .title-input::placeholder { color: #555; }
-.anno-bottombar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: #1a1a2e; border-top: 1px solid #2a2a4a; flex-shrink: 0; }
-.anno-bottombar .nav-btn { padding: 8px 16px; border: 1.5px solid #3a3a5a; border-radius: 6px; background: #252540; color: #ccd; cursor: pointer; font-size: 13px; transition: all 0.15s; font-family: inherit; }
-.anno-bottombar .nav-btn:hover { border-color: #6366f1; background: #2a2a48; }
+.anno-sidebar .result-btn.pq { border-color: var(--result-pq-border); color: var(--result-pq-color); }
+.anno-sidebar .result-btn.pq.selected { background: var(--result-pq-bg); color: var(--result-pq-selcolor); }
+.anno-sidebar .result-btn.logistics { border-color: var(--result-logistics-border); color: var(--result-logistics-color); }
+.anno-sidebar .result-btn.logistics.selected { background: var(--result-logistics-bg); color: var(--result-logistics-selcolor); }
+.anno-sidebar .result-btn.npq { border-color: var(--result-npq-border); color: var(--result-npq-color); }
+.anno-sidebar .result-btn.npq.selected { background: var(--result-npq-bg); color: var(--result-npq-selcolor); }
+.anno-sidebar .result-btn.review { border-color: var(--result-review-border); color: var(--result-review-color); }
+.anno-sidebar .result-btn.review.selected { background: var(--result-review-bg); color: var(--result-review-selcolor); }
+.anno-sidebar .title-input { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border-btn); border-radius: 6px; background: var(--btn-bg); color: var(--text-btn); font-size: 12px; font-family: inherit; }
+.anno-sidebar .title-input:focus { outline: none; border-color: var(--accent); }
+.anno-sidebar .title-input::placeholder { color: var(--text-placeholder); }
+.anno-bottombar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--bg-topbar); border-top: 1px solid var(--border); flex-shrink: 0; }
+.anno-bottombar .nav-btn { padding: 8px 16px; border: 1.5px solid var(--border-btn); border-radius: 6px; background: var(--btn-bg); color: var(--text-btn); cursor: pointer; font-size: 13px; transition: all 0.15s; font-family: inherit; }
+.anno-bottombar .nav-btn:hover { border-color: var(--accent); background: var(--btn-bg-hover); }
 .anno-bottombar .nav-btn.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; font-weight: 700; }
 .anno-bottombar .nav-btn.primary:hover { background: #4338ca; }
 .anno-bottombar .nav-btn.done { background: #059669; border-color: #059669; color: #fff; font-weight: 700; }
 .anno-bottombar .nav-btn.done:hover { background: #047857; }
-.anno-thumb-strip { display: flex; gap: 4px; overflow-x: auto; padding: 8px 0; border-top: 1px solid #2a2a4a; }
+.anno-thumb-strip { display: flex; gap: 4px; overflow-x: auto; padding: 8px 0; border-top: 1px solid var(--border); }
 .anno-thumb { width: 48px; height: 48px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; overflow: hidden; position: relative; transition: all 0.15s; }
-.anno-thumb:hover { border-color: #6366f1; }
-.anno-thumb.active { border-color: #4f46e5; }
+.anno-thumb:hover { border-color: var(--accent); }
+.anno-thumb.active { border-color: var(--accent); }
 .anno-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .anno-thumb .thumb-dot { position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 5px; }
 .anno-thumb .thumb-dot.green { background: #10b981; }
 .anno-thumb .thumb-dot.yellow { background: #f59e0b; }
-.anno-thumb .thumb-dot.gray { background: #555; }
-.anno-hint { font-size: 11px; color: #555; text-align: center; padding: 4px 20px; background: #1a1a2e; }
-.anno-ai-banner { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; background: #1e1a2e; border-bottom: 1px solid #2a2a4a; color: #c4b5fd; font-size: 13px; flex-shrink: 0; }
+.anno-thumb .thumb-dot.gray { background: var(--text-placeholder); }
+.anno-hint { font-size: 11px; color: var(--text-placeholder); text-align: center; padding: 4px 20px; background: var(--bg-topbar); }
+.anno-ai-banner { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
 .anno-ai-banner .btn-sm { font-size: 11px; padding: 4px 10px; }
-.anno-progress-bar-wrap { flex-shrink: 0; padding: 6px 20px; background: #1a1a2e; border-bottom: 1px solid #2a2a4a; display: flex; align-items: center; gap: 10px; }
-.anno-progress-bar-wrap .bar-label { font-size: 12px; color: #a5b4fc; white-space: nowrap; min-width: 70px; }
-.anno-progress-bar-track { flex: 1; height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden; }
-.anno-progress-bar-track .fill { height: 100%; background: linear-gradient(90deg, #6366f1, #818cf8); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+.anno-progress-bar-wrap { flex-shrink: 0; padding: 6px 20px; background: var(--bg-topbar); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.anno-progress-bar-wrap .bar-label { font-size: 12px; color: var(--accent); white-space: nowrap; min-width: 70px; }
+.anno-progress-bar-track { flex: 1; height: 6px; background: var(--border-btn); border-radius: 3px; overflow: hidden; }
+.anno-progress-bar-track .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--text-btn-selected)); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
 .anno-test-drop { border: 2px dashed #d1d5db; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; min-width: 220px; min-height: 140px; display: flex; align-items: center; justify-content: center; }
 .anno-test-drop:hover { border-color: #4f46e5; background: #f8f9ff; }
 .anno-test-success { color: #059669; font-weight: 600; }
@@ -235,7 +302,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .af-chip-x { cursor: pointer; color: #999; font-weight: 700; margin-left: 2px; }
 .af-chip-x:hover { color: #dc2626; }
 .af-chip-add { background: transparent; border: 1px dashed #ccc; color: #888; cursor: pointer; }
-.af-chip-add:hover { border-color: #4f46e5; color: #4f46e5; }\n</style>
+.af-chip-add:hover { border-color: #4f46e5; color: #4f46e5; }
+
+</style>
 </head>
 <body>
 
@@ -243,6 +312,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <button class="tab-btn active" data-tab="rules">规则集管理</button>
   <button class="tab-btn" data-tab="cases">案例库管理</button>
   <button class="tab-btn" data-tab="model">模型配置</button>
+  <button class="tab-btn" data-tab="evaluate">鉴定评估</button>
+  <button class="tab-btn" data-tab="sql">SQL 查询</button>
+  <button class="tab-btn" data-tab="dashboard">仪表盘</button>
 </div>
 
 <div class="tab-content active" id="tab-rules">
@@ -333,24 +405,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           </div>
           <input type="file" id="caseImageFileInput" accept="image/*" multiple style="display:none" onchange="onCaseImageFilesSelected(event)" />
         </div>
-        <div class="form-row">
-          <div><label class="case-field-label" data-field="crackLocation">屏损位置 *</label><select id="caseCrackLocation" onchange="onLocationSelectChange()"><option value="">-- 请选择 --</option><option>天侧</option><option>地侧</option><option>左侧</option><option>右侧</option><option>四角区域</option><option>中央区域</option><option>全屏区域</option><option>局部不规则区域</option><option value="__custom__">自定义...</option></select><input type="text" id="caseCrackLocationCustom" placeholder="自行输入屏损位置" style="margin-top:4px;display:none;" /></div>
-          <div><label class="case-field-label" data-field="crackShape">屏损形态 *</label><select id="caseCrackShape" onchange="onShapeSelectChange()"><option value="">-- 请选择 --</option><option>单条线状屏裂</option><option>多条线状屏裂</option><option>点放射状屏裂</option><option>发散性线状屏裂</option><option>环状/圈状屏裂</option><option>网状(大面积无规则)屏裂</option><option value="__custom__">自定义...</option></select><input type="text" id="caseCrackShapeCustom" placeholder="自行输入屏损形态" style="margin-top:4px;display:none;" /></div>
-        </div>
-        <div class="form-row">
-          <div><label class="case-field-label" data-field="installStatus">安装状态</label><select id="caseInstallStatus"><option value="">-- 非必填 --</option><option value="installed">已安装</option><option value="not_installed">未安装</option></select></div>
-          <div><label class="case-field-label" data-field="packageDamage">包装状态</label><select id="casePackageDamage"><option value="">-- 非必填 --</option><option value="none">无损坏</option><option value="minor">轻微损坏</option><option value="severe">严重损坏</option></select></div>
-        </div>
-        <div class="form-row">
-          <div><label class="case-field-label" data-field="result">鉴定结论</label><select id="caseResult"><option value="">-- 非必填 --</option><option value="product_quality_issue">产品质量问题</option><option value="logistics_issue">物流问题</option><option value="not_product_quality">非产品质量问题</option><option value="needs_further_review">需进一步鉴定</option></select></div>
-        </div>
-        <div class="form-group">
-          <label class="case-field-label" data-field="crackPrinciple">屏损原理</label>
-          <textarea id="casePossibleCause" placeholder="例如：外力冲击导致液晶层破裂，裂纹从受力点向四周放射..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;"></textarea>
-        </div>
-        <div id="caseCustomFieldsContainer" style="border-top:1px dashed #d1d5db;padding-top:12px;margin-top:8px;display:none;">
-          <div id="caseCustomFields"></div>
-        </div>
+        <div id="caseFormFields"></div>
       </div>
     </div>
   </div>
@@ -397,6 +452,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <span class="title">快速标注</span>
     <span class="progress" id="annoProgress">1 / 1</span>
     <div class="actions">
+      <div class="theme-switcher" style="position:relative;display:inline-block;">
+        <button class="btn btn-sm btn-outline" onclick="toggleThemeMenu(event)" style="color:var(--text-secondary);border-color:var(--border-btn);font-size:11px;padding:4px 10px;" id="annoThemeBtn">🎨 主题</button>
+        <div id="annoThemeMenu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-sidebar);border:1px solid var(--border);border-radius:8px;padding:6px;z-index:100;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+          <div class="theme-opt" onclick="setAnnoTheme('dark')" style="padding:6px 10px;cursor:pointer;border-radius:6px;font-size:12px;color:var(--text-btn);">🌙 深色</div>
+          <div class="theme-opt" onclick="setAnnoTheme('light')" style="padding:6px 10px;cursor:pointer;border-radius:6px;font-size:12px;color:var(--text-btn);">☀️ 浅色</div>
+          <div class="theme-opt" onclick="setAnnoTheme('green')" style="padding:6px 10px;cursor:pointer;border-radius:6px;font-size:12px;color:var(--text-btn);">🌿 绿调</div>
+          <div class="theme-opt" onclick="setAnnoTheme('warm')" style="padding:6px 10px;cursor:pointer;border-radius:6px;font-size:12px;color:var(--text-btn);">🔥 暖调</div>
+        </div>
+      </div>
       <button class="btn btn-sm btn-outline" onclick="closeAnnotation()" style="color:#ccd;border-color:#3a3a5a;">关闭</button>
       <button class="btn btn-sm btn-primary" id="annoDoneBtn" onclick="finishAnnotation()">完成标注</button>
     </div>
@@ -449,7 +513,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
       <div class="item" onclick="selectModelSection('vector')">
         <div class="name">🔍 向量检索服务</div>
-        <div class="meta">CLIP · Milvus 状态</div>
+        <div class="meta">DINOv2 · 状态</div>
       </div>
     </div>
     <div class="stats" id="modelNavStats">共 4 个配置模块</div>
@@ -469,7 +533,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
             <label>启用大模型分析</label>
             <div style="margin-top:4px;">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-                <input type="checkbox" id="modelEnabled" /> 启用后拍照分析界面将出现「大模型深度分析」按钮
+                <input type="checkbox" id="modelEnabled" onchange="applyModelEnabledLinkage()" /> 启用后拍照分析界面将出现「大模型深度分析」按钮
               </label>
             </div>
           </div>
@@ -485,6 +549,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
                 <input type="checkbox" id="showAiPanel" checked /> 启用屏损鉴定分析面板（大模型分析按钮）
               </label>
+            </div>
+            <div style="font-size:11px;color:#999;margin-top:4px;display:none;" id="showAiPanelHint">关闭「启用大模型分析」时将自动隐藏此面板</div>
+            <div style="margin-top:8px;">
+              <label style="display:block;margin-bottom:4px;font-size:13px;color:#555;">前端默认分析模式</label>
+              <select id="analysisMode">
+                <option value="hybrid">混合模式（RAG + LLM 并行）</option>
+                <option value="rag">仅 RAG 识别（向量检索 Top-K 聚合，不调用大模型）</option>
+                <option value="llm">仅 LLM 识别（纯大模型，跳过知识库检索）</option>
+              </select>
+              <div style="font-size:11px;color:#999;margin-top:4px;">此设置为前端默认值，用户可在页面上临时切换</div>
             </div>
           </div>
 
@@ -555,6 +629,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
                 <input type="checkbox" id="annoEnabled" checked /> 启用后 AI 辅助标注和批量预标注将使用此模型
               </label>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label>标注分析模式</label>
+            <select id="annoAnalysisMode">
+              <option value="hybrid">混合模式（RAG 相似案例参考 + LLM 标注）</option>
+              <option value="llm">仅 LLM 标注（纯大模型，跳过相似案例检索）</option>
+              <option value="rag">仅 RAG 识别（向量检索 Top-K 聚合，不调用大模型）</option>
+            </select>
+            <div style="font-size:11px;color:#999;margin-top:4px;">混合模式先检索相似案例作为参考再让大模型标注；仅 RAG 模式不消耗 token 但依赖向量索引，未检索到相似案例时会提示失败。</div>
           </div>
 
           <div class="form-group">
@@ -640,7 +724,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
             <label>启用知识库检索</label>
             <div style="margin-top:4px;">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-                <input type="checkbox" id="kbEnabled" /> 启用后大模型分析时将检索知识库内容作为参考
+                <input type="checkbox" id="kbEnabled" checked /> 启用后大模型分析时将检索知识库内容作为参考
               </label>
             </div>
           </div>
@@ -683,14 +767,136 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
           <div class="form-group">
             <label>快速操作</label>
-            <div style="display:flex;gap:10px;margin-top:8px;">
+            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
               <button class="btn btn-accent" onclick="rebuildVectorIndex()">🔄 重建全部向量索引</button>
+              <button class="btn btn-success" onclick="manualBackup()">💾 备份数据库</button>
             </div>
             <div style="font-size:12px;color:#999;margin-top:8px;">从所有已有案例中提取图片 CLIP 特征并重建 Milvus 向量库。新案例入库时会自动索引，无需手动操作。</div>
+            <div style="font-size:11px;color:#aaa;margin-top:4px;">备份文件保存在 knowledge-ai/data/backup/ 目录下，系统保留最近 7 天的备份</div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 鉴定评估 -->
+<div class="tab-content" id="tab-evaluate" style="flex-direction:column;overflow:auto;padding:16px;">
+  <!-- 操作栏 -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="btn btn-accent" id="evalCreateBtn" onclick="evalCreateBatch()">📋 创建评估批次</button>
+    <button class="btn btn-outline" id="evalUploadBtn" onclick="document.getElementById('evalUploadInput').click()" title="直接上传图片创建评估批次">📤 上传图片</button>
+    <input type="file" id="evalUploadInput" accept="image/*" multiple style="display:none" onchange="evalUploadImages(event)" />
+    <button class="btn btn-primary" id="evalAnalyzeBtn2" onclick="evalBatchAnalyze()" disabled style="display:none;">🤖 批量发起 LLM 分析</button>
+    <button class="btn btn-outline" onclick="evalExportCSV()" style="display:none;" id="evalExportBtn">📥 导出 Excel 报告</button>
+    <button class="btn btn-outline" onclick="evalSync()" style="display:none;" id="evalSyncBtn">🔄 同步</button>
+    <button class="btn btn-danger" onclick="evalDeleteBatch()" style="display:none;" id="evalDeleteBtn">🗑 删除批次</button>
+    <span id="evalSyncStatus" style="display:none;font-size:11px;color:#10b981;font-weight:600;"></span>
+    <span id="evalProgress" style="display:none;font-size:12px;color:#888;"></span>
+    <progress id="evalProgressBar" value="0" max="100" style="display:none;width:160px;height:20px;border-radius:10px;accent-color:var(--primary);"></progress>
+    <span id="evalProgressError" style="display:none;font-size:11px;color:#ef4444;font-weight:600;"></span>
+    <button id="evalStopBtn" class="btn btn-danger" onclick="evalStopAnalyze()" style="display:none;font-size:11px;padding:3px 8px;">⏹ 中断分析</button>
+    <span style="font-size:11px;color:#888;margin-left:auto;">👤</span>
+    <input id="evalUsername" type="text" maxlength="12" style="width:100px;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;" placeholder="姓名" />
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;" id="evalStatsCards"></div>
+
+  <!-- 评估表格 -->
+  <div style="overflow-x:auto;flex:1;min-height:0;">
+    <table id="evalTable" style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:var(--bg-sidebar);">
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:left;min-width:40px;">#</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:left;min-width:100px;">案例</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">位置</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">形态</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">环节</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">结论</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">状态观察</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">屏损原理</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:60px;">判别人</th>
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:left;min-width:80px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="evalTableBody"></tbody>
+    </table>
+    <div id="evalEmpty" style="text-align:center;color:#aaa;padding:40px;font-size:13px;">点击「创建评估批次」将案例库中的案例加载到评估列表</div>
+  </div>
+  <!-- 悬浮预览浮层 -->
+  <div id="evalTooltip" style="display:none;position:fixed;z-index:9999;pointer-events:none;border:2px solid var(--primary);border-radius:8px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,0.18);padding:4px;">
+    <img id="evalTooltipImg" src="" alt="预览" style="max-width:320px;max-height:260px;display:block;border-radius:4px;" />
+  </div>
+  <!-- 行详情展开面板 -->
+  <div id="evalDetailPanel" style="display:none;margin-top:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);overflow:auto;max-height:80vh;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg-sidebar);border-bottom:1px solid var(--border);">
+      <span id="evalDetailTitle" style="font-weight:700;font-size:14px;"></span>
+      <button onclick="closeEvalDetail()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;line-height:1;">×</button>
+    </div>
+    <div style="display:flex;gap:16px;padding:16px;flex-wrap:wrap;">
+      <div style="flex:0 0 360px;max-width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <img id="evalDetailImg" src="" alt="原图" style="max-width:100%;max-height:500px;border-radius:6px;cursor:pointer;border:1px solid var(--border);" onclick="openLightbox(this.src)" title="点击放大预览" />
+        <span style="font-size:11px;color:#888;">点击图片可放大/旋转/拖拽</span>
+      </div>
+      <div style="flex:1;min-width:280px;">
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:8px;">LLM 分析结果</div>
+        <div id="evalDetailLLM" style="font-size:12px;line-height:1.8;"></div>
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:600;margin-top:12px;margin-bottom:8px;">人工标注</div>
+        <div id="evalDetailForm" style="font-size:12px;"></div>
+      </div>
+    </div>
+    <!-- 底部导航条 -->
+    <div id="evalDetailFooter" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:var(--bg-sidebar);border-top:1px solid var(--border);font-size:13px;color:#555;">
+      <button id="evalPrevBtn" onclick="evalPrev()" style="font-size:13px;padding:4px 14px;border-radius:4px;cursor:pointer;background:#f0f0f0;border:1px solid #ddd;line-height:1.6;">← 上一条</button>
+      <span id="evalNavInfo" style="min-width:100px;text-align:center;font-weight:600;"></span>
+      <button id="evalNextBtn" onclick="evalNext()" style="font-size:13px;padding:4px 14px;border-radius:4px;cursor:pointer;background:#f0f0f0;border:1px solid #ddd;line-height:1.6;">下一条 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SQL 查询 -->
+<div class="tab-content" id="tab-sql" style="flex-direction:column;overflow:auto;padding:16px;">
+  <div style="display:flex;gap:12px;align-items:flex-start;height:100%;min-height:0;">
+    <!-- 左侧数据库目录树 -->
+    <div style="flex:0 0 220px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);overflow:auto;max-height:calc(100vh - 120px);">
+      <div style="padding:10px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border);background:var(--bg-sidebar);">数据库目录</div>
+      <div id="sqlSchemaTree" style="padding:8px;font-size:12px;">
+        <div style="color:#aaa;padding:10px;text-align:center;">加载中...</div>
+      </div>
+    </div>
+    <!-- 右侧查询区 -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;">
+      <div style="font-size:13px;color:#888;">仅支持 <strong>SELECT</strong> 查询，最多返回 5000 行，可导出 xlsx</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT * FROM cases ORDER BY created_at DESC LIMIT 20')">全部字段</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT id, title, crackShape, crackLocation, crackStage, result, created_at, updated_at FROM cases ORDER BY updated_at DESC LIMIT 20')">案例列表</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT crackShape, COUNT(*) AS cnt FROM cases WHERE crackShape != \'\' GROUP BY crackShape ORDER BY cnt DESC')">形态统计</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT result, COUNT(*) AS cnt FROM cases WHERE result != \'\' GROUP BY result ORDER BY cnt DESC')">结论分布</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT e.id, e.case_id, e.case_title, e.llm_location, e.human_location, e.match_location, e.judged_by FROM evaluations e ORDER BY e.id DESC LIMIT 30')">评估列表</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT match_conclusion, COUNT(*) AS cnt FROM evaluations WHERE analyzed = 1 GROUP BY match_conclusion')">评估准确率</button>
+        <button class="btn btn-sm btn-outline" onclick="setSqlQuery('SELECT id, title FROM cases WHERE crackShape IN (\'未知\', \'无\', \'\') ORDER BY id')">空形态案例</button>
+      </div>
+      <textarea id="sqlInput" placeholder="输入 SQL 语句，例如：SELECT * FROM cases WHERE crackShape LIKE '%漏液%'" style="width:100%;min-height:100px;font-family:Consolas,monospace;font-size:13px;padding:10px;border:1px solid #d1d5db;border-radius:8px;resize:vertical;box-sizing:border-box;"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="btn btn-primary" onclick="runSqlQuery()">执行查询</button>
+        <button class="btn btn-outline" id="sqlExportBtn" onclick="exportSqlQuery()" disabled>下载 xlsx</button>
+        <span id="sqlStatus" style="font-size:12px;color:#888;"></span>
+      </div>
+      <div id="sqlResultWrap" style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);min-height:200px;">
+        <div id="sqlResultEmpty" style="text-align:center;color:#aaa;padding:40px;font-size:13px;">输入 SQL 后点击「执行查询」查看结果</div>
+        <div id="sqlResultTableWrap" style="display:none;padding:8px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 仪表盘 -->
+<div class="tab-content" id="tab-dashboard" style="flex-direction:column;overflow:auto;padding:16px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+    <h2 style="margin:0;font-size:16px;">系统仪表盘</h2>
+    <button class="btn btn-sm btn-outline" onclick="loadDashboard()" style="margin-left:auto;">刷新</button>
+  </div>
+  <div id="dashboardCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;">
+    <div style="text-align:center;color:#aaa;padding:40px;font-size:13px;">加载中...</div>
   </div>
 </div>
 
@@ -760,12 +966,18 @@ async function knowledgeApi(path, options = {}) {
   return data
 }
 
-function toast(msg, type = 'success') {
+function toast(msg, type = 'success', persist = false) {
   const el = document.createElement('div')
   el.className = `toast toast-${type}`
-  el.textContent = msg
-  document.body.appendChild(el)
-  setTimeout(() => el.remove(), 2500)
+  if (persist) el.className += ' toast-persist'
+  if (persist) {
+    el.innerHTML = `<span>${msg}</span><span class="toast-close" onclick="this.parentElement.remove()">×</span>`
+    document.body.appendChild(el)
+  } else {
+    el.textContent = msg
+    document.body.appendChild(el)
+    setTimeout(() => { if (el.parentNode) el.remove() }, 2500)
+  }
 }
 
 function nodeTypeLabel(type) {
@@ -795,8 +1007,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'))
     btn.classList.add('active')
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active')
+    // 离开鉴定评估标签时停止轮询
+    if (btn.dataset.tab !== 'evaluate') _evalStopPoll()
     if (btn.dataset.tab === 'cases') loadCaseList()
     if (btn.dataset.tab === 'model') loadModelConfigPage()
+    if (btn.dataset.tab === 'evaluate') loadEvalPage()
+    if (btn.dataset.tab === 'sql') loadSqlSchema()
+    if (btn.dataset.tab === 'dashboard') loadDashboard()
   })
 })
 
@@ -1003,16 +1220,17 @@ async function saveAnnoFieldsConfig() {
     btn.disabled = false
     btn.textContent = '💾 保存配置'
     closeAnnoFieldsEditor()
-    // 刷新当前案例编辑器的标签和自定义字段
+    // 重新渲染案例编辑表单
     if (currentCaseId) {
-      refreshCaseFormLabels()
-      // 从当前表单重新读取 hardcoded 字段 + 服务器返回的 customFields
       try {
         const { data } = await knowledgeApi('/case?id=' + currentCaseId)
-        renderCaseCustomFields(data.customFields || {})
+        renderCaseForm(data)
+        loadCaseImages(data)
       } catch (_) {
-        renderCaseCustomFields({})
+        renderCaseForm()
       }
+    } else {
+      renderCaseForm()
     }
   } catch (e) {
     toast('保存失败: ' + e.message, 'error')
@@ -1052,11 +1270,11 @@ async function checkVectorStatus() {
     if (data.clipAvailable) {
       dot.style.background = '#10b981'
       text.textContent = '✅ 向量检索服务运行正常'
-      detail.innerHTML = `<strong>引擎：</strong>PIL+Numpy 图像特征 (512维)<br><strong>向量库：</strong>Milvus 已连接<br><strong>说明：</strong>向量检索可用，优先使用 Milvus 进行以图搜图匹配。`
+      detail.innerHTML = `<strong>引擎：</strong>DINOv2 ViT-S/14 (384维)<br><strong>向量库：</strong>内存索引 (numpy cosine)<br><strong>说明：</strong>向量检索可用，使用 DINOv2 深度学习特征进行以图搜图匹配。`
     } else {
       dot.style.background = '#f59e0b'
       text.textContent = '⚠️ 特征提取服务未连接 / Milvus 未就绪'
-      detail.innerHTML = `<strong>引擎：</strong>PIL+Numpy 图像特征 (512维)<br><strong>说明：</strong>请启动 Python 服务（端口 8084）和 Milvus（端口 19530/9091）。<br><code>docker run -d --name milvus-standalone -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest</code>`
+      detail.innerHTML = `<strong>引擎：</strong>DINOv2 ViT-S/14 (384维)<br><strong>说明：</strong>请启动 Python 服务（端口 8084）和 Milvus（端口 19530/9091）。<br><code>docker run -d --name milvus-standalone -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest</code>`
     }
   } catch {
     dot.style.background = '#ef4444'
@@ -1084,6 +1302,8 @@ async function loadModelConfigPage() {
     document.getElementById('kbMaxChunks').value = data.kbMaxChunks || 5
     document.getElementById('showRagPanel').checked = data.showRagPanel !== false
     document.getElementById('showAiPanel').checked = data.showAiPanel !== false
+    document.getElementById('analysisMode').value = data.analysisMode || 'hybrid'
+    applyModelEnabledLinkage()
     if (data.annoFields && Array.isArray(data.annoFields)) {
       currentAnnoFields = data.annoFields
     }
@@ -1106,6 +1326,20 @@ function onProviderChange() {
   }
 }
 
+function applyModelEnabledLinkage() {
+  const enabled = document.getElementById('modelEnabled')
+  const showAi = document.getElementById('showAiPanel')
+  const hint = document.getElementById('showAiPanelHint')
+  if (!enabled.checked) {
+    showAi.checked = false
+    showAi.disabled = true
+    hint.style.display = ''
+  } else {
+    showAi.disabled = false
+    hint.style.display = 'none'
+  }
+}
+
 async function saveModelConfig() {
   const btn = document.getElementById('modelSaveBtn')
   btn.textContent = '正在保存...'
@@ -1124,6 +1358,7 @@ async function saveModelConfig() {
     kbMaxChunks: parseInt(document.getElementById('kbMaxChunks').value) || 5,
     showRagPanel: document.getElementById('showRagPanel').checked,
     showAiPanel: document.getElementById('showAiPanel').checked,
+    analysisMode: document.getElementById('analysisMode').value,
   }
   try {
     await knowledgeApi('/model-config', { method: 'POST', body: JSON.stringify(body) })
@@ -1155,6 +1390,7 @@ async function loadAnnotationConfigPage() {
     annotationConfigLoaded = true
     const data = annoResp.data
     document.getElementById('annoEnabled').checked = data.enabled !== false
+    document.getElementById('annoAnalysisMode').value = data.analysisMode || 'hybrid'
     document.getElementById('annoModelName').value = data.model || ''
     document.getElementById('annoEndpoint').value = data.endpoint || ''
     document.getElementById('annoApiKey').value = data.apiKey || ''
@@ -1177,6 +1413,7 @@ async function saveAnnotationConfigHandler() {
   btn.disabled = true
   const body = {
     enabled: document.getElementById('annoEnabled').checked,
+    analysisMode: document.getElementById('annoAnalysisMode').value,
     model: document.getElementById('annoModelName').value,
     endpoint: document.getElementById('annoEndpoint').value,
     apiKey: document.getElementById('annoApiKey').value,
@@ -1260,7 +1497,7 @@ async function runAnnotationTest() {
     } else {
       const d = json.data
       content.innerHTML = `
-        <div class="anno-test-success">✓ 分析成功（${elapsed}s，置信度 ${d.confidence || '-'}%）</div>
+        <div class="anno-test-success">✓ 分析成功（${elapsed}s）</div>
         <table style="margin-top:10px;width:100%;font-size:12px;border-collapse:collapse;">
           ${row('屏损位置', d.crackLocation)}
           ${row('屏损形态', d.crackShape)}
@@ -1660,121 +1897,125 @@ function selectCase(id) {
   })
 }
 
-function refreshCaseFormLabels() {
-  // 更新所有硬编码字段的标签 + select 选项
-  document.querySelectorAll('.case-field-label').forEach(lbl => {
-    const fieldId = lbl.dataset.field
-    const cfg = currentAnnoFields.find(f => f.id === fieldId)
-    if (cfg) {
-      lbl.textContent = cfg.label + (cfg.required ? ' *' : '')
-      // 更新对应 select 的选项（如果有）
-      if (cfg.type === 'tag-grid' && cfg.options) {
-        const selectEl = document.querySelector(`[id^="case${fieldId.charAt(0).toUpperCase()+fieldId.slice(1)}"]`)
-        if (selectEl && selectEl.tagName === 'SELECT') {
-          // For custom selects like crackLocation/crackShape, don't replace entirely
-          // Just update the non-custom option labels
-          updateSelectOptions(selectEl, cfg.options)
-        }
-      }
+// ===== 动态渲染案例编辑表单 =====
+
+function renderCaseForm(caseData) {
+  const container = document.getElementById('caseFormFields')
+  if (!container) return
+
+  // 按 currentAnnoFields 顺序渲染，select 类型每行 2 列，textarea/input 全宽独立一行
+  let html = ''
+  let pendingRow = []
+  function flushRow() {
+    if (pendingRow.length > 0) {
+      html += '<div class="form-row">' + pendingRow.map(f => renderSelectFieldHtml(f, caseData)).join('') + '</div>'
+      pendingRow = []
+    }
+  }
+
+  currentAnnoFields.forEach(f => {
+    if (f.type === 'tag-grid' || f.type === 'result-btns') {
+      pendingRow.push(f)
+      if (pendingRow.length === 2) flushRow()
+    } else {
+      flushRow()
+      html += '<div class="form-group">' + renderFullFieldHtml(f, caseData) + '</div>'
     }
   })
+  flushRow() // 剩余未满一行的
+
+  container.innerHTML = html
 }
 
-function updateSelectOptions(selectEl, opts) {
-  // Update option labels for existing options, keep __custom__ and empty
-  const existingOpt = selectEl.querySelector('option[value="__custom__"]')
-  const emptyOpt = selectEl.querySelector('option[value=""]')
-  // For core fields, don't replace the entire list to avoid breaking exact option references
-  // Instead just ensure the known option labels match
-  // This is a best-effort sync for the standard options
+function renderSelectFieldHtml(f, caseData) {
+  const fieldVal = caseData ? getCaseFieldValueForRender(caseData, f.id) : ''
+  const opts = f.options || []
+  const hasCustom = hasCustomOption(f)
+  const known = opts.filter(o => (typeof o === 'string' ? o : o.value) !== '__custom__').map(o => typeof o === 'string' ? o : o.value)
+  const isCustomVal = fieldVal && !known.includes(fieldVal)
+
+  let h = `<div><label>${esc(f.label)}${f.required ? ' *' : ''}</label>`
+  h += `<select id="caseField_${f.id}" onchange="onCaseFieldChange('${f.id}')"><option value="">-- ${f.required ? '请选择' : '非必填'} --</option>`
+  opts.forEach(o => {
+    const ov = typeof o === 'string' ? o : o.value
+    const ol = typeof o === 'string' ? (o === '__custom__' ? '✏️ 自定义' : o) : o.label
+    h += `<option value="${esc(ov)}"${(!isCustomVal && fieldVal === ov) ? ' selected' : ''}>${esc(ol)}</option>`
+  })
+  h += `</select>`
+  if (hasCustom) {
+    h += `<input type="text" id="caseField_${f.id}_custom" placeholder="自行输入..." value="${esc(isCustomVal ? fieldVal : '')}" style="margin-top:4px;width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;${isCustomVal ? '' : 'display:none;'}" />`
+  }
+  if (f.id === 'result') {
+    h += `<span id="caseResultHint" style="display:none;font-size:11px;color:#6366f1;margin-left:8px;"></span>`
+  }
+  h += `</div>`
+  return h
 }
 
-function renderCaseCustomFields(customFieldsObj) {
-  customFieldsObj = customFieldsObj || {}
-  const customFields = currentAnnoFields.filter(f => !CORE_FIELD_IDS.has(f.id))
-  const container = document.getElementById('caseCustomFields')
-  const wrapper = document.getElementById('caseCustomFieldsContainer')
+function renderFullFieldHtml(f, caseData) {
+  const fieldVal = caseData ? getCaseFieldValueForRender(caseData, f.id) : ''
+  if (f.type === 'textarea') {
+    return `<label>${esc(f.label)}${f.required ? ' *' : ''}</label><textarea id="caseField_${f.id}" placeholder="输入..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;">${esc(fieldVal)}</textarea>`
+  }
+  if (f.type === 'input') {
+    return `<label>${esc(f.label)}${f.required ? ' *' : ''}</label><input type="text" id="caseField_${f.id}" value="${esc(fieldVal)}" placeholder="输入..." style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />`
+  }
+  return ''
+}
 
-  if (customFields.length === 0) {
-    wrapper.style.display = 'none'
-    container.innerHTML = ''
+function getCaseFieldValueForRender(caseData, fieldId) {
+  // crackPrinciple 字段在案例对象中可能存为 possibleCause（向后兼容）
+  if (fieldId === 'crackPrinciple') {
+    return caseData.crackPrinciple || caseData.possibleCause || ''
+  }
+  const v = caseData[fieldId]
+  // 多值字段（如 crackShape）在数据库中可能以数组存储，规范化为字符串再渲染
+  if (Array.isArray(v)) return v.join('、')
+  return v || ''
+}
+
+function setFieldValue(fieldId, value) {
+  const field = currentAnnoFields.find(f => f.id === fieldId)
+  if (!field) return
+  if (field.type === 'textarea' || field.type === 'input') {
+    const el = document.getElementById(`caseField_${fieldId}`)
+    if (el) el.value = value || ''
     return
   }
-  wrapper.style.display = ''
-  container.innerHTML = customFields.map(f => {
-    const currentVal = customFieldsObj[f.id] || ''
-    if (f.type === 'textarea') {
-      return `<div class="form-group">
-        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
-        <textarea id="caseCustom_${f.id}" placeholder="输入..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;">${esc(currentVal)}</textarea>
-      </div>`
-    } else if (f.type === 'input') {
-      return `<div class="form-group">
-        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
-        <input type="text" id="caseCustom_${f.id}" value="${esc(currentVal)}" placeholder="输入..." style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />
-      </div>`
-    } else if (f.type === 'tag-grid' || f.type === 'result-btns') {
-      const opts = f.options || []
-      const hasCustom = hasCustomOption(f)
-      const known = opts.map(o => typeof o === 'string' ? o : o.value)
-      let isCustomVal = hasCustom && currentVal && !known.includes(currentVal)
-      let html = `<div class="form-group">
-        <label>${esc(f.label)}${f.required ? ' *' : ''}</label>
-        <select id="caseCustom_${f.id}" onchange="onCaseCustomSelectChange('${f.id}','${hasCustom}')" style="width:100%;">
-          <option value="">-- 非必填 --</option>`
-      opts.forEach(o => {
-        const ov = typeof o === 'string' ? o : o.value
-        const ol = typeof o === 'string' ? (o === '__custom__' ? '✏️ 自定义' : o) : o.label
-        const sel = ov === currentVal ? ' selected' : ''
-        html += `<option value="${esc(ov)}"${sel}>${esc(ol)}</option>`
-      })
-      html += `</select>`
-      if (hasCustom) {
-        html += `<input type="text" id="caseCustom_${f.id}_custom" placeholder="自定义输入..." value="${esc(isCustomVal ? currentVal : '')}" style="margin-top:4px;width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;${isCustomVal ? '' : 'display:none;'}" />`
-      }
-      html += `</div>`
-      return html
-    }
-    return ''
-  }).join('')
-}
-
-function onCaseCustomSelectChange(fieldId, hasCustom) {
-  if (hasCustom) {
-    const customInput = document.getElementById('caseCustom_' + fieldId + '_custom')
-    const sel = document.getElementById('caseCustom_' + fieldId)
-    if (sel.value === '__custom__') {
-      customInput.style.display = ''
-      customInput.focus()
+  if (field.type === 'tag-grid' || field.type === 'result-btns') {
+    const sel = document.getElementById(`caseField_${fieldId}`)
+    if (!sel) return
+    const hasCustom = hasCustomOption(field)
+    const known = (field.options || []).filter(o => (typeof o === 'string' ? o : o.value) !== '__custom__').map(o => typeof o === 'string' ? o : o.value)
+    if (value && hasCustom && !known.includes(value)) {
+      sel.value = '__custom__'
+      const ci = document.getElementById(`caseField_${fieldId}_custom`)
+      if (ci) { ci.style.display = ''; ci.value = value }
     } else {
-      customInput.style.display = 'none'
-      customInput.value = ''
+      sel.value = value || ''
+      const ci = document.getElementById(`caseField_${fieldId}_custom`)
+      if (ci) { ci.style.display = 'none'; ci.value = '' }
     }
   }
 }
 
-function readCaseCustomFields() {
-  const customFields = {}
-  const customFieldsArr = currentAnnoFields.filter(f => !CORE_FIELD_IDS.has(f.id))
-  customFieldsArr.forEach(f => {
-    let val = ''
-    if (f.type === 'tag-grid' || f.type === 'result-btns') {
-      const sel = document.getElementById('caseCustom_' + f.id)
-      if (sel) {
-        if (sel.value === '__custom__') {
-          const ci = document.getElementById('caseCustom_' + f.id + '_custom')
-          val = ci ? ci.value.trim() : ''
-        } else {
-          val = sel.value
-        }
-      }
-    } else {
-      const el = document.getElementById('caseCustom_' + f.id)
-      if (el) val = el.value.trim()
+function getFieldValue(fieldId) {
+  const field = currentAnnoFields.find(f => f.id === fieldId)
+  if (!field) return ''
+  if (field.type === 'textarea' || field.type === 'input') {
+    const el = document.getElementById(`caseField_${fieldId}`)
+    return el ? el.value.trim() : ''
+  }
+  if (field.type === 'tag-grid' || field.type === 'result-btns') {
+    const sel = document.getElementById(`caseField_${fieldId}`)
+    if (!sel) return ''
+    if (sel.value === '__custom__') {
+      const ci = document.getElementById(`caseField_${fieldId}_custom`)
+      return ci ? ci.value.trim() : ''
     }
-    if (val) customFields[f.id] = val
-  })
-  return customFields
+    return sel.value
+  }
+  return ''
 }
 
 // ===== 案例图片管理 =====
@@ -1848,105 +2089,93 @@ function loadCaseImages(c) {
 }
 
 function fillCaseForm(c) {
-  // 刷新标签
-  refreshCaseFormLabels()
-  // 加载已有图片
+  renderCaseForm(c)
   loadCaseImages(c)
-  // 渲染自定义字段
-  renderCaseCustomFields(c.customFields || {})
-  const locSel = document.getElementById('caseCrackLocation')
-  const locCustom = document.getElementById('caseCrackLocationCustom')
-  const KNOWN_LOCS = ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域']
-  if (c.crackLocation && !KNOWN_LOCS.includes(c.crackLocation)) {
-    locSel.value = '__custom__'
-    locCustom.style.display = ''
-    locCustom.value = c.crackLocation
-  } else {
-    locSel.value = c.crackLocation || ''
-    locCustom.style.display = 'none'
-    locCustom.value = ''
-  }
-  // 屏损形态
-  const shapeSel = document.getElementById('caseCrackShape')
-  const shapeCustom = document.getElementById('caseCrackShapeCustom')
-  const KNOWN_SHAPES = ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂']
-  if (c.crackShape && !KNOWN_SHAPES.includes(c.crackShape)) {
-    shapeSel.value = '__custom__'
-    shapeCustom.style.display = ''
-    shapeCustom.value = c.crackShape
-  } else {
-    shapeSel.value = c.crackShape || ''
-    shapeCustom.style.display = 'none'
-    shapeCustom.value = ''
-  }
-  document.getElementById('caseInstallStatus').value = c.installStatus || ''
-  document.getElementById('casePackageDamage').value = c.packageDamage || ''
-  document.getElementById('caseResult').value = c.result || ''
-  document.getElementById('casePossibleCause').value = c.crackPrinciple || ''
 }
 
 function resetCaseForm() {
-  document.getElementById('caseCrackLocation').value = ''
-  document.getElementById('caseCrackLocationCustom').style.display = 'none'
-  document.getElementById('caseCrackLocationCustom').value = ''
-  document.getElementById('caseCrackShape').value = ''
-  document.getElementById('caseCrackShapeCustom').style.display = 'none'
-  document.getElementById('caseCrackShapeCustom').value = ''
-  document.getElementById('caseInstallStatus').value = ''
-  document.getElementById('casePackageDamage').value = ''
-  document.getElementById('caseResult').value = ''
-  document.getElementById('casePossibleCause').value = ''
   _caseImages = []
   renderCaseImages()
+  renderCaseForm()
   document.getElementById('caseEditorTitle').textContent = '新建案例'
-  document.getElementById('caseCustomFields').innerHTML = ''
-  document.getElementById('caseCustomFieldsContainer').style.display = 'none'
-  refreshCaseFormLabels()
-  renderCaseCustomFields({})
 }
 
-// select change handlers
-function onLocationSelectChange() {
-  const sel = document.getElementById('caseCrackLocation')
-  const custom = document.getElementById('caseCrackLocationCustom')
-  custom.style.display = sel.value === '__custom__' ? '' : 'none'
-  if (sel.value !== '__custom__') custom.value = ''
+// Generic field change handler for dynamically rendered form
+function onCaseFieldChange(fieldId) {
+  const field = currentAnnoFields.find(f => f.id === fieldId)
+  if (!field) return
+
+  // Handle custom option toggle for select types
+  if (field.type === 'tag-grid') {
+    const sel = document.getElementById(`caseField_${fieldId}`)
+    const ci = document.getElementById(`caseField_${fieldId}_custom`)
+    if (ci) {
+      if (sel.value === '__custom__') {
+        ci.style.display = ''; ci.focus()
+      } else {
+        ci.style.display = 'none'; ci.value = ''
+      }
+    }
+  }
+
+  // Trigger auto-suggest for crackShape and crackStage
+  if (fieldId === 'crackShape' || fieldId === 'crackStage') {
+    autoSuggestResult()
+  }
 }
-function onShapeSelectChange() {
-  const sel = document.getElementById('caseCrackShape')
-  const custom = document.getElementById('caseCrackShapeCustom')
-  custom.style.display = sel.value === '__custom__' ? '' : 'none'
-  if (sel.value !== '__custom__') custom.value = ''
+
+/**
+ * 根据屏损形态 + 屏损环节从历史案例统计中自动推荐鉴定结论
+ */
+async function autoSuggestResult() {
+  const hint = document.getElementById('caseResultHint')
+  const resultSel = document.getElementById('caseField_result')
+  const shape = getFieldValue('crackShape')
+  const stage = getFieldValue('crackStage')
+
+  if (!shape && !stage) {
+    if (hint) hint.style.display = 'none'
+    return
+  }
+
+  try {
+    const { data } = await knowledgeApi(`/cases/result-stats?crackShape=${encodeURIComponent(shape)}&crackStage=${encodeURIComponent(stage)}`)
+    if (data.recommended && data.total > 0) {
+      if (resultSel) resultSel.value = data.recommended
+      if (hint) { hint.style.display = 'inline'; hint.textContent = `系统推荐（基于 ${data.total} 条案例，${data.distribution[0].pct}%）` }
+    } else {
+      if (hint) { hint.style.display = 'inline'; hint.textContent = `暂无匹配案例（${data.total} 条），请手动选择` }
+    }
+  } catch {
+    if (hint) hint.style.display = 'none'
+  }
 }
 
 function readCaseForm() {
-  const locSel = document.getElementById('caseCrackLocation')
-  const locCustom = document.getElementById('caseCrackLocationCustom')
-  const crackLocation = locSel.value === '__custom__' ? (locCustom.value || '').trim() : locSel.value
-
-  const shapeSel = document.getElementById('caseCrackShape')
-  const shapeCustom = document.getElementById('caseCrackShapeCustom')
-  const crackShape = shapeSel.value === '__custom__' ? (shapeCustom.value || '').trim() : shapeSel.value
+  const data = {}
+  currentAnnoFields.forEach(f => {
+    data[f.id] = getFieldValue(f.id)
+  })
+  // Backward compat: createCase 用的是 possibleCause 而非 crackPrinciple
+  if (data.crackPrinciple) {
+    data.possibleCause = data.crackPrinciple
+  }
 
   // 收集新上传的图片 base64（非已有图片）
   const imageDataList = _caseImages.filter(img => !img.existing && img.data && img.data.startsWith('data:image/')).map(img => img.data)
-
-  return {
-    crackLocation,
-    crackShape,
-    installStatus: document.getElementById('caseInstallStatus').value,
-    packageDamage: document.getElementById('casePackageDamage').value,
-    result: document.getElementById('caseResult').value,
-    crackPrinciple: document.getElementById('casePossibleCause').value.trim(),
-    customFields: readCaseCustomFields(),
-    imageDataList,
-  }
+  data.imageDataList = imageDataList
+  return data
 }
 
 async function saveCase() {
   const data = readCaseForm()
-  if (!data.crackLocation) return toast('请选择或输入屏损位置', 'error')
-  if (!data.crackShape) return toast('请选择或输入屏损形态', 'error')
+
+  // 动态验证所有必填字段
+  for (const f of currentAnnoFields) {
+    if (f.required && !data[f.id]) {
+      return toast(`请填写 ${f.label}`, 'error')
+    }
+  }
 
   try {
     if (currentCaseId) {
@@ -2091,12 +2320,9 @@ function addImages(files) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) { skipped++; continue }
     if (imageBatchList.some(i => i.filename === file.name)) { skipped++; continue }
-    imageBatchList.push({
-      filename: file.name, file, title: '',
-      crackLocation: '', crackShape: '', result: '',
-      installStatus: '', packageDamage: '',
-      crackPrinciple: '',
-    })
+    const newItem = { filename: file.name, file }
+    currentAnnoFields.forEach(f => { newItem[f.id] = '' })
+    imageBatchList.push(newItem)
     added++
   }
   if (added > 0) toast(`已添加 ${added} 张图片`, 'info')
@@ -2171,11 +2397,11 @@ function updateImgConfirmBtn() {
 
 // ===== 快速标注模式 =====
 let annoCurrentIdx = 0
-
-const CORE_FIELD_IDS = new Set(['crackLocation','crackShape','result','installStatus','packageDamage','crackPrinciple','title'])
-
 async function openQuickAnnotation(startIdx) {
   if (imageBatchList.length === 0) return toast('请先添加图片', 'error')
+
+  // 应用已保存的主题
+  applyAnnoTheme()
 
   // 清除侧边栏缓存，强制用最新配置重新渲染
   imageBatchList.forEach(img => { delete img._annoSidebarRendered })
@@ -2185,6 +2411,39 @@ async function openQuickAnnotation(startIdx) {
 
   // 进入标注后，展示 AI 批量预填引导横幅
   showAiBannerIfNeeded()
+}
+
+// ===== 主题切换 =====
+function toggleThemeMenu(e) {
+  e.stopPropagation()
+  const menu = document.getElementById('annoThemeMenu')
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none'
+  if (menu.style.display === 'block') {
+    setTimeout(() => document.addEventListener('click', closeThemeMenu, { once: true }), 10)
+  }
+}
+function closeThemeMenu() {
+  document.getElementById('annoThemeMenu').style.display = 'none'
+}
+function setAnnoTheme(theme) {
+  localStorage.setItem('annoTheme', theme)
+  applyAnnoTheme()
+  document.getElementById('annoThemeMenu').style.display = 'none'
+  // 高亮选中项
+  document.querySelectorAll('.theme-opt').forEach(el => el.style.background = 'transparent')
+  const opts = document.getElementById('annoThemeMenu').querySelectorAll('.theme-opt')
+  const idx = ['dark', 'light', 'green', 'warm'].indexOf(theme)
+  if (opts[idx]) opts[idx].style.background = 'var(--accent-bg)'
+}
+function applyAnnoTheme() {
+  const theme = localStorage.getItem('annoTheme') || 'dark'
+  const overlay = document.getElementById('annoOverlay')
+  overlay.classList.remove('anno-theme-light', 'anno-theme-green', 'anno-theme-warm')
+  if (theme !== 'dark') overlay.classList.add('anno-theme-' + theme)
+  // 刷新主题按钮文字
+  const labels = { dark: '🌙 深色', light: '☀️ 浅色', green: '🌿 绿调', warm: '🔥 暖调' }
+  const btn = document.getElementById('annoThemeBtn')
+  if (btn) btn.textContent = labels[theme] || '🎨 主题'
 }
 
 /**
@@ -2342,7 +2601,7 @@ async function annotateCurrentImage() {
     console.log('[AI标注] 返回:', {
       位置: data.crackLocation, 形态: data.crackShape,
       原理: data.crackPrinciple, 环节: data.crackStage,
-      结论: data.result, 置信度: data.confidence
+      结论: data.result
     })
     console.log('[AI标注] 写入后:', {
       位置: getAnnoVal(img, 'crackLocation'),
@@ -2356,7 +2615,7 @@ async function annotateCurrentImage() {
     // 刷新侧边栏（renderAnnotation 会正确高亮匹配的 tag-grid 按钮）
     renderAnnotation()
 
-    toast(`AI 分析完成 (${data.confidence}% 置信度)`, 'success')
+    toast(`AI 分析完成`, 'success')
   } catch (e) {
     toast('AI 分析失败: ' + (e.message || e), 'error')
   } finally {
@@ -2382,23 +2641,20 @@ function finishAnnotation() {
   closeAnnotation()
 }
 
-// 辅助：从图片项读取字段值（内置字段在顶层，自定义字段在 customFields 里）
+// 辅助：从图片项读取字段值
 function getAnnoVal(img, fieldId) {
-  return CORE_FIELD_IDS.has(fieldId) ? img[fieldId] : ((img.customFields || {})[fieldId])
+  return img[fieldId] !== undefined ? img[fieldId] : ((img.customFields || {})[fieldId] || '')
 }
 function setAnnoVal(img, fieldId, val) {
-  if (CORE_FIELD_IDS.has(fieldId)) img[fieldId] = val
-  else {
-    if (!img.customFields) img.customFields = {}
-    img.customFields[fieldId] = val
-  }
+  img[fieldId] = val
 }
 
 // 动态渲染侧边栏（标注开始时调用一次）
 function renderAnnoSidebar() {
   const container = document.getElementById('annoSidebar')
   const fields = currentAnnoFields
-  let html = `<button class="btn btn-sm btn-accent" id="annoAiBtn" onclick="annotateCurrentImage()" style="width:100%;margin-bottom:12px;">🤖 AI 分析此图</button>`
+  let html = `<button class="btn btn-sm btn-accent" id="annoAiBtn" onclick="annotateCurrentImage()" style="width:100%;margin-bottom:8px;">🤖 AI 分析此图</button>
+  <button class="btn btn-sm btn-danger" onclick="removeAnnoImage()" style="width:100%;margin-bottom:12px;">🗑 删除此图</button>`
   for (let i = 0; i < fields.length; i++) {
     const f = fields[i]
     const uid = 'anno_' + f.id
@@ -2461,15 +2717,212 @@ function optValue(opt) {
   return opt.value
 }
 
+// ===== 全局图片交互式预览 =====
+// 缩放（滚轮，以鼠标为锚点）、拖动平移、左右旋转、状态持久化
+class InteractivePreview {
+  constructor(container, url, saved) {
+    this.container = container
+    this.wrap = document.createElement('div')
+    this.wrap.className = 'ipreview-wrap'
+    this.img = document.createElement('img')
+    this.img.src = url
+    this.img.draggable = false
+    // scale: 缩放倍数  rotate: 旋转角度(deg)  ox/oy: 中心相对容器中心的偏移(px)
+    this.scale = saved?.scale || 1
+    this.rotate = saved?.rotate || 0
+    this.ox = saved?.ox || 0
+    this.oy = saved?.oy || 0
+    this._onDown = this._onDown.bind(this)
+    this._onMove = this._onMove.bind(this)
+    this._onUp = this._onUp.bind(this)
+    this._onWheel = this._onWheel.bind(this)
+
+    container.innerHTML = ''
+    container.appendChild(this.wrap)
+
+    // 先加入 DOM，再设置 src，确保 img 在 placeImage 执行时已在文档树中
+    this.wrap.appendChild(this.img)
+    this.img.src = url
+
+    // 等待 DOM 布局完成后定位图片
+    const waitForLayout = (cb, tries) => {
+      tries = tries || 0
+      const cw = this.wrap.clientWidth, ch = this.wrap.clientHeight
+      if (cw > 0 && ch > 0) { cb(); return }
+      if (tries < 30) requestAnimationFrame(() => waitForLayout(cb, tries + 1))
+      else cb() // 兜底：30 帧后仍无尺寸，不再等待
+    }
+    const placeImage = () => {
+      if (this._destroyed) return
+      this._naturalW = this.img.naturalWidth
+      this._naturalH = this.img.naturalHeight
+      waitForLayout(() => {
+        if (this._destroyed) return
+        if (!saved) {
+          const cw = this.wrap.clientWidth, ch = this.wrap.clientHeight
+          if (cw > 0 && ch > 0) {
+            this.scale = Math.min(cw / this._naturalW, ch / this._naturalH, 1)
+          }
+          // ox/oy 零点 = 图片中心在容器中心；初始偏移让 translate 将图片中心对齐容器中心
+          this.ox = -this._naturalW * this.scale / 2
+          this.oy = -this._naturalH * this.scale / 2
+          this.rotate = 0
+        }
+        this._applyTransform()
+      })
+    }
+    this.img.onload = placeImage
+    if (this.img.complete) placeImage()
+
+    // 控制按钮
+    this._controls = document.createElement('div')
+    this._controls.className = 'ipreview-controls'
+    this._controls.innerHTML = `
+      <button class="ipreview-btn" title="放大">＋</button>
+      <button class="ipreview-btn" title="缩小">－</button>
+      <button class="ipreview-btn" title="左旋">↺</button>
+      <button class="ipreview-btn" title="右旋">↻</button>
+      <button class="ipreview-btn" title="还原">⟲</button>
+    `
+    const [zi, zo, rl, rr, rs] = this._controls.querySelectorAll('button')
+    zi.onclick = () => this._zoomAroundCenter(1.3)
+    zo.onclick = () => this._zoomAroundCenter(0.7)
+    rl.onclick = () => this.rotateBy(-90)
+    rr.onclick = () => this.rotateBy(90)
+    rs.onclick = () => this.reset()
+    this.wrap.appendChild(this._controls)
+
+    // 缩放信息
+    this._info = document.createElement('div')
+    this._info.className = 'ipreview-info'
+    this.wrap.appendChild(this._info)
+    this._updateInfo()
+
+    // 事件
+    this.wrap.addEventListener('mousedown', this._onDown)
+    this.wrap.addEventListener('wheel', this._onWheel, { passive: false })
+  }
+
+  // 图片中心在容器中的坐标
+  _centerX() { return this.wrap.clientWidth / 2 + this.ox }
+  _centerY() { return this.wrap.clientHeight / 2 + this.oy }
+
+  _onDown(e) {
+    if (e.button !== 0) return
+    this._dragStartX = e.clientX
+    this._dragStartY = e.clientY
+    this._dragStartOx = this.ox
+    this._dragStartOy = this.oy
+    this.wrap.classList.add('grabbing')
+    document.addEventListener('mousemove', this._onMove)
+    document.addEventListener('mouseup', this._onUp)
+  }
+
+  _onMove(e) {
+    this.ox = this._dragStartOx + (e.clientX - this._dragStartX)
+    this.oy = this._dragStartOy + (e.clientY - this._dragStartY)
+    this._applyTransform()
+    this._updateInfo()
+  }
+
+  _onUp() {
+    this.wrap.classList.remove('grabbing')
+    document.removeEventListener('mousemove', this._onMove)
+    document.removeEventListener('mouseup', this._onUp)
+  }
+
+  _onWheel(e) {
+    e.preventDefault()
+    const rect = this.wrap.getBoundingClientRect()
+    const mx = e.clientX - rect.left   // 鼠标在容器内的 X
+    const my = e.clientY - rect.top    // 鼠标在容器内的 Y
+    const factor = e.deltaY < 0 ? 1.15 : 0.85
+    const newScale = Math.max(0.1, Math.min(10, this.scale * factor))
+
+    // 以鼠标位置为锚点：缩放后该点下方的图像内容不变
+    const cx = this._centerX(), cy = this._centerY()
+    const imgX = (mx - cx) / this.scale  // 鼠标对应图像坐标（相对中心）
+    const imgY = (my - cy) / this.scale
+
+    this.scale = newScale
+    this.ox = mx - imgX * newScale - this.wrap.clientWidth / 2
+    this.oy = my - imgY * newScale - this.wrap.clientHeight / 2
+
+    this._applyTransform()
+    this._updateInfo()
+  }
+
+  // transform-origin: center center → translate 移动的是图片中心
+  _applyTransform() {
+    this.img.style.transform =
+      `translate(${this._centerX()}px, ${this._centerY()}px) rotate(${this.rotate}deg) scale(${this.scale})`
+  }
+
+  _updateInfo() {
+    const pct = Math.round(this.scale * 100)
+    const deg = ((this.rotate % 360) + 360) % 360
+    this._info.textContent = `${pct}% | ${deg}°`
+  }
+
+  _zoomAroundCenter(factor) {
+    this.scale = Math.max(0.1, Math.min(10, this.scale * factor))
+    this._applyTransform()
+    this._updateInfo()
+  }
+
+  rotateBy(deg) {
+    this.rotate = (this.rotate + deg) % 360
+    this._applyTransform()
+    this._updateInfo()
+  }
+
+  reset() {
+    const cw = this.wrap.clientWidth, ch = this.wrap.clientHeight
+    this.scale = Math.min(cw / (this._naturalW || 1), ch / (this._naturalH || 1), 1)
+    this.rotate = 0
+    this.ox = -this._naturalW * this.scale / 2
+    this.oy = -this._naturalH * this.scale / 2
+    this._applyTransform()
+    this._updateInfo()
+  }
+
+  save() {
+    return { scale: this.scale, rotate: this.rotate, ox: this.ox, oy: this.oy }
+  }
+
+  destroy() {
+    this._destroyed = true
+    document.removeEventListener('mousemove', this._onMove)
+    document.removeEventListener('mouseup', this._onUp)
+    this.container.innerHTML = ''
+  }
+}
+
+// 当前标注预览实例（切换图片时保存/销毁/重建）
+let currentIPreview = null
+let currentIPreviewOwner = null  // 当前预览属于哪张图
+
 function renderAnnotation() {
   const img = imageBatchList[annoCurrentIdx]
   if (!img) return
 
-  // Preview
+  // Preview — 使用交互式预览（缩放/拖动/旋转），切换图片时保存状态
   const preview = document.getElementById('annoPreview')
   const url = img._blobUrl || URL.createObjectURL(img.file)
   img._blobUrl = url
-  preview.innerHTML = `<img src="${url}" alt="${esc(img.filename)}" />`
+  if (currentIPreview && currentIPreviewOwner !== img) {
+    // 切换到不同图片：保存当前状态到旧图
+    currentIPreviewOwner._previewState = currentIPreview.save()
+    currentIPreview.destroy()
+    currentIPreview = null
+  } else if (currentIPreview && currentIPreviewOwner === img) {
+    // 同一张图重新渲染（如切换标签后）：保存当前状态
+    img._previewState = currentIPreview.save()
+    currentIPreview.destroy()
+    currentIPreview = null
+  }
+  currentIPreview = new InteractivePreview(preview, url, img._previewState)
+  currentIPreviewOwner = img
 
   // Progress
   document.getElementById('annoProgress').textContent = `${annoCurrentIdx + 1} / ${imageBatchList.length}`
@@ -2603,8 +3056,42 @@ function renderAnnoThumbs() {
 function setAnnotationField(fieldId, value) {
   const img = imageBatchList[annoCurrentIdx]
   if (!img) return
-  setAnnoVal(img, fieldId, value)
+
+  // 如果点击的是已选中的值，取消选择
+  const cur = getAnnoVal(img, fieldId)
+  if (cur === value) {
+    setAnnoVal(img, fieldId, '')
+  } else {
+    setAnnoVal(img, fieldId, value)
+  }
+
+  // 选屏损形态或屏损环节时自动推断鉴定结论
+  if (fieldId === 'crackShape' || fieldId === 'crackStage') {
+    autoSuggestResultForAnnotation(img)
+  }
+
   renderAnnotation()
+}
+
+/**
+ * 快速标注中根据形态+环节从历史案例统计自动填入鉴定结论
+ */
+async function autoSuggestResultForAnnotation(img) {
+  const shape = getAnnoVal(img, 'crackShape') || ''
+  const stage = getAnnoVal(img, 'crackStage') || ''
+  if (!shape && !stage) return
+
+  try {
+    const { data } = await knowledgeApi(`/cases/result-stats?crackShape=${encodeURIComponent(shape)}&crackStage=${encodeURIComponent(stage)}`)
+    if (data.recommended && data.total > 0) {
+      setAnnoVal(img, 'result', data.recommended)
+      // 刷新侧边栏以更新按钮高亮
+      delete img._annoSidebarRendered
+      renderAnnotation()
+    }
+  } catch {
+    // 静默失败
+  }
 }
 
 function annotationNext() {
@@ -2624,6 +3111,28 @@ function annotationPrev() {
 function jumpAnnotation(idx) {
   annoCurrentIdx = idx
   renderAnnotation()
+}
+
+// 删除当前标注图片
+function removeAnnoImage() {
+  const img = imageBatchList[annoCurrentIdx]
+  if (!img) return
+  if (!confirm(`确定删除图片「${img.filename || '当前图片'}」吗？删除后将无法恢复`)) return
+  // 释放 blob URL
+  if (img._blobUrl) URL.revokeObjectURL(img._blobUrl)
+  imageBatchList.splice(annoCurrentIdx, 1)
+  if (imageBatchList.length === 0) {
+    closeAnnotation()
+    // 刷新入库弹窗的图片网格
+    renderImageGrid && renderImageGrid()
+    updateImgConfirmBtn()
+    toast && toast('已删除全部图片，标注模式已关闭', 'info')
+    return
+  }
+  if (annoCurrentIdx >= imageBatchList.length) annoCurrentIdx = imageBatchList.length - 1
+  renderAnnotation()
+  renderImageGrid && renderImageGrid()
+  updateImgConfirmBtn()
 }
 
 function onAnnoKeydown(e) {
@@ -2654,6 +3163,7 @@ async function confirmImageBatchImport() {
   btn.textContent = '正在读取图片...'
 
   const images = []
+  const readErrors = []
   for (const img of imageBatchList) {
     // Skip images missing required fields
     if (!getAnnoVal(img, 'crackLocation') || !getAnnoVal(img, 'crackShape')) continue
@@ -2665,25 +3175,18 @@ async function confirmImageBatchImport() {
       reader.readAsDataURL(img.file)
     })
     if (!data) {
-      toast(`读取失败: ${img.filename}`, 'error')
+      readErrors.push(img.filename)
       continue
     }
-    images.push({
-      filename: img.filename,
-      data,
-      title: getAnnoVal(img, 'title') || '',
-      crackLocation: getAnnoVal(img, 'crackLocation'),
-      crackShape: getAnnoVal(img, 'crackShape'),
-      result: getAnnoVal(img, 'result') || '',
-      installStatus: getAnnoVal(img, 'installStatus') || '',
-      packageDamage: getAnnoVal(img, 'packageDamage') || '',
-      crackPrinciple: getAnnoVal(img, 'crackPrinciple') || '',
-      customFields: img.customFields || {},
-    })
+    const item = { filename: img.filename, data }
+    currentAnnoFields.forEach(f => { item[f.id] = getAnnoVal(img, f.id) })
+    images.push(item)
   }
 
   if (images.length === 0) {
-    toast('没有可导入的图片（请确保已标注位置+形状）', 'error')
+    let msg = '没有可导入的图片（请确保已标注位置+形状）'
+    if (readErrors.length > 0) msg += `；${readErrors.length} 张读取失败`
+    toast(msg, 'error')
     btn.disabled = false
     btn.textContent = '确认入库'
     return
@@ -2696,14 +3199,21 @@ async function confirmImageBatchImport() {
       method: 'POST',
       body: JSON.stringify({ images, defaults: {} }),
     })
-    if (data.imported > 0) {
-      toast(`成功入库 ${data.imported} 张案例！`, 'success')
-      // 向量索引已在 createCase 中自动完成
-    }
+
+    // 汇总所有失败信息，在关闭前展示
+    const failParts = []
+    if (readErrors.length > 0) failParts.push(`读取失败 ${readErrors.length} 张: ${readErrors.join(', ')}`)
     if (data.failed > 0) {
       const preview = document.getElementById('imgImportPreview')
       const details = data.errors.map(e => `<div>${esc(e.item)}: ${e.errors.map(x => esc(x)).join(', ')}</div>`).join('')
-      preview.innerHTML = `<div class="import-item-notice"><strong>${data.failed} 张失败</strong>:<br />${details}</div>`
+      preview.innerHTML = `<div class="import-item-notice"><strong>后端校验失败 ${data.failed} 张</strong>:<br />${details}</div>`
+      failParts.push(`后端校验失败 ${data.failed} 张`)
+    }
+
+    if (data.imported > 0) {
+      toast(`成功入库 ${data.imported} 张案例！${failParts.length > 0 ? ' ' + failParts.join('；') : ''}`, failParts.length > 0 ? 'error' : 'success')
+    } else if (failParts.length > 0) {
+      toast('入库失败: ' + failParts.join('；'), 'error')
     }
     closeImageBatchImport()
     await loadCaseList()
@@ -2716,33 +3226,25 @@ async function confirmImageBatchImport() {
 
 loadRuleList()
 
-let adminLightboxAngle = 0
-let adminLightboxScale = 1
+let adminLightboxPreview = null
 function openLightbox(src) {
-  adminLightboxAngle = 0
-  adminLightboxScale = 1
-  const img = document.getElementById('lightboxImg')
-  img.src = src
-  img.style.transform = 'rotate(0deg) scale(1)'
-  document.getElementById('imgLightbox').style.display = 'flex'
+  const overlay = document.getElementById('imgLightbox')
+  overlay.style.display = 'flex'
+  if (adminLightboxPreview) adminLightboxPreview.destroy()
+  // 双帧 + 50ms 延时确保 display:flex 布局完全稳定后再创建预览
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const container = document.getElementById('lightboxPreviewContainer')
+        adminLightboxPreview = new InteractivePreview(container, src, null)
+      }, 50)
+    })
+  })
 }
 function closeLightbox() {
+  if (adminLightboxPreview) { adminLightboxPreview.destroy(); adminLightboxPreview = null }
   document.getElementById('imgLightbox').style.display = 'none'
 }
-function rotateLightboxImg() {
-  adminLightboxAngle = (adminLightboxAngle + 90) % 360
-  updateLightboxTransform()
-}
-function updateLightboxTransform() {
-  const img = document.getElementById('lightboxImg')
-  img.style.transform = `rotate(${adminLightboxAngle}deg) scale(${adminLightboxScale})`
-}
-document.getElementById('imgLightbox').addEventListener('wheel', function(e) {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? -0.15 : 0.15
-  adminLightboxScale = Math.max(0.3, Math.min(8, adminLightboxScale + delta))
-  updateLightboxTransform()
-}, { passive: false })
 
 // ===== 图像特征提取（供 KNN 训练用，与前端 index.html 同算法） =====
 const FEAT_TARGET_W = 400
@@ -2917,6 +3419,26 @@ async function submitTraining(images, location, shape, caseId) {
   }
 }
 
+async function manualBackup() {
+  if (!confirm('将备份知识库数据库，确定继续？')) return
+
+  toast('正在备份数据库...', 'info', true)
+  try {
+    const resp = await fetch(`/api/admin/backup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const result = await resp.json()
+    if (result.success) {
+      toast('✅ 数据库备份成功: ' + (result.data?.path || ''), 'success', true)
+    } else {
+      toast('❌ 备份失败: ' + (result.error?.message || '未知错误'), 'error', true)
+    }
+  } catch (e) {
+    toast('❌ 备份失败: ' + e.message, 'error', true)
+  }
+}
+
 async function rebuildVectorIndex() {
   if (!confirm('将从所有已有案例中提取图片 CLIP 特征，重建 Milvus 向量库。\n\n此操作将清空现有向量索引并重新构建。确定继续？')) return
 
@@ -2937,6 +3459,994 @@ async function rebuildVectorIndex() {
   }
 }
 // ===== 特征提取 END =====
+// ===== 鉴定评估 =====
+let _evalData = { list: [], stats: { total: 0, location: {}, shape: {}, conclusion: {} } }
+let _evalAbort = null
+let _evalPollTimer = null
+let _evalIsAnalyzing = false
+
+// 用户名：优先读 localStorage，否则用随机匿名名
+function _evalGetUser() {
+  let name = localStorage.getItem('eval_username')
+  if (!name) {
+    name = '评估员-' + Math.random().toString(36).slice(2, 8)
+    localStorage.setItem('eval_username', name)
+  }
+  return name
+}
+function _evalSetUser(name) {
+  localStorage.setItem('eval_username', name)
+}
+
+// 模块级 option 列表
+const _locList = ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域']
+const _shapeList = ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','漏液（无缺角、裂纹、腐蚀）','熔屏（无缺角、裂纹、腐蚀）']
+const _stageList = ['产品因素','物流运输搬运','拆机验机安装','使用保管不当']
+const _conclusionMap = { product_quality_issue: '产品质量问题', logistics_issue: '物流问题', not_product_quality: '非产品质量问题', needs_further_review: '需进一步鉴定' }
+const _concOpts = Object.keys(_conclusionMap)
+const _concLabels = { ..._conclusionMap }
+const _evalImgBase = () => `${KNOWLEDGE_API}/images?name=`
+
+function _evalBuildSelect(options, current, labelMap) {
+  let html = '<option value="">-</option>'
+  for (const v of options) {
+    const label = labelMap ? (labelMap[v] || v) : v
+    html += `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(label)}</option>`
+  }
+  return html
+}
+
+function _evalJudgeCell(id, field, llmVal, matchVal, humanVal, options, labelMap) {
+  const ok = matchVal === 1, ng = matchVal === 0
+  const btnStyle = (active, color) => `font-size:11px;padding:1px 6px;border-radius:4px;cursor:pointer;background:${active?color:'#f0f0f0'};border:${active?`1.5px solid ${color}`:'1.5px solid #ddd'};line-height:1.4;transition:all 0.12s;`
+  const llmDisplay = llmVal ? (labelMap ? (labelMap[llmVal] || llmVal) : llmVal) : ''
+  return `<div id="eval-judge-${id}-${field}" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+    <div style="font-size:10px;color:#555;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(llmDisplay)}">${esc(llmDisplay||'—')}</div>
+    <div style="display:flex;gap:3px;">
+      <button onclick="event.stopPropagation();evalJudge(${id},'${field}',1)" style="${btnStyle(ok,'#10b981')}">✅</button>
+      <button onclick="event.stopPropagation();evalJudge(${id},'${field}',0)" style="${btnStyle(ng,'#ef4444')}">❌</button>
+    </div>
+    ${ng && options ? `<select onchange="event.stopPropagation();evalJudgeValue(${id},'${field}',this.value)" style="font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:3px;max-width:90px;">${_evalBuildSelect(options, humanVal, labelMap)}</select>` : ''}
+  </div>`
+}
+
+function _evalJudgeCellText(id, field, llmVal, matchVal) {
+  const ok = matchVal === 1, ng = matchVal === 0
+  const btnStyle = (active, color) => `font-size:11px;padding:1px 6px;border-radius:4px;cursor:pointer;background:${active?color:'#f0f0f0'};border:${active?`1.5px solid ${color}`:'1.5px solid #ddd'};line-height:1.4;transition:all 0.12s;`
+  const preview = (llmVal||'').slice(0,30)
+  return `<div id="eval-judge-${id}-${field}" style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+    <div style="font-size:9px;color:#888;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(llmVal||'')}">${esc(preview||'—')}</div>
+    <div style="display:flex;gap:3px;">
+      <button onclick="event.stopPropagation();evalJudge(${id},'${field}',1)" style="${btnStyle(ok,'#10b981')}">✅</button>
+      <button onclick="event.stopPropagation();evalJudge(${id},'${field}',0)" style="${btnStyle(ng,'#ef4444')}">❌</button>
+    </div>
+  </div>`
+}
+
+// _evalStatsCache 作为轻量缓存（仅首次渲染和 full refresh 时重建）
+let _evalStatsCache = null
+function _evalBuildStatsCache() {
+  const list = _evalData.list
+  const fields = ['location','shape','stage','conclusion','status_obs','principle']
+  const s = { total: list.length }
+  for (const f of fields) { s[f] = { ok: 0, fail: 0 } }
+  for (const r of list) {
+    for (const f of fields) {
+      if (r['match_'+f] === 1) s[f].ok++
+      else if (r['match_'+f] === 0) s[f].fail++
+    }
+  }
+  _evalStatsCache = s
+  return s
+}
+
+// 增量更新单个判断单元格（只改一个 cell，不做整行替换）
+function _evalUpdateJudgeCell(id, field, rec) {
+  let html
+  if (field === 'location') html = _evalJudgeCell(id, field, rec.llm_location, rec.match_location, rec.human_location, _locList)
+  else if (field === 'shape') html = _evalJudgeCell(id, field, rec.llm_shape, rec.match_shape, rec.human_shape, _shapeList)
+  else if (field === 'stage') html = _evalJudgeCell(id, field, rec.llm_stage, rec.match_stage, rec.human_stage, _stageList)
+  else if (field === 'conclusion') html = _evalJudgeCell(id, field, rec.llm_conclusion, rec.match_conclusion, rec.human_conclusion, _concOpts, _concLabels)
+  else html = _evalJudgeCellText(id, field, rec['llm_'+field], rec['match_'+field])
+  const td = document.getElementById('eval-judge-'+id+'-'+field)
+  if (td) td.innerHTML = html
+  // 更新判别人列（第 9 个 td, index 8）
+  const tr = document.querySelector('tr[data-eval-id="'+id+'"]')
+  if (tr) {
+    const tds = tr.querySelectorAll('td')
+    if (tds.length >= 9) tds[8].textContent = rec.judged_by || '-'
+  }
+}
+
+// 增量更新一张统计卡片
+function _evalUpdateStatCard(oldRec, newRec, field) {
+  if (!_evalStatsCache) _evalBuildStatsCache()
+  if (oldRec) {
+    const oldV = oldRec['match_'+field]
+    if (oldV === 1) _evalStatsCache[field].ok--
+    else if (oldV === 0) _evalStatsCache[field].fail--
+  }
+  const newV = newRec['match_'+field]
+  if (newV === 1) _evalStatsCache[field].ok++
+  else if (newV === 0) _evalStatsCache[field].fail++
+
+  const labels = { location:'屏损位置', shape:'屏损形态', stage:'屏损环节', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
+  const { ok, fail } = _evalStatsCache[field]
+  const t = ok + fail
+  const pct = t > 0 ? Math.round(ok / t * 100) + '%' : '-'
+  const el = document.getElementById('evalStatCard_'+field)
+  if (el) {
+    el.style.background = ok >= fail ? '#d1fae5' : '#fee2e2'
+    el.innerHTML = `<div style="font-size:10px;color:#666;">${labels[field]}</div><div style="font-size:18px;font-weight:700;">${pct}</div><div style="font-size:9px;color:#888;">${ok}/${t} 正确</div>`
+  }
+}
+
+function renderEvalRow(id) {
+  const idx = _evalData.list.findIndex(r => r.id === id)
+  if (idx === -1) return
+  const r = _evalData.list[idx]
+  const imgUrl = r.image_name ? _evalImgBase() + encodeURIComponent(r.image_name) : ''
+  const dataImg = imgUrl ? ` data-eval-img="${imgUrl.replace(/"/g,'&quot;')}"` : ''
+  const html = `<tr style="background:${idx%2?'#f8f9ff':''};border-bottom:1px solid var(--border);cursor:${imgUrl?'pointer':'default'}" data-eval-id="${r.id}"${dataImg} onclick="toggleEvalDetail(event,${r.id})">
+    <td style="padding:4px 6px;">${idx+1}</td>
+    <td style="padding:4px 6px;font-size:11px;">${esc(r.case_title||'-')}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'location',r.llm_location,r.match_location,r.human_location,_locList) : '<span id="evalStatus_'+r.id+'">⏳</span>'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'shape',r.llm_shape,r.match_shape,r.human_shape,_shapeList) : '-'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'stage',r.llm_stage,r.match_stage,r.human_stage,_stageList) : '-'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'conclusion',r.llm_conclusion,r.match_conclusion,r.human_conclusion,_concOpts,_concLabels) : '-'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'status_obs',r.llm_status_obs,r.match_status_obs) : '-'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'principle',r.llm_principle,r.match_principle) : '-'}</td>
+    <td style="padding:2px 4px;text-align:center;font-size:10px;color:#666;">${esc(r.judged_by||'-')}</td>
+    <td style="padding:4px 6px;text-align:center;"><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();evalShowDetail(${r.id})" style="font-size:10px;padding:2px 6px;">详情</button></td>
+  </tr>`
+  const tr = document.querySelector(`tr[data-eval-id="${r.id}"]`)
+  if (tr) tr.outerHTML = html
+}
+
+function renderEvalStats() {
+  const { list } = _evalData
+  const fields = ['location','shape','stage','conclusion','status_obs','principle']
+  const fieldLabels = { location:'屏损位置', shape:'屏损形态', stage:'屏损环节', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
+  const stats = { total: list.length }
+  for (const f of fields) {
+    let ok = 0, fail = 0
+    list.forEach(r => {
+      if (r['match_'+f] === 1) ok++
+      else if (r['match_'+f] === 0) fail++
+    })
+    stats[f] = { ok, fail }
+  }
+  _evalData.stats = stats
+
+  const pct = (ok, fail) => { const t = ok + fail; return t > 0 ? Math.round(ok / t * 100) + '%' : '-' }
+  const cards = fields.map(f => {
+    const { ok, fail } = stats[f]
+    return `<div id="evalStatCard_${f}" style="background:${ok>=fail?'#d1fae5':'#fee2e2'};border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;min-width:80px;flex:0 0 auto;">
+      <div style="font-size:10px;color:#666;">${fieldLabels[f]}</div><div style="font-size:18px;font-weight:700;">${pct(ok,fail)}</div><div style="font-size:9px;color:#888;">${ok}/${ok+fail} 正确</div>
+    </div>`
+  }).join('')
+  document.getElementById('evalStatsCards').innerHTML = `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;min-width:80px;flex:0 0 auto;">
+      <div style="font-size:10px;color:#888;">总评估</div><div style="font-size:18px;font-weight:700;">${stats.total}</div>
+    </div>${cards}`
+  _evalBuildStatsCache()
+
+  // Update button
+  const btn = document.getElementById('evalAnalyzeBtn2')
+  if (btn && btn.style.display !== 'none') {
+    const unanalyzed = list.filter(r => !r.analyzed).length
+    btn.disabled = unanalyzed === 0
+    btn.textContent = unanalyzed > 0 ? `🤖 批量发起 LLM 分析 (${unanalyzed})` : '✅ 全部已分析'
+  }
+}
+
+async function loadEvalPage() {
+  document.getElementById('evalUsername').value = _evalGetUser()
+  document.getElementById('evalUsername').addEventListener('change', function() {
+    _evalSetUser(this.value.trim())
+  })
+  await evalRefresh()
+
+}
+
+async function evalRefresh() {
+  try {
+    const { data } = await knowledgeApi('/eval/list')
+    _evalData = data
+    evalRender()
+  } catch (e) {
+    toast('加载评估列表失败: ' + e.message, 'error')
+  }
+}
+
+async function evalCreateBatch() {
+  if (!confirm('将从案例库中加载所有有图片的案例创建评估批次，确定继续？')) return
+  try {
+    const { data: caseData } = await knowledgeApi('/cases?limit=5000')
+    const withImg = caseData.filter(c => c.images && c.images.length > 0)
+    if (withImg.length === 0) { toast('没有有图片的案例', 'error'); return }
+    const caseIds = withImg.map(c => c.id)
+    await knowledgeApi('/eval/create', { method: 'POST', body: JSON.stringify({ caseIds }) })
+    toast(`✅ 已创建评估批次，共 ${caseIds.length} 条`)
+    await evalRefresh()
+  } catch (e) {
+    toast('创建失败: ' + e.message, 'error')
+  }
+}
+
+// 上传图片直接创建评估批次（不走案例库）
+async function evalUploadImages(event) {
+  const files = event.target.files
+  if (!files.length) return
+  const images = []
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue
+    if (file.size > 10 * 1024 * 1024) { toast(`${file.name} 超过 10MB 上限，已跳过`, 'error'); continue }
+    const data = await new Promise(resolve => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(file)
+    })
+    if (data) images.push(data)
+  }
+  event.target.value = ''
+  if (images.length === 0) return
+  const btn = document.getElementById('evalUploadBtn')
+  const oldText = btn.textContent
+  btn.disabled = true
+  btn.textContent = `⏳ 上传中 (0/${images.length})...`
+  try {
+    const { data } = await knowledgeApi('/eval/upload-images', {
+      method: 'POST',
+      body: JSON.stringify({ images }),
+    })
+    toast(`✅ 已上传 ${data.count} 张图片并加入评估批次`)
+    await evalRefresh()
+  } catch (e) {
+    toast('上传失败: ' + e.message, 'error')
+  } finally {
+    btn.disabled = false
+    btn.textContent = oldText
+  }
+}
+
+async function evalBatchAnalyze() {
+  const unanalyzed = _evalData.list.filter(r => !r.analyzed)
+  if (unanalyzed.length === 0) { toast('所有记录已分析', 'error'); return }
+  if (!confirm(`将批量分析 ${unanalyzed.length} 条记录，预计需要几分钟。确定继续？`)) return
+
+  const btn = document.getElementById('evalAnalyzeBtn2')
+  btn.disabled = true
+  btn.textContent = '⏳ 分析中...'
+  const stopBtn = document.getElementById('evalStopBtn')
+  const progressEl = document.getElementById('evalProgress')
+  const progressBar = document.getElementById('evalProgressBar')
+  const progressErr = document.getElementById('evalProgressError')
+  progressEl.style.display = 'inline'
+  progressBar.style.display = 'inline-block'
+  stopBtn.style.display = 'inline-block'
+  progressErr.style.display = 'none'
+  progressBar.value = 0
+  progressBar.max = unanalyzed.length
+  let errCount = 0
+
+  _evalAbort = new AbortController()
+  _evalIsAnalyzing = true
+  try {
+    const resp = await fetch(`${KNOWLEDGE_API}/eval/batch-analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: _evalAbort.signal,
+    })
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const s = line.trim()
+        if (!s.startsWith('data: ')) continue
+        try {
+          const evt = JSON.parse(s.slice(6))
+          if (evt.stage === 'progress') {
+            progressBar.value = evt.done
+            if (evt.status === 'error') {
+              errCount++
+              progressEl.textContent = `进度: ${evt.done}/${evt.total}`
+              progressErr.style.display = 'inline'
+              progressErr.textContent = `⚠ ${errCount} 条失败`
+              updateEvalRowById(evt.id, '❌')
+            } else if (evt.status === 'ok') {
+              const rec = _evalData.list.find(r => r.id === evt.id)
+              if (rec) {
+                rec.analyzed = 1
+                rec.llm_location = evt.llm_location || ''
+                rec.llm_shape = evt.llm_shape || ''
+                rec.llm_stage = evt.llm_stage || ''
+                rec.llm_conclusion = evt.llm_conclusion || ''
+                rec.llm_status_obs = evt.llm_status_obs || ''
+                rec.llm_principle = evt.llm_principle || ''
+              }
+              progressEl.textContent = `进度: ${evt.done}/${evt.total}`
+              renderEvalRow(evt.id)
+              renderEvalStats()
+            } else {
+              progressEl.textContent = `进度: ${evt.done}/${evt.total} (跳过 ${evt.reason || ''})`
+            }
+          } else if (evt.stage === 'done') {
+            progressEl.textContent = `完成！成功 ${evt.done - evt.errors}，失败 ${evt.errors}`
+            progressBar.value = unanalyzed.length
+            if (evt.errors > 0) {
+              progressErr.style.display = 'inline'
+              progressErr.textContent = `⚠ ${evt.errors} 条失败`
+            }
+            await evalRefresh()
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      toast('⚠ 分析已中断')
+    } else {
+      toast('批量分析失败: ' + e.message, 'error')
+    }
+  } finally {
+    btn.disabled = false
+    btn.textContent = '🤖 批量发起 LLM 分析'
+    stopBtn.style.display = 'none'
+    _evalAbort = null
+    _evalIsAnalyzing = false
+  }
+}
+
+function updateEvalRowById(id, text) {
+  const td = document.getElementById('evalStatus_' + id)
+  if (td) td.textContent = text
+}
+
+function evalStopAnalyze() {
+  if (_evalAbort) {
+    _evalAbort.abort()
+  }
+}
+
+function evalRender() {
+  const { list } = _evalData
+  const tbody = document.getElementById('evalTableBody')
+  const emptyEl = document.getElementById('evalEmpty')
+  const btn = document.getElementById('evalAnalyzeBtn2')
+  const exportBtn = document.getElementById('evalExportBtn')
+  const syncBtn = document.getElementById('evalSyncBtn')
+
+  if (list.length === 0) {
+    emptyEl.style.display = ''
+    document.getElementById('evalTable').style.display = 'none'
+    // 无批次时保持按钮可见但禁用，避免工具栏整排消失
+    btn.style.display = ''
+    btn.disabled = true
+    btn.textContent = '🤖 批量发起 LLM 分析'
+    exportBtn.style.display = ''
+    exportBtn.disabled = true
+    syncBtn.style.display = ''
+    syncBtn.disabled = true
+    const deleteBtn = document.getElementById('evalDeleteBtn')
+    deleteBtn.style.display = ''
+    deleteBtn.disabled = true
+    document.getElementById('evalStatsCards').innerHTML = ''
+    // 清除进度残留
+    document.getElementById('evalProgress').style.display = 'none'
+    document.getElementById('evalProgressBar').style.display = 'none'
+    document.getElementById('evalProgressError').style.display = 'none'
+    return
+  }
+  emptyEl.style.display = 'none'
+  document.getElementById('evalTable').style.display = ''
+  btn.style.display = ''
+  btn.disabled = false
+  exportBtn.style.display = ''
+  exportBtn.disabled = false
+  syncBtn.style.display = ''
+  syncBtn.disabled = false
+  const deleteBtn = document.getElementById('evalDeleteBtn')
+  deleteBtn.style.display = ''
+  deleteBtn.disabled = false
+
+  tbody.innerHTML = list.map((r, i) => {
+    const imgUrl = r.image_name ? _evalImgBase() + encodeURIComponent(r.image_name) : ''
+    const dataImg = imgUrl ? ` data-eval-img="${imgUrl.replace(/"/g,'&quot;')}"` : ''
+    return `
+    <tr style="background:${i%2?'#f8f9ff':''};border-bottom:1px solid var(--border);cursor:${imgUrl?'pointer':'default'}" data-eval-id="${r.id}"${dataImg} onclick="toggleEvalDetail(event,${r.id})">
+      <td style="padding:4px 6px;">${i+1}</td>
+      <td style="padding:4px 6px;font-size:11px;">${esc(r.case_title||'-')}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'location',r.llm_location,r.match_location,r.human_location,_locList) : '<span id="evalStatus_'+r.id+'"></span>'}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'shape',r.llm_shape,r.match_shape,r.human_shape,_shapeList) : '-'}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'stage',r.llm_stage,r.match_stage,r.human_stage,_stageList) : '-'}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'conclusion',r.llm_conclusion,r.match_conclusion,r.human_conclusion,_concOpts,_concLabels) : '-'}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'status_obs',r.llm_status_obs,r.match_status_obs) : '-'}</td>
+      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'principle',r.llm_principle,r.match_principle) : '-'}</td>
+      <td style="padding:4px 6px;text-align:center;"><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();evalShowDetail(${r.id})" style="font-size:10px;padding:2px 6px;">详情</button></td>
+    </tr>`
+  }).join('')
+
+  renderEvalStats()
+}
+
+function buildEvalSelect(options, current, labelMap) {
+  let html = '<option value="">-</option>'
+  for (const v of options) {
+    const label = labelMap ? (labelMap[v] || v) : v
+    html += `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(label)}</option>`
+  }
+  return html
+}
+
+// 待保存请求 + 失败计数
+const _evalPendingSaves = []
+let _evalSaveFailures = 0
+
+function evalJudge(id, field, isCorrect) {
+  const rec = _evalData.list.find(r => r.id === id)
+  if (!rec) return
+  const username = document.getElementById('evalUsername').value.trim() || _evalGetUser()
+
+  // 只改内存数据，不做 DOM 更新（靠同步按钮刷新）
+  rec['match_' + field] = isCorrect ? 1 : 0
+  if (isCorrect) rec['human_' + field] = ''
+  rec.judged_by = username
+
+  // 如果详情面板打开，只更新按钮样式
+  if (_evalDetailId === id) _evalUpdateDetailField(id, field)
+
+  // 后台保存
+  const data = { id, judged_by: username }
+  data['match_' + field] = isCorrect ? 1 : 0
+  if (isCorrect) data['human_' + field] = ''
+  const p = knowledgeApi('/eval/save', { method: 'POST', body: JSON.stringify(data) })
+    .then(() => {}) // success: remove from pending
+    .catch(e => { _evalSaveFailures++; console.error('保存失败:', e.message); toast('保存失败: ' + e.message, 'error') })
+  _evalPendingSaves.push(p)
+  p.finally(() => { const i = _evalPendingSaves.indexOf(p); if (i >= 0) _evalPendingSaves.splice(i, 1) })
+}
+
+function evalJudgeValue(id, field, value) {
+  const rec = _evalData.list.find(r => r.id === id)
+  if (!rec) return
+  const username = document.getElementById('evalUsername').value.trim() || _evalGetUser()
+
+  // 只改内存数据，不做 DOM 更新（靠同步按钮刷新）
+  rec['human_' + field] = value
+  rec['match_' + field] = 0
+  rec.judged_by = username
+
+  // 如果详情面板打开，只更新按钮样式
+  if (_evalDetailId === id) _evalUpdateDetailField(id, field)
+
+  // 后台保存
+  const data = { id, judged_by: username }
+  data['human_' + field] = value
+  data['match_' + field] = 0
+  const p = knowledgeApi('/eval/save', { method: 'POST', body: JSON.stringify(data) })
+    .then(() => {})
+    .catch(e => { _evalSaveFailures++; console.error('保存失败:', e.message); toast('保存失败: ' + e.message, 'error') })
+  _evalPendingSaves.push(p)
+  p.finally(() => { const i = _evalPendingSaves.indexOf(p); if (i >= 0) _evalPendingSaves.splice(i, 1) })
+}
+
+function evalExportCSV() {
+  window.open(`${KNOWLEDGE_API}/eval/export-xlsx`, '_blank')
+}
+
+// 手动同步：等待所有保存完成后，从服务端重拉数据，刷新表格、统计卡、详情面板
+async function evalSync() {
+  const btn = document.getElementById('evalSyncBtn')
+  const status = document.getElementById('evalSyncStatus')
+  btn.disabled = true
+  try {
+    // 先等所有待保存请求落库
+    if (_evalPendingSaves.length > 0) {
+      btn.textContent = '⏳ 保存中...'
+      await Promise.allSettled([..._evalPendingSaves])
+    }
+    btn.textContent = '⏳ 同步中...'
+    await evalRefresh()
+    // 如果详情面板打开，用最新数据刷新
+    if (_evalDetailId) {
+      const rec = _evalData.list.find(r => r.id === _evalDetailId)
+      if (rec) _evalRenderDetailForm(rec)
+    }
+    if (_evalSaveFailures > 0) {
+      status.style.color = '#f59e0b'
+      status.textContent = '⚠ ' + _evalSaveFailures + ' 条保存失败，请重试'
+      toast(_evalSaveFailures + ' 条标注保存失败，请检查网络后重试', 'error')
+      _evalSaveFailures = 0
+    } else {
+      status.style.display = ''
+      status.style.color = '#10b981'
+      status.textContent = '✅ 已同步'
+    }
+    setTimeout(() => { status.style.display = 'none'; status.style.color = '#10b981' }, 3000)
+  } catch (e) {
+    console.error('同步失败:', e)
+    status.style.display = ''
+    status.style.color = '#ef4444'
+    status.textContent = '同步失败: ' + e.message
+    setTimeout(() => { status.style.display = 'none'; status.style.color = '#10b981' }, 3000)
+  } finally {
+    btn.disabled = false
+    btn.textContent = '🔄 同步'
+  }
+}
+
+function _evalStartPoll() {
+  _evalStopPoll()
+  const username = _evalGetUser()
+  _evalPollTimer = setInterval(async () => {
+    if (_evalIsAnalyzing) return // SSE stream handles real-time during analysis
+    try {
+      const { data } = await knowledgeApi('/eval/list')
+      const oldMap = new Map(_evalData.list.map(r => [r.id, r]))
+      const meName = document.getElementById('evalUsername').value.trim() || username
+      let synced = 0
+      for (const row of data.list) {
+        const old = oldMap.get(row.id)
+        if (!old) continue
+        // 跳过本人刚改过的行（本地的 judged_by 就是自己）
+        if (old.judged_by === meName) continue
+        // 检查是否有别人更新的 match 字段
+        let changed = false
+        const fields = ['location','shape','stage','conclusion','status_obs','principle']
+        for (const f of fields) {
+          const mf = 'match_' + f
+          if ((row[mf] === 1 || row[mf] === 0) && old[mf] !== row[mf]) changed = true
+          const hf = 'human_' + f
+          if (row[hf] !== old[hf]) changed = true
+        }
+        if (changed || row.judged_by !== old.judged_by) {
+          Object.assign(old, {
+            ...row,
+            llm_location: row.llm_location,
+            llm_shape: row.llm_shape,
+            llm_stage: row.llm_stage,
+            llm_conclusion: row.llm_conclusion,
+            llm_status_obs: row.llm_status_obs,
+            llm_principle: row.llm_principle,
+            llm_description: row.llm_description,
+          })
+          renderEvalRow(row.id)
+          synced++
+        }
+      }
+      if (synced > 0) {
+        renderEvalStats()
+        document.getElementById('evalPollStatus').textContent = `🔄 同步 ${synced} 行`
+        setTimeout(() => { document.getElementById('evalPollStatus').textContent = '' }, 2000)
+      }
+    } catch (_) { /* 静默忽略 */ }
+  }, 5000)
+}
+
+function _evalStopPoll() {
+  if (_evalPollTimer) { clearInterval(_evalPollTimer); _evalPollTimer = null }
+}
+
+async function evalDeleteBatch() {
+  if (!confirm('确定删除整个评估批次？LLM 分析结果和人工标注将全部清空，不可恢复。')) return
+  try {
+    await fetch(`${KNOWLEDGE_API}/eval/batch`, { method: 'DELETE' })
+    toast('✅ 评估批次已删除')
+    await evalRefresh()
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error')
+  }
+}
+
+function evalShowDetail(id) {
+  const rec = _evalData.list.find(r => r.id === id)
+  if (!rec) return
+  const desc = rec.llm_description || '暂无 LLM 分析结果'
+  alert(`【案例详情】\n\n案例: ${rec.case_title}\nLLM 位置: ${rec.llm_location||'-'}\nLLM 形态: ${rec.llm_shape||'-'}\nLLM 环节: ${rec.llm_stage||'-'}\nLLM 结论: ${rec.llm_conclusion||'-'}\n\nLLM 描述:\n${desc}`)
+}
+
+// Ctrl+悬浮预览 — 通过全局委托监听
+ function evalTooltipOn(e) {
+   if (!e.ctrlKey) return
+   const tr = e.target.closest('tr[data-eval-img]')
+   if (!tr) return
+  const url = tr.getAttribute('data-eval-img')
+   const tip = document.getElementById('evalTooltip')
+   const img = document.getElementById('evalTooltipImg')
+   img.src = url
+   tip.style.display = 'block'
+   const x = e.clientX + 16, y = e.clientY + 12
+   tip.style.left = Math.min(x, window.innerWidth - 340) + 'px'
+   tip.style.top = Math.min(y, window.innerHeight - 280) + 'px'
+ }
+ function evalTooltipOff(e) {
+   document.getElementById('evalTooltip').style.display = 'none'
+ }
+
+ // 初始化 Ctrl+悬浮 全局委托
+ document.addEventListener('DOMContentLoaded', () => {
+   const tbody = document.getElementById('evalTableBody')
+   if (tbody) {
+     tbody.addEventListener('mouseover', evalTooltipOn)
+     tbody.addEventListener('mouseout', evalTooltipOff)
+   }
+ })
+ // 每次 render 后重新绑定（因为 innerHTML 重建了 tbody）
+ ;(function() {
+   const origEvalRender = evalRender
+   evalRender = function() {
+     origEvalRender.apply(this, arguments)
+     const tbody = document.getElementById('evalTableBody')
+     if (tbody) {
+       tbody.removeEventListener('mouseover', evalTooltipOn)
+       tbody.removeEventListener('mouseout', evalTooltipOff)
+       tbody.addEventListener('mouseover', evalTooltipOn)
+       tbody.addEventListener('mouseout', evalTooltipOff)
+     }
+   }
+ })()
+
+// 点击行展开详情面板
+let _evalDetailId = null
+function toggleEvalDetail(e, id) {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return
+  if (_evalDetailId === id) { closeEvalDetail(); return }
+  _evalDetailId = id
+  const rec = _evalData.list.find(r => r.id === id)
+  if (!rec) return
+  _evalRenderDetailForm(rec)
+  document.getElementById('evalDetailPanel').style.display = 'block'
+  document.addEventListener('keydown', _evalKeyNav)
+}
+
+// 独立函数：渲染详情面板（首次展开 + 标注后增量刷新）
+function _evalRenderDetailForm(rec) {
+  const id = rec.id
+  const conclusionMap = { product_quality_issue: '产品质量问题', logistics_issue: '物流问题', not_product_quality: '非产品质量问题', needs_further_review: '需进一步鉴定' }
+  const concOpts = Object.entries(conclusionMap).map(([k,v])=>k)
+  const concLabels = Object.entries(conclusionMap).reduce((a,[k,v])=>(a[k]=v,a),{})
+
+  document.getElementById('evalDetailTitle').textContent = `📋 ${rec.case_title || '未命名'}`
+  // 图片（只在首次设置 src，避免闪动）
+  const imgEl = document.getElementById('evalDetailImg')
+  if (rec.image_name) {
+    const newSrc = `${KNOWLEDGE_API}/images?name=${encodeURIComponent(rec.image_name)}`
+    if (imgEl.src !== newSrc) imgEl.src = newSrc
+    imgEl.style.display = ''
+  } else {
+    imgEl.style.display = 'none'
+  }
+  // LLM 结果
+  document.getElementById('evalDetailLLM').innerHTML = `
+    <div><b>屏损位置:</b> ${esc(rec.llm_location||(rec.analyzed?'未知':''))}</div>
+    <div><b>屏损形态:</b> ${esc(rec.llm_shape||(rec.analyzed?'未知':''))}</div>
+    <div><b>屏损环节:</b> ${esc(rec.llm_stage||(rec.analyzed?'未知':''))}</div>
+    <div><b>状态观察:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_status_obs||(rec.analyzed?'未知':''))}</span></div>
+    <div><b>屏损原理:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_principle||(rec.analyzed?'未知':''))}</span></div>
+    <div><b>鉴定结论:</b> ${esc(_conclusionMap[rec.llm_conclusion]||rec.llm_conclusion||(rec.analyzed?'未知':''))}</div>
+    <div style="margin-top:6px;"><b>完整描述:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_description||(rec.analyzed?'未知':''))}</span></div>`
+  // 人工标注 — ✅/❌ 模式 for 6 fields
+  const detailBtn = (field, ok, ng) => `
+    <button onclick="evalJudge(${id},'${field}',1)" style="font-size:12px;padding:2px 10px;border-radius:4px;cursor:pointer;background:${ok?'#10b981':'#f0f0f0'};border:${ok?'1.5px solid #10b981':'1.5px solid #ddd'};line-height:1.6;">✅ 正确</button>
+    <button onclick="evalJudge(${id},'${field}',0)" style="font-size:12px;padding:2px 10px;border-radius:4px;cursor:pointer;background:${ng?'#ef4444':'#f0f0f0'};border:${ng?'1.5px solid #ef4444':'1.5px solid #ddd'};line-height:1.6;">❌ 错误</button>`
+  const detailSel = (field, options, humanVal, labelMap) => {
+    const ng = rec['match_'+field] === 0
+    return ng && options ? `<select onchange="evalJudgeValue(${id},'${field}',this.value)" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;max-width:140px;">${buildEvalSelect(options, humanVal, labelMap)}</select>` : ''
+  }
+  document.getElementById('evalDetailForm').innerHTML = `
+    <div id="evalDetailField_status_obs" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">状态观察</label><div style="display:flex;align-items:center;gap:6px;">${detailBtn('status_obs',rec.match_status_obs===1,rec.match_status_obs===0)}</div></div>
+    <div id="evalDetailField_location" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损位置</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('location',rec.match_location===1,rec.match_location===0)}${detailSel('location',_locList,rec.human_location)}</div></div>
+    <div id="evalDetailField_shape" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损形态</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('shape',rec.match_shape===1,rec.match_shape===0)}${detailSel('shape',_shapeList,rec.human_shape)}</div></div>
+    <div id="evalDetailField_principle" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损原理</label><div style="display:flex;align-items:center;gap:6px;">${detailBtn('principle',rec.match_principle===1,rec.match_principle===0)}</div></div>
+    <div id="evalDetailField_stage" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损环节</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('stage',rec.match_stage===1,rec.match_stage===0)}${detailSel('stage',_stageList,rec.human_stage)}</div></div>
+    <div id="evalDetailField_conclusion" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">鉴定结论</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('conclusion',rec.match_conclusion===1,rec.match_conclusion===0)}${detailSel('conclusion',_concOpts,rec.human_conclusion,_concLabels)}</div></div>`
+
+  // 更新底部导航信息
+  _evalUpdateNavInfo(rec)
+}
+
+// 增量更新详情面板中单个字段（只操作 DOM 属性，不用 innerHTML，避免重排）
+function _evalUpdateDetailField(id, field) {
+  const el = document.getElementById('evalDetailField_'+field)
+  if (!el) return
+  const rec = _evalData.list.find(r => r.id === id)
+  if (!rec) return
+  const matchVal = rec['match_'+field]
+  const ng = matchVal === 0, ok = matchVal === 1
+  // 直接找按钮操作 style/classList，不重建 DOM
+  const btns = el.querySelectorAll('button')
+  if (btns.length >= 2) {
+    // ✅ 正确按钮（第一个）
+    btns[0].style.background = ok ? '#10b981' : '#f0f0f0'
+    btns[0].style.border = ok ? '1.5px solid #10b981' : '1.5px solid #ddd'
+    // ❌ 错误按钮（第二个）
+    btns[1].style.background = ng ? '#ef4444' : '#f0f0f0'
+    btns[1].style.border = ng ? '1.5px solid #ef4444' : '1.5px solid #ddd'
+  }
+  // 更新或创建下拉框
+  const opts = { location: _locList, shape: _shapeList, stage: _stageList, conclusion: _concOpts }[field]
+  const lm = field === 'conclusion' ? _concLabels : null
+  let sel = el.querySelector('select')
+  if (ng && opts) {
+    const humanVal = rec['human_'+field] || ''
+    if (sel) {
+      sel.innerHTML = buildEvalSelect(opts, humanVal, lm)
+      sel.style.display = ''
+    } else {
+      sel = document.createElement('select')
+      sel.style.cssText = 'font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;max-width:140px;'
+      sel.innerHTML = buildEvalSelect(opts, humanVal, lm)
+      sel.onchange = function(){ evalJudgeValue(id,field,this.value) }
+      el.appendChild(sel)
+    }
+  } else if (sel) {
+    sel.style.display = 'none'
+  }
+}
+function closeEvalDetail() {
+  document.getElementById('evalDetailPanel').style.display = 'none'
+  _evalDetailId = null
+  document.removeEventListener('keydown', _evalKeyNav)
+}
+
+// 底部导航信息 + 按钮状态
+function _evalUpdateNavInfo(rec) {
+  const idx = _evalData.list.findIndex(r => r.id === rec.id)
+  const total = _evalData.list.length
+  const pos = idx === -1 ? '?' : String(idx + 1)
+  document.getElementById('evalNavInfo').textContent = `${pos} / ${total}`
+  // 禁用边界按钮
+  document.getElementById('evalPrevBtn').disabled = idx <= 0
+  document.getElementById('evalPrevBtn').style.opacity = idx <= 0 ? '0.4' : '1'
+  document.getElementById('evalNextBtn').disabled = idx >= total - 1
+  document.getElementById('evalNextBtn').style.opacity = idx >= total - 1 ? '0.4' : '1'
+}
+
+function evalPrev() {
+  if (!_evalDetailId) return
+  const idx = _evalData.list.findIndex(r => r.id === _evalDetailId)
+  if (idx <= 0) return
+  const rec = _evalData.list[idx - 1]
+  _evalDetailId = rec.id
+  _evalRenderDetailForm(rec)
+}
+
+function evalNext() {
+  if (!_evalDetailId) return
+  const idx = _evalData.list.findIndex(r => r.id === _evalDetailId)
+  if (idx >= _evalData.list.length - 1) return
+  const rec = _evalData.list[idx + 1]
+  _evalDetailId = rec.id
+  _evalRenderDetailForm(rec)
+}
+
+function _evalScrollToDetail() {
+  const panel = document.getElementById('evalDetailPanel')
+  if (panel) {
+    const rect = panel.getBoundingClientRect()
+    if (rect.bottom > window.innerHeight || rect.top < 0) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }
+}
+
+// 键盘导航
+function _evalKeyNav(e) {
+  if (!_evalDetailId) return
+  // Cmd/Ctrl+Arrow 留给浏览器默认行为
+  if (e.metaKey || e.ctrlKey) return
+  // 如果焦点在 input/select/textarea 里不拦截
+  const tag = document.activeElement?.tagName
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+    e.preventDefault()
+    evalPrev()
+    _evalScrollToDetail()
+  } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+    e.preventDefault()
+    evalNext()
+    _evalScrollToDetail()
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    closeEvalDetail()
+  }
+}
+
+// ===== SQL 自助查询 =====
+let _sqlLastResult = null
+
+function setSqlQuery(sql) {
+  document.getElementById('sqlInput').value = sql
+  runSqlQuery()
+}
+
+async function loadSqlSchema() {
+  const tree = document.getElementById('sqlSchemaTree')
+  try {
+    const r = await fetch('/api/knowledge/sql-schema')
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '加载失败')
+    const tables = j.data || []
+    tree.innerHTML = tables.length === 0
+      ? '<div style="color:#aaa;padding:10px;text-align:center;">无数据表</div>'
+      : tables.map(t => `
+        <div class="sql-table" style="margin-bottom:4px;">
+          <div onclick="toggleSqlTable('${t.name}')" style="cursor:pointer;padding:5px 8px;border-radius:4px;font-weight:600;color:var(--primary);" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">▸ ${t.name}</div>
+          <div id="sqlCols_${t.name}" style="display:none;padding-left:18px;">
+            ${t.columns.map(c => `<div title="双击插入列名" ondblclick="insertColRef('${t.name}.${c.name}')" style="padding:2px 4px;cursor:pointer;border-radius:3px;color:#555;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background=''">${c.name} <span style="color:#aaa;font-size:10px;">${c.type}${c.pk ? ' PK' : ''}</span></div>`).join('')}
+          </div>
+        </div>`).join('')
+  } catch (e) {
+    tree.innerHTML = `<div style="color:#ef4444;padding:10px;font-size:12px;">加载失败: ${esc(e.message)}</div>`
+  }
+}
+
+function toggleSqlTable(name) {
+  const el = document.getElementById('sqlCols_' + name)
+  if (!el) return
+  const open = el.style.display !== 'none'
+  el.style.display = open ? 'none' : 'block'
+  const head = el.previousElementSibling
+  if (head) head.textContent = (open ? '▸' : '▾') + ' ' + name
+}
+
+function insertColRef(name) {
+  const ta = document.getElementById('sqlInput')
+  const start = ta.selectionStart, end = ta.selectionEnd
+  ta.value = ta.value.slice(0, start) + name + ta.value.slice(end)
+  ta.focus()
+  ta.selectionStart = ta.selectionEnd = start + name.length
+}
+
+async function runSqlQuery() {
+  const sql = document.getElementById('sqlInput').value.trim()
+  const status = document.getElementById('sqlStatus')
+  const empty = document.getElementById('sqlResultEmpty')
+  const wrap = document.getElementById('sqlResultTableWrap')
+  if (!sql) { status.textContent = '请输入 SQL'; return }
+  status.textContent = '查询中...'
+  try {
+    const r = await fetch('/api/knowledge/sql-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql }),
+    })
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '查询失败')
+    const { rows, total, truncated, maxRows } = j.data || {}
+    _sqlLastResult = sql
+    document.getElementById('sqlExportBtn').disabled = !rows || rows.length === 0
+    if (!rows || rows.length === 0) {
+      empty.style.display = 'block'
+      wrap.style.display = 'none'
+      status.textContent = '查询完成，无数据'
+      return
+    }
+    empty.style.display = 'none'
+    wrap.style.display = 'block'
+    const cols = Object.keys(rows[0])
+    const head = cols.map(c => `<th style="padding:6px 10px;border:1px solid var(--border);background:var(--bg-sidebar);position:sticky;top:0;text-align:left;white-space:nowrap;font-size:12px;">${esc(c)}</th>`).join('')
+    const body = rows.map(row => `<tr>${cols.map(c => `<td style="padding:5px 10px;border:1px solid var(--border);font-size:12px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(formatSqlValue(row[c]))}</td>`).join('')}</tr>`).join('')
+    wrap.innerHTML = `<div style="overflow:auto;max-height:60vh;"><table style="border-collapse:collapse;width:100%;"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+    status.textContent = truncated ? `查询完成，共 ${total} 行（已截断，仅显示前 ${rows.length} 行）` : `查询完成，共 ${total} 行`
+  } catch (e) {
+    status.textContent = '查询失败: ' + e.message
+  }
+}
+
+function formatSqlValue(v) {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'object') return JSON.stringify(v)
+  return String(v)
+}
+
+async function exportSqlQuery() {
+  if (!_sqlLastResult) return
+  const sql = document.getElementById('sqlInput').value.trim()
+  try {
+    const r = await fetch('/api/knowledge/sql-query/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      throw new Error(j.error?.message || '导出失败')
+    }
+    const blob = await r.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'sql-query-result-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(a.href)
+  } catch (e) {
+    alert('导出失败: ' + e.message)
+  }
+}
+
+// ===== 仪表盘 =====
+function fmtSize(n) {
+  if (!n) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ }
+  return n.toFixed(1) + ' ' + units[i]
+}
+function fmtUptime(ms) {
+  const s = Math.floor(ms / 1000)
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60)
+  if (d > 0) return d + ' 天 ' + h + ' 小时'
+  if (h > 0) return h + ' 小时 ' + m + ' 分'
+  return m + ' 分钟'
+}
+
+function dashCard(title, bodyHtml) {
+  return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">${title}</div>
+    ${bodyHtml}
+  </div>`
+}
+function dashRow(label, value) {
+  return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:#555;"><span style="color:#888;">${label}</span><span style="font-weight:600;color:#333;">${value}</span></div>`
+}
+
+async function loadDashboard() {
+  const box = document.getElementById('dashboardCards')
+  if (!box) return
+  box.innerHTML = '<div style="text-align:center;color:#aaa;padding:40px;font-size:13px;grid-column:1/-1;">加载中...</div>'
+  try {
+    const r = await fetch('/api/knowledge/dashboard')
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '加载失败')
+    const d = j.data
+    const caseDist = Object.entries(d.cases?.byResult || {}).map(([k, v]) => `${esc(k)}: ${v}`).join('，') || '无'
+    box.innerHTML = [
+      dashCard('案例库', `
+        ${dashRow('案例总数', d.cases?.total ?? 0)}
+        <div style="font-size:12px;color:#888;margin:6px 0 2px;">结论分布</div>
+        <div style="font-size:12px;color:#333;word-break:break-all;">${caseDist}</div>
+        ${dashRow('文件路径', `<span style="font-size:10px;word-break:break-all;">${esc(d.cases?.filePath || '')}</span>`)}
+        ${dashRow('文件大小', fmtSize(d.cases?.fileSize))}
+      `),
+      dashCard('训练数据', `
+        ${dashRow('总数', d.training?.total ?? 0)}
+        ${dashRow('文件路径', `<span style="font-size:10px;word-break:break-all;">${esc(d.training?.filePath || '')}</span>`)}
+        ${dashRow('文件大小', fmtSize(d.training?.fileSize))}
+      `),
+      dashCard('知识库', `
+        ${dashRow('文档数', d.knowledgeBase?.documents ?? 0)}
+        ${dashRow('分块数', d.knowledgeBase?.chunks ?? 0)}
+        ${dashRow('总字符', d.knowledgeBase?.totalChars ?? 0)}
+        ${dashRow('文件路径', `<span style="font-size:10px;word-break:break-all;">${esc(d.knowledgeBase?.filePath || '')}</span>`)}
+        ${dashRow('文件大小', fmtSize(d.knowledgeBase?.fileSize))}
+      `),
+      dashCard('图片存储', `
+        ${dashRow('图片数', d.images?.count ?? 0)}
+        ${dashRow('存储目录', `<span style="font-size:10px;word-break:break-all;">${esc(d.images?.dir || '')}</span>`)}
+      `),
+      dashCard('向量服务', `
+        ${dashRow('服务状态', d.vector?.clipAvailable ? '<span style="color:#10b981;">在线</span>' : '<span style="color:#ef4444;">离线</span>')}
+        ${dashRow('引擎', esc(d.vector?.engine || d.vector?.mode || '-'))}
+        ${dashRow('索引向量数', d.vector?.indexed_vectors ?? '-')}
+      `),
+      dashCard('服务状态', `
+        ${dashRow('knowledge-ai 运行时长', fmtUptime(d.uptime || 0))}
+      `),
+    ].join('')
+  } catch (e) {
+    box.innerHTML = `<div style="text-align:center;color:#ef4444;padding:40px;font-size:13px;grid-column:1/-1;">加载失败: ${esc(e.message)}</div>`
+  }
+}
 </script>
 
 <!-- 标注字段配置弹窗 -->
@@ -2992,8 +4502,7 @@ async function rebuildVectorIndex() {
 <!-- 图片原图预览弹窗 -->
 <div class="img-lightbox-overlay" id="imgLightbox" style="display:none" onclick="if(event.target===this)closeLightbox()">
   <button class="img-lightbox-close" onclick="closeLightbox()">✕</button>
-  <button class="img-lightbox-rotate" onclick="rotateLightboxImg()">↻ 旋转</button>
-  <img id="lightboxImg" src="" alt="预览原图" />
+  <div id="lightboxPreviewContainer" style="width:92vw;height:92vh;position:relative;"></div>
 </div>
 
 </body>

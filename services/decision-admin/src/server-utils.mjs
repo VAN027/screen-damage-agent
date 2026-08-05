@@ -26,7 +26,12 @@ export function createServer(routes, port, name) {
         const forwardPath = pathname + (url.search || '')
 
         // 图片、SSE 流等非 JSON 资源：直接透传，不做 JSON 解析
-        if (pathname === '/api/knowledge/images' || pathname === '/api/knowledge/analyze-llm-stream') {
+        const isStream = pathname === '/api/knowledge/images'
+          || pathname === '/api/knowledge/analyze-llm-stream'
+          || pathname === '/api/knowledge/eval/batch-analyze'
+          || pathname === '/api/knowledge/eval/export-xlsx'
+          || pathname === '/api/knowledge/sql-query/export'
+        if (isStream) {
           return pipeProxy(req.method, `${KNOWLEDGE_AI_URL}${forwardPath}`, body, res)
         }
 
@@ -84,6 +89,9 @@ function pipeProxy(method, url, body, clientRes) {
     }
     if (upstreamRes.headers['content-length']) {
       headers['Content-Length'] = upstreamRes.headers['content-length']
+    }
+    if (upstreamRes.headers['content-disposition']) {
+      headers['Content-Disposition'] = upstreamRes.headers['content-disposition']
     }
     clientRes.writeHead(upstreamRes.statusCode, headers)
     upstreamRes.pipe(clientRes)

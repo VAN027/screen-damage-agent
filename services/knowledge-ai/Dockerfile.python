@@ -1,0 +1,24 @@
+# Python 图像特征提取微服务 (DINOv2 + Milvus)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖并安装
+COPY services/knowledge-ai/python/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# 复制代码
+COPY services/knowledge-ai/python/main.py /app/main.py
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; import json; r = urllib.request.urlopen('http://localhost:8084/api/health'); assert json.loads(r.read()).get('status') == 'ok'"
+
+EXPOSE 8084
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8084"]

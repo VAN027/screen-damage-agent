@@ -19,6 +19,10 @@ services/knowledge-ai/data/vector-index.json
 services/knowledge-ai/data/kb.json
 services/knowledge-ai/data/kb-inverted-index.json
 services/knowledge-ai/data/kb-docs/*.txt
+services/knowledge-ai/data/*.db
+services/knowledge-ai/data/*.db-shm
+services/knowledge-ai/data/*.db-wal
+services/knowledge-ai/data/backup/
 
 # IDE & 系统
 .vscode/

@@ -74,9 +74,13 @@ function buildAnswers(req) {
 
 function outcomeToEnum(outcome) {
   if (outcome === '产品质量问题') return 'product_quality_issue'
-  if (outcome === '物流问题') return 'logistics_issue'
-  if (outcome === '需进一步综合判定') return 'needs_further_review'
   return 'not_product_quality'
+}
+
+const RESULT_LABELS = {
+  product_quality_issue: '产品质量问题',
+  not_product_quality: '非产品质量问题',
+  no_damage: '屏幕完好',
 }
 
 const routes = [
@@ -102,11 +106,10 @@ const routes = [
       const evalResult = decisionTree.evaluate(answers)
 
       let result = outcomeToEnum(evalResult.outcome)
-      let resultLabel = evalResult.outcome
       if (unknownCount >= 2 && unknownCount < 4) {
-        result = 'needs_further_review'
-        resultLabel = '需进一步综合判定'
+        result = 'not_product_quality'
       }
+      const resultLabel = RESULT_LABELS[result] || '非产品质量问题'
 
       json(res, 200, {
         success: true,
@@ -145,7 +148,14 @@ const routes = [
   },
 ]
 
-createServer(routes, PORT, 'decision-engine')
+const server = createServer(routes, PORT, 'decision-engine')
 console.log(`[decision-engine] 判定接口 → POST http://localhost:${PORT}/api/decision/evaluate`)
 
-reloadRulesFromAdmin()
+// 等待规则加载完成后再接受请求，确保首次请求时规则已就绪
+server.on('listening', () => {
+  reloadRulesFromAdmin().then(loaded => {
+    if (!loaded) {
+      console.log('[decision-engine] 使用内置默认规则')
+    }
+  })
+})

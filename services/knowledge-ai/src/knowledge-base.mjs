@@ -309,9 +309,12 @@ async function describeImageWithLLM(imageBytes, mimeType) {
 
 // 自动拼接 /chat/completions — 兼容用户只填 base URL 的情况
 function normalizeEndpoint(endpoint) {
-  const trimmed = (endpoint || '').replace(/\/+$/, '')
+  let trimmed = (endpoint || '').replace(/\/+$/, '')
+  // 兼容误填的 OpenAI Responses API 路径（豆包等仅支持 chat/completions）
+  trimmed = trimmed.replace(/\/responses(\/v1)?$/, '')
   if (trimmed.endsWith('/chat/completions')) return trimmed
-  if (trimmed.endsWith('/v1')) return trimmed + '/chat/completions'
+  // 已带 API 版本段（/v1、/v3 等）时直接拼 /chat/completions
+  if (/\/v\d+$/.test(trimmed)) return trimmed + '/chat/completions'
   return trimmed + '/v1/chat/completions'
 }
 

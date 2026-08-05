@@ -81,7 +81,7 @@ export async function indexCase(caseId, imageBase64, meta = {}) {
       symptoms: (meta.symptoms || []).join(','),
       result_label: meta.resultLabel || '',
       crack_location: meta.crackLocation || '',
-      crack_shape: meta.crackShape || '',
+      crack_shape: Array.isArray(meta.crackShape) ? meta.crackShape.join(',') : (meta.crackShape || ''),
     }),
   })
 }

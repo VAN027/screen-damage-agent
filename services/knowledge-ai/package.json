@@ -5,6 +5,9 @@
   "description": "屏损智能体 — 知识库与向量检索服务",
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",
-    "hnswlib-node": "^3.0.0"
+    "better-sqlite3": "^11.7.0",
+    "exceljs": "^4.4.0",
+    "hnswlib-node": "^3.0.0",
+    "sharp": "^0.35.3"
   }
 }

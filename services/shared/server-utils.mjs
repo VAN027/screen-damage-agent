@@ -51,9 +51,24 @@ export function json(res, status, data) {
 }
 
 export function parseBody(req) {
+  const MAX_BODY_BYTES = 50 * 1024 * 1024 // 50MB 上限（含 base64 图片）
+  let contentLength = parseInt(req.headers['content-length'], 10)
+  if (contentLength > MAX_BODY_BYTES) {
+    return Promise.reject(new Error(`请求体过大: ${contentLength} bytes 超过上限 ${MAX_BODY_BYTES} bytes`))
+  }
+
   return new Promise((resolve, reject) => {
     let raw = ''
-    req.on('data', chunk => { raw += chunk })
+    let totalBytes = 0
+    req.on('data', chunk => {
+      totalBytes += chunk.length
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy(new Error('请求体超出大小限制'))
+        reject(new Error('请求体超出大小限制'))
+        return
+      }
+      raw += chunk
+    })
     req.on('end', () => {
       try {
         resolve(raw ? JSON.parse(raw) : {})
@@ -67,9 +82,11 @@ export function parseBody(req) {
 
 export function fetchJson(url, options = {}) {
   const timeout = options.timeout ?? 5000
+  let req = null
+  let timer = null
   return new Promise((resolve, reject) => {
     const { hostname, port, pathname, search } = new URL(url)
-    const req = http.request({
+    req = http.request({
       hostname,
       port: port || 80,
       path: pathname + (search || ''),
@@ -85,9 +102,19 @@ export function fetchJson(url, options = {}) {
         catch (e) { reject(new Error(`JSON解析失败: ${e.message}, 原始数据: ${data.substring(0, 200)}`)) }
       })
     })
-    req.on('error', (err) => reject(new Error(`HTTP ${options.method || 'GET'} ${url} 失败: ${err.message}`)))
-    req.on('timeout', () => { req.destroy(); reject(new Error(`请求超时: ${url}`)) })
+    req.on('error', (err) => {
+      clearTimeout(timer)
+      reject(new Error(`HTTP ${options.method || 'GET'} ${url} 失败: ${err.message}`))
+    })
+    req.on('timeout', () => {
+      req.destroy()
+      clearTimeout(timer)
+      reject(new Error(`请求超时: ${url}`))
+    })
     if (options.body) req.write(JSON.stringify(options.body))
     req.end()
+  }).finally(() => {
+    if (timer) clearTimeout(timer)
+    if (req) req.destroy()
   })
 }

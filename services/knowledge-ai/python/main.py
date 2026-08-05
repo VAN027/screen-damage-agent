@@ -1,11 +1,11 @@
 """
-屏损智能体 - 图像特征提取与向量检索微服务 v4.0 (Milvus 版)
+屏损智能体 - 图像特征提取与向量检索微服务 v5.0 (DINOv2 版)
 =========================================================
-使用 PIL + NumPy 提取 512 维图像特征，Milvus 向量数据库存储与检索。
+使用 DINOv2 ViT-S/14 提取 384 维图像语义特征，Milvus 向量数据库存储与检索。
 自动检测 Milvus 可用性，不可用时回退内存索引。
 
 启动方式:
-  pip install fastapi uvicorn Pillow numpy httpx
+  pip install fastapi uvicorn Pillow numpy httpx torch transformers
   python main.py
 
 前置条件 (可选但推荐):
@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 import io
 import time
 import os
@@ -37,6 +37,8 @@ import logging
 from pathlib import Path
 
 import httpx
+import torch
+from transformers import AutoImageProcessor, AutoModel
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
-FEATURE_DIM = 512
+FEATURE_DIM = 384  # DINOv2 ViT-S/14 CLS token
 COLLECTION_NAME = "screen_damage_cases"
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
@@ -153,8 +155,22 @@ async def check_milvus():
         return False
 
 # ---------------------------------------------------------------------------
-# 图像特征提取
+# 图像特征提取 (DINOv2 ViT-S/14)
 # ---------------------------------------------------------------------------
+
+_dinov2_processor = None
+_dinov2_model = None
+
+def _get_dinov2():
+    global _dinov2_processor, _dinov2_model
+    if _dinov2_model is None:
+        logger.info("[DINOv2] 加载 facebook/dinov2-small 模型...")
+        # 模型已离线缓存，使用 local_files_only 避免访问被墙的 HuggingFace
+        _dinov2_processor = AutoImageProcessor.from_pretrained('facebook/dinov2-small', local_files_only=True)
+        _dinov2_model = AutoModel.from_pretrained('facebook/dinov2-small', local_files_only=True)
+        _dinov2_model.eval()
+        logger.info("[DINOv2] 模型加载完成")
+    return _dinov2_processor, _dinov2_model
 
 def _decode_image(image_base64: str) -> Image.Image:
     if image_base64.startswith("data:"):
@@ -163,106 +179,16 @@ def _decode_image(image_base64: str) -> Image.Image:
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 def extract_features(img: Image.Image) -> np.ndarray:
-    """
-    提取 512 维增强图像特征（v5.0）:
-      [0:128]   色阶直方图 — RGB各32bin + 灰度32bin 降维到128
-      [128:256] 分块均值   — 8×8 块 RGB 降采样到 128
-      [256:384] Sobel边缘  — Sobel 梯度幅值降采样到 128
-      [384:512] LBP纹理   — 局部二值模式纹理特征 (128)
-    归一化到单位向量，适合余弦相似度检索。
-    """
-    img_small = img.resize((128, 128), Image.LANCZOS)
-    arr = np.array(img_small, dtype=np.float32) / 255.0  # [128, 128, 3]
-    gray = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
-
-    features = []
-
-    # 1. 色阶直方图 (128 dim) — 降低权重，减少光照敏感度
-    hist_r, _ = np.histogram(arr[:, :, 0], bins=32, range=(0, 1))
-    hist_g, _ = np.histogram(arr[:, :, 1], bins=32, range=(0, 1))
-    hist_b, _ = np.histogram(arr[:, :, 2], bins=32, range=(0, 1))
-    hist_gray, _ = np.histogram(gray, bins=32, range=(0, 1))
-    hist_features = np.concatenate([hist_r, hist_g, hist_b, hist_gray]).astype(np.float32)
-    hist_features = hist_features / (np.sum(hist_features) + 1e-8)
-    if len(hist_features) > 128:
-        step = len(hist_features) / 128
-        hist_features = np.array([hist_features[int(i*step)] for i in range(128)], dtype=np.float32)
-    features.append(hist_features)
-
-    # 2. 分块均值 (128 dim) — 空间布局
-    block_size = 16
-    blocks = []
-    for i in range(0, 128, block_size):
-        for j in range(0, 128, block_size):
-            block = arr[i:i+block_size, j:j+block_size, :]
-            blocks.append(np.mean(block, axis=(0, 1)))
-    block_features = np.array(blocks, dtype=np.float32).flatten()
-    if len(block_features) > 128:
-        step = len(block_features) / 128
-        block_features = np.array([block_features[int(i*step)] for i in range(128)], dtype=np.float32)
-    features.append(block_features)
-
-    # 3. Sobel 边缘特征 (128 dim) — 裂缝/冲击点形态
-    gray_img = Image.fromarray((gray * 255).astype(np.uint8))
-    edge_x = np.array(gray_img.filter(ImageFilter.Kernel((3, 3),
-        [-1, 0, 1, -2, 0, 2, -1, 0, 1], scale=1)), dtype=np.float32)
-    edge_y = np.array(gray_img.filter(ImageFilter.Kernel((3, 3),
-        [-1, -2, -1, 0, 0, 0, 1, 2, 1], scale=1)), dtype=np.float32)
-    edge_mag = np.sqrt(edge_x ** 2 + edge_y ** 2)
-    edge_flat = edge_mag.flatten()
-    step = len(edge_flat) / 128
-    edge_features = np.array([edge_flat[int(i*step)] for i in range(128)], dtype=np.float32)
-    edge_features = edge_features / (np.max(edge_features) + 1e-8)
-    features.append(edge_features)
-
-    # 4. LBP 纹理特征 (128 dim) — 新增，区分漏液/裂纹/碎裂纹理
-    gray_uint8 = (gray * 255).astype(np.uint8)
-    lbp = np.zeros_like(gray_uint8, dtype=np.uint8)
-    # 3x3 LBP: 比较周围8个像素
-    for r in range(1, 127):
-        for c in range(1, 127):
-            center = gray_uint8[r, c]
-            code = 0
-            code |= (1 if gray_uint8[r-1, c-1] > center else 0) << 0
-            code |= (1 if gray_uint8[r-1, c]   > center else 0) << 1
-            code |= (1 if gray_uint8[r-1, c+1] > center else 0) << 2
-            code |= (1 if gray_uint8[r, c+1]   > center else 0) << 3
-            code |= (1 if gray_uint8[r+1, c+1] > center else 0) << 4
-            code |= (1 if gray_uint8[r+1, c]   > center else 0) << 5
-            code |= (1 if gray_uint8[r+1, c-1] > center else 0) << 6
-            code |= (1 if gray_uint8[r, c-1]   > center else 0) << 7
-            lbp[r, c] = code
-    # LBP 直方图 → 128 dim
-    lbp_hist, _ = np.histogram(lbp[1:-1, 1:-1].ravel(), bins=32, range=(0, 255))
-    # 分块 LBP 统计: 4x4 块，每块的 LBP 均值 + 方差 = 32 dim
-    lbp_block_feats = []
-    for bi in range(0, 126, 32):
-        for bj in range(0, 126, 32):
-            block_lbp = lbp[bi:bi+32, bj:bj+32]
-            lbp_block_feats.append(np.mean(block_lbp))
-            lbp_block_feats.append(np.var(block_lbp))
-    lbp_block_arr = np.array(lbp_block_feats, dtype=np.float32)  # 4x4x2 = 32 dim
-    lbp_block_arr = lbp_block_arr / (np.max(lbp_block_arr) + 1e-8)
-    # 合并: lbp_hist(32) + 填充到 96，再 + lbp_block(32) = 128
-    lbp_hist = lbp_hist.astype(np.float32) / (np.sum(lbp_hist) + 1e-8)
-    # 用 LBP 直方图的平滑填充到 96
-    if len(lbp_hist) < 96:
-        lbp_hist_padded = np.repeat(lbp_hist, 3)[:96]
-    else:
-        lbp_hist_padded = lbp_hist[:96]
-    lbp_features = np.concatenate([lbp_hist_padded.astype(np.float32), lbp_block_arr]).astype(np.float32)
-    if len(lbp_features) > 128:
-        lbp_features = lbp_features[:128]
-    features.append(lbp_features)
-
-    vec = np.concatenate(features).astype(np.float32)
-    if len(vec) > FEATURE_DIM:
-        vec = vec[:FEATURE_DIM]
+    processor, model = _get_dinov2()
+    inputs = processor(images=img, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**inputs)
+    vec = outputs.last_hidden_state[:, 0, :].cpu().numpy()[0]  # CLS token (384d)
     # L2 归一化
     norm = np.linalg.norm(vec)
     if norm > 0:
         vec = vec / norm
-    return vec
+    return vec.astype(np.float32)
 
 def cosine_similarity(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
     return float(np.dot(vec_a, vec_b))
@@ -416,7 +342,7 @@ class RebuildRequest(BaseModel):
 async def health():
     return {
         "status": "ok",
-        "model": "PIL+Numpy Image Features (512-dim)",
+        "model": "DINOv2-ViT-S/14 (384-dim)",
         "milvus_connected": milvus_available,
         "indexed_vectors": await _get_total_count(),
         "engine": "Milvus" if milvus_available else "numpy-cosine (fallback)",
@@ -436,7 +362,7 @@ async def extract(request: ExtractRequest):
     try:
         img = _decode_image(request.image_base64)
         vec = extract_features(img)
-        return {"vector": vec.tolist(), "model": "pil-image-features", "dim": FEATURE_DIM}
+        return {"vector": vec.tolist(), "model": "dinov2-small", "dim": FEATURE_DIM}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"特征提取失败: {e}")
 

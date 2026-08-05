@@ -83,11 +83,19 @@ function pipeProxyToKnowledge(method, path, body, clientReq, clientRes) {
       'Cache-Control': upstreamRes.headers['cache-control'] || 'public, max-age=86400',
     }
     if (upstreamRes.headers['content-length']) headers['Content-Length'] = upstreamRes.headers['content-length']
+    if (upstreamRes.headers['content-disposition']) headers['Content-Disposition'] = upstreamRes.headers['content-disposition']
     clientRes.writeHead(upstreamRes.statusCode, headers)
     upstreamRes.pipe(clientRes)
   })
   proxyReq.on('error', () => {
     if (!clientRes.headersSent) { clientRes.writeHead(502); clientRes.end() }
+  })
+  // 监听客户端断开，及时清理上游请求
+  clientReq.on('close', () => {
+    proxyReq.destroy()
+  })
+  clientReq.on('error', () => {
+    proxyReq.destroy()
   })
   if (body) proxyReq.write(JSON.stringify(body))
   proxyReq.end()
@@ -215,11 +223,25 @@ const routes = [
     path: '/api/knowledge/annotate-batch',
     handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/annotate-batch', body, res),
   },
+  {
+    method: 'GET',
+    path: '/api/knowledge/cases/result-stats',
+    handler: (_req, res, { query }) => {
+      const qs = Object.entries(query || {}).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+      return proxyToKnowledge('GET', '/api/knowledge/cases/result-stats' + (qs ? '?' + qs : ''), null, res)
+    },
+  },
   // SSE 流式分析 —— 特殊处理，不能走 fetchJson（会缓冲）
   {
     method: 'POST',
     path: '/api/knowledge/analyze-llm-stream',
     handler: (req, res, { body }) => proxyStreamToKnowledge('/api/knowledge/analyze-llm-stream', body, req, res),
+  },
+  // 集中式字段定义
+  {
+    method: 'GET',
+    path: '/api/knowledge/field-defs',
+    handler: (_req, res) => proxyToKnowledge('GET', '/api/knowledge/field-defs', null, res),
   },
   // 案例图片代理（二进制透传，供前端展示相似案例缩略图）
   {
@@ -250,6 +272,17 @@ const routes = [
     method: 'OPTIONS',
     path: '/api/knowledge/analyze-llm-stream',
     handler: (_req, res) => { res.writeHead(204, corsHeaders()); res.end() },
+  },
+  // ===== SQL 自助查询 =====
+  {
+    method: 'POST',
+    path: '/api/knowledge/sql-query',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/sql-query', body, res),
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/sql-query/export',
+    handler: (req, res, { body }) => pipeProxyToKnowledge('POST', '/api/knowledge/sql-query/export', body, req, res),
   },
   // ===== 前端页面 =====
   {

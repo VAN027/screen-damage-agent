@@ -6,30 +6,38 @@
 <title>屏损故障鉴定 - 智能助手</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
-.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: #fff; position: relative; }
-.header { padding: 20px 20px 12px; border-bottom: 1px solid #f0f0f0; }
-.header h1 { font-size: 18px; font-weight: 700; }
-.header .sub { font-size: 12px; color: #999; margin-top: 4px; }
-.steps { display: flex; padding: 12px 16px; gap: 6px; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap; }
-.step-dot { flex: 1; height: 4px; border-radius: 2px; background: #e8e8e8; transition: background 0.3s; }
-.step-dot.done { background: #4f46e5; }
-.step-dot.active { background: #4f46e5; }
-.page { flex: 1; padding: 20px; display: none; flex-direction: column; overflow-y: auto; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: linear-gradient(135deg, #e8ecf4 0%, #dce2f0 100%); color: #1a1a2e; min-height: 100vh; }
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: #fff; position: relative; box-shadow: 0 0 40px rgba(0,0,0,0.06); }
+.header { padding: 22px 20px 14px; border-bottom: 1px solid #f0f0f0; background: linear-gradient(135deg, #fafbff 0%, #fff 100%); }
+.header h1 { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #cc0010 0%, #e60012 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.3px; }
+.header .sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.header .sub-version { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #fef2f2; color: #e60012; font-size: 10px; font-weight: 600; -webkit-text-fill-color: #e60012; }
+.steps { display: flex; padding: 14px 20px; gap: 8px; border-bottom: 1px solid #f0f0f0; align-items: center; }
+.step-dot { flex: 1; height: 4px; border-radius: 2px; background: #e2e8f0; transition: all 0.4s ease; position: relative; }
+.step-dot.done { background: linear-gradient(90deg, #cc0010, #e60012); }
+.step-dot.active { background: linear-gradient(90deg, #cc0010, #e60012); box-shadow: 0 0 6px rgba(230,0,18,0.3); }
+.step-dot::after { content: attr(data-label); position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #94a3b8; white-space: nowrap; font-weight: 500; letter-spacing: 0.3px; }
+.step-dot.active::after { color: #cc0010; font-weight: 600; }
+.step-dot.done::after { color: #cc0010; }
+.page { flex: 1; padding: 24px 20px; display: none; flex-direction: column; overflow-y: auto; }
 .page.active { display: flex; }
-.page-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-.page-desc { font-size: 13px; color: #888; margin-bottom: 20px; }
+.page-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; color: #1e293b; }
+.page-title-row { display: flex; align-items: center; gap: 8px; }
+.page-back-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d1d5db; background: #fff; font-size: 14px; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+.page-back-btn:hover { background: #f1f5f9; color: #cc0010; border-color: #e60012; }
+.page-desc { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6; }
 .symptoms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.symptom-card { border: 2px solid #e8e8e8; border-radius: 12px; padding: 20px 14px; cursor: pointer; transition: all 0.2s; text-align: center; position: relative; }
+.symptom-card { border: 2px solid #e2e8f0; border-radius: 14px; padding: 20px 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); text-align: center; position: relative; }
 .symptom-card:active { transform: scale(0.97); }
-.symptom-card.selected { border-color: #4f46e5; background: #eef2ff; }
-.symptom-card .icon { font-size: 36px; margin-bottom: 8px; }
+.symptom-card:hover { border-color: #fecaca; }
+.symptom-card.selected { border-color: #e60012; background: #fef2f2; box-shadow: 0 4px 12px rgba(230,0,18,0.1); }
+.symptom-card .icon { font-size: 36px; margin-bottom: 8px; display: block; }
 .symptom-card .label { font-size: 14px; font-weight: 600; }
-.symptom-card .desc { font-size: 11px; color: #999; margin-top: 4px; }
-.symptom-card .check { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 10px; background: #4f46e5; color: #fff; font-size: 12px; display: none; align-items: center; justify-content: center; }
+.symptom-card .desc { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.symptom-card .check { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 10px; background: #e60012; color: #fff; font-size: 12px; display: none; align-items: center; justify-content: center; }
 .symptom-card.selected .check { display: flex; }
 .camera-area { flex: 1; display: flex; flex-direction: column; align-items: center; }
-.camera-view { width: 100%; min-height: 320px; max-height: 420px; background: #f8f9fa; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 16px; border: 1px solid #e8e8e8; transition: background 0.3s; }
+.camera-view { width: 100%; min-height: 320px; max-height: 420px; background: #f8f9fa; border-radius: 14px; overflow: hidden; position: relative; margin-bottom: 16px; border: 1px solid #e2e8f0; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
 .camera-view.dark { background: #000; border-color: transparent; }
 .camera-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .camera-view .guide-overlay { position: absolute; inset: 0; pointer-events: none; display: none; }
@@ -38,7 +46,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .guide-box { width: 60%; height: 50%; border: 2px dashed rgba(255,255,255,0.8); border-radius: 8px; position: relative; z-index: 1; box-shadow: 0 0 0 9999px rgba(0,0,0,0.35); }
 .guide-box::after { content: '对准凹坑/裂痕处'; position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #fff; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 4px; white-space: nowrap; }
 .guide-toggle { position: absolute; bottom: 8px; right: 8px; z-index: 2; width: 32px; height: 32px; border-radius: 16px; border: 1.5px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.4); color: rgba(255,255,255,0.8); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
-.guide-toggle.active { border-color: #4f46e5; color: #4f46e5; background: rgba(79,70,229,0.2); }
+.guide-toggle.active { border-color: #e60012; color: #e60012; background: rgba(230,0,18,0.2); }
 .camera-consent { position: absolute; inset: 0; z-index: 3; background: rgba(255,255,255,0.97); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 28px; border-radius: 12px; }
 .camera-consent .consent-icon { font-size: 48px; margin-bottom: 12px; }
 .camera-consent .consent-title { font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
@@ -51,91 +59,114 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .photo-preview { width: 100%; max-height: 250px; border-radius: 12px; overflow: hidden; position: relative; background: #f5f5f5; cursor: pointer; }
 .photo-preview canvas { width: 100%; display: block; }
 .photo-preview .re-take { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
-.btn-row { display: flex; gap: 10px; margin-top: 16px; }
-.btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-row { display: flex; justify-content: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.btn { flex: 0 1 auto; min-width: 140px; padding: 12px 20px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
 .btn:active { transform: scale(0.97); }
-.btn-primary { background: #4f46e5; color: #fff; }
-.btn-outline { background: #fff; color: #4f46e5; border: 2px solid #4f46e5; }
-.btn-success { background: #059669; color: #fff; }
-.btn-sm { padding: 8px 16px; font-size: 12px; flex: none; }
-.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f0f0f0; }
-.toggle-row .label { font-size: 15px; font-weight: 500; }
-.toggle-row .hint { font-size: 12px; color: #999; margin-top: 2px; }
-.toggle { width: 52px; height: 30px; border-radius: 15px; background: #d1d5db; cursor: pointer; position: relative; transition: background 0.3s; flex-shrink: 0; }
-.toggle.on { background: #4f46e5; }
-.toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 12px; background: #fff; transition: transform 0.3s; }
+.btn-primary { background: linear-gradient(135deg, #cc0010 0%, #e60012 100%); color: #fff; box-shadow: 0 4px 12px rgba(230,0,18,0.25); }
+.btn-primary:hover { box-shadow: 0 6px 20px rgba(230,0,18,0.35); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(0.97) translateY(0); }
+.btn-outline { background: #fff; color: #e60012; border: 2px solid #e60012; }
+.btn-outline:hover { background: #fff5f5; }
+.btn-success { background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #fff; box-shadow: 0 4px 12px rgba(5,150,105,0.25); }
+.btn-sm { padding: 8px 20px; font-size: 12px; flex: none; border-radius: 8px; }
+.btn-row-footer { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; font-size: 11px; color: #94a3b8; }
+.btn-retake-link { border: none; background: none; color: #94a3b8; font-size: 11px; cursor: pointer; padding: 2px 6px; text-decoration: underline; text-underline-offset: 2px; transition: color 0.2s; }
+.btn-retake-link:hover { color: #64748b; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+.toggle-row .label { font-size: 15px; font-weight: 600; color: #1e293b; }
+.toggle-row .hint { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.toggle { width: 52px; height: 30px; border-radius: 15px; background: #cbd5e1; cursor: pointer; position: relative; transition: background 0.3s cubic-bezier(0.4,0,0.2,1); flex-shrink: 0; }
+.toggle.on { background: linear-gradient(135deg, #cc0010, #e60012); }
+.toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 12px; background: #fff; transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
 .toggle.on::after { transform: translateX(22px); }
 .form-group { margin-bottom: 18px; }
-.form-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-.form-group select, .form-group input { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: #fff; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+.form-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #1e293b; }
+.form-group select, .form-group input { width: 100%; padding: 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; background: #fff; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' fill='none' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; transition: border-color 0.2s; }
+.form-group select:focus, .form-group input:focus { border-color: #e60012; outline: none; box-shadow: 0 0 0 3px rgba(230,0,18,0.1); }
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
-.checkbox-pill { padding: 8px 16px; border: 2px solid #e8e8e8; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-.checkbox-pill.selected { border-color: #4f46e5; background: #eef2ff; color: #4f46e5; }
+.checkbox-pill { padding: 8px 16px; border: 2px solid #e2e8f0; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+.checkbox-pill:hover { border-color: #fecaca; }
+.checkbox-pill.selected { border-color: #e60012; background: #fef2f2; color: #e60012; font-weight: 600; }
 .pill-unknown { border-style: dashed; color: #d97706; border-color: #fcd34d; }
 .pill-unknown.selected { border-color: #d97706; background: #fffbeb; color: #d97706; }
-.result-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 24px; color: #fff; text-align: center; margin-bottom: 16px; animation: fadeInUp 0.5s ease; }
+.result-card { background: linear-gradient(135deg, #cc0010 0%, #e60012 100%); border-radius: 16px; padding: 24px; color: #fff; text-align: center; margin-bottom: 16px; animation: fadeInUp 0.5s ease; box-shadow: 0 8px 24px rgba(230,0,18,0.25); }
 .result-card.quality { background: linear-gradient(135deg, #059669 0%, #10b981 100%); }
 .result-card.logistics { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
-.result-card.review { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
-.result-card .result-icon { font-size: 48px; margin-bottom: 8px; }
+.result-card.review { background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%); }
 .result-card .result-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 .result-card .result-subtitle { font-size: 13px; opacity: 0.85; }
 .path-list { background: #f8f9ff; border-radius: 12px; padding: 16px; }
-.path-list h4 { font-size: 14px; margin-bottom: 12px; color: #555; }
-.path-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.path-list h4 { font-size: 14px; margin-bottom: 12px; color: #64748b; }
+.path-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
 .path-item:last-child { border: none; }
-.path-item .step-num { width: 24px; height: 24px; border-radius: 12px; background: #4f46e5; color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0; }
-.path-item .step-answer { color: #4f46e5; font-weight: 600; margin-left: auto; }
-.info-card { background: #f8f9ff; border-radius: 12px; padding: 12px 16px; font-size: 13px; color: #666; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.path-item .step-num { width: 24px; height: 24px; border-radius: 12px; background: linear-gradient(135deg, #cc0010, #e60012); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0; }
+.path-item .step-answer { color: #e60012; font-weight: 600; margin-left: auto; }
+.info-card { background: #f8f9ff; border-radius: 12px; padding: 12px 16px; font-size: 13px; color: #64748b; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .info-card .emoji { font-size: 20px; }
 .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; }
-.spinner { width: 40px; height: 40px; border: 3px solid #e8e8e8; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #e60012; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg) } }
 @keyframes fadeInUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
 .similar-section { margin-top: 20px; }
-.similar-section h4 { font-size: 14px; margin-bottom: 12px; color: #555; }
-.similar-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px; padding: 14px; margin-bottom: 10px; transition: all 0.2s; animation: fadeInUp 0.4s ease; }
-.similar-card:hover { border-color: #4f46e5; box-shadow: 0 2px 8px rgba(79,70,229,0.1); }
+.similar-section h4 { font-size: 14px; margin-bottom: 12px; color: #64748b; }
+.similar-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 10px; transition: all 0.2s; animation: fadeInUp 0.4s ease; }
+.similar-card:hover { border-color: #fca5a5; box-shadow: 0 4px 12px rgba(230,0,18,0.08); }
 .similar-card .sim-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .similar-card .sim-title { font-size: 14px; font-weight: 600; flex: 1; }
 .similar-card .sim-score { padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
 .similar-card .sim-score.high { background: #d1fae5; color: #065f46; }
 .similar-card .sim-score.medium { background: #fef3c7; color: #92400e; }
-.similar-card .sim-detail { display: block; font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
-.similar-card .sim-model { font-size: 12px; color: #888; margin-bottom: 4px; }
+.similar-card .sim-detail { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+.similar-card .sim-model { font-size: 12px; color: #64748b; margin-bottom: 4px; }
 .similar-card .sim-result { font-size: 12px; margin-bottom: 6px; }
-.similar-card .sim-summary { font-size: 12px; color: #666; line-height: 1.5; }
+.similar-card .sim-summary { font-size: 12px; color: #64748b; line-height: 1.5; }
 .similar-card .sim-cause { font-size: 12px; color: #92400e; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b; }
-.similar-card .sim-warranty { font-size: 12px; color: #1e40af; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6; }
-.analysis-panel { background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 16px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
+.similar-card .sim-warranty { font-size: 12px; color: #991b1b; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #e60012; }
+.analysis-panel { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px; padding: 18px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
 .analysis-panel .analysis-title { font-size: 14px; font-weight: 700; color: #065f46; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-.ai-panel { background: #f5f3ff; border: 1px solid #c4b5fd; border-radius: 12px; padding: 16px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
-.ai-panel .analysis-title { font-size: 14px; font-weight: 700; color: #5b21b6; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.ai-panel { background: #fff5f5; border: 1px solid #fecaca; border-radius: 14px; padding: 18px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
+.ai-panel .analysis-title { font-size: 14px; font-weight: 700; color: #991b1b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
 .analysis-row { display: flex; gap: 12px; margin-bottom: 10px; }
 .analysis-detail { font-size: 13px; line-height: 1.9; color: #333; padding: 0 4px; }
 .analysis-detail strong { color: #1a1a2e; }
 .analysis-detail .report-section { margin-top: 12px; }
-.analysis-detail .report-section h4 { font-size: 13px; color: #4f46e5; margin-bottom: 4px; }
+.analysis-detail .report-section h4 { font-size: 13px; color: #cc0010; margin-bottom: 4px; }
 .analysis-source { font-size: 11px; color: #888; margin-top: 6px; }
-.correction-panel { margin-top: 12px; padding: 12px; background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; display: none; animation: fadeInUp 0.3s ease; }
-.correction-panel .corr-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.correction-row { display: flex; gap: 8px; align-items: flex-end; }
-.correction-row select { flex: 1; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background: #fff; }
-.correction-row .btn-confirm { padding: 8px 14px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.correction-row .btn-confirm:disabled { background: #9ca3af; cursor: not-allowed; }
-.correct-btn { padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; background: #fff; cursor: pointer; color: #888; margin-top: 8px; }
-.correct-btn:hover { border-color: #d97706; color: #d97706; }
+.correction-panel { margin-top: 12px; padding: 14px; background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; display: none; animation: fadeInUp 0.3s ease; }
+.correction-panel .corr-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.correction-field { margin-bottom: 10px; }
+.correction-field .field-label { font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.correction-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.correction-pill { padding: 6px 12px; border: 1.5px solid #e8e8e8; border-radius: 16px; font-size: 12px; cursor: pointer; transition: all 0.15s; background: #fafafa; }
+.correction-pill:hover { border-color: #d97706; color: #d97706; }
+.correction-pill.selected { border-color: #d97706; background: #fffbeb; color: #d97706; font-weight: 600; }
+.corr-pill-custom { border-style: dashed; color: #888; }
+.corr-pill-custom.selected { border-color: #4f46e5; background: #eef2ff; color: #4f46e5; }
+.corr-custom-input:focus { outline: none; border-color: #4f46e5; }
+.correction-actions { display: flex; gap: 8px; margin-top: 12px; }
+.correction-actions .btn-confirm { flex: 1; padding: 10px 14px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.correction-actions .btn-confirm:disabled { background: #9ca3af; cursor: not-allowed; }
+.correction-actions .btn-cancel { padding: 10px 14px; background: #fff; color: #888; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.correction-feedback { display: none; margin-top: 10px; padding: 8px 12px; border-radius: 6px; font-size: 12px; }
+.correction-feedback.success { background: #d1fae5; color: #065f46; display: block; }
+.correction-feedback.error { background: #fef2f2; color: #dc2626; display: block; }
+.corr-textarea { width: 100%; padding: 8px 10px; border: 1.5px solid #e8e8e8; border-radius: 6px; font-size: 12px; font-family: inherit; resize: vertical; box-sizing: border-box; }
+.corr-textarea:focus { border-color: #d97706; outline: none; }
+.field-required { color: #dc2626; font-weight: bold; }
+.corrected-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; background: #d97706; color: #fff; vertical-align: middle; }
+.correct-btn { display:block; width:100%; padding:12px 20px; border:none; border-radius:10px; font-size:15px; font-weight:600; background:linear-gradient(135deg,#fffbeb,#fef3c7); cursor:pointer; color:#b45309; margin-top:12px; text-align:center; transition:all .2s; box-shadow:0 2px 8px rgba(245,158,11,.25); }
+.correct-btn:hover { background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; transform:translateY(-1px); box-shadow:0 4px 14px rgba(217,119,6,.3); }
 
-.llm-btn { display: block; width: 100%; margin-top: 8px; padding: 10px; border: 2px dashed #7c3aed; border-radius: 10px; background: #f5f3ff; color: #6d28d9; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.llm-btn:hover { background: #ede9fe; border-color: #6d28d9; }
+.llm-btn { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 2px dashed #fca5a5; border-radius: 12px; background: #fff5f5; color: #b91c1c; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
+.llm-btn:hover { background: #fee2e2; border-color: #ef4444; }
 .llm-btn.loading { opacity: 0.6; pointer-events: none; }
 .llm-progress { margin-top: 10px; display: none; }
-.llm-progress-bar { width: 100%; height: 6px; background: #e8e8e8; border-radius: 3px; overflow: hidden; }
-.llm-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 3px; transition: width 0.3s ease; }
-.llm-progress-text { font-size: 12px; color: #888; text-align: center; margin-top: 6px; }
-.llm-result-label { font-size: 13px; font-weight: 700; color: #5b21b6; margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #e8e8e8; }
-.llm-result-label span { font-weight: 400; font-size: 11px; color: #999; }
-.llm-result-text { font-size: 13px; line-height: 1.9; color: #333; padding: 0 4px; white-space: pre-wrap; word-break: break-word; }
+.llm-progress-bar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.llm-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #cc0010, #e60012); border-radius: 3px; transition: width 0.4s ease; }
+.llm-progress-text { font-size: 12px; color: #94a3b8; text-align: center; margin-top: 6px; }
+.llm-result-label { font-size: 13px; font-weight: 700; color: #991b1b; margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+.llm-result-label span { font-weight: 400; font-size: 11px; color: #94a3b8; }
+.llm-result-text { font-size: 13px; line-height: 1.9; color: #334155; padding: 0 4px; white-space: pre-wrap; word-break: break-word; }
 .llm-result-text p { margin: 0 0 10px; }
 .llm-result-text p:last-child { margin-bottom: 0; }
 .llm-result-text h3 { font-size: 15px; font-weight: 700; margin: 14px 0 6px; color: #1a1a2e; }
@@ -148,33 +179,50 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 
 /* Photo grid */
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px,1fr)); gap: 8px; margin-top: 10px; }
-.photo-grid-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; background: #f9fafb; }
-.photo-grid-item.main { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+.photo-grid-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 10px; overflow: hidden; cursor: pointer; background: #f9fafb; transition: all 0.2s; }
+.photo-grid-item:hover { border-color: #fca5a5; }
+.photo-grid-item.main { border-color: #e60012; box-shadow: 0 0 0 2px rgba(230,0,18,0.15); }
 .photo-grid-item img, .photo-grid-item canvas { width: 100%; height: 100%; object-fit: cover; }
-.photo-grid-item .grid-badge { position: absolute; top: 2px; left: 4px; background: #2563eb; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 600; }
-.photo-grid-item .grid-del { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
-.photo-grid-item .grid-del:hover { background: rgba(220,38,38,0.85); }
-.photo-grid-add { aspect-ratio: 1; border: 2px dashed #cbd5e1; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 28px; font-weight: 300; }
-.photo-grid-add:hover { border-color: #2563eb; color: #2563eb; }
+.photo-grid-item .grid-badge { position: absolute; top: 2px; left: 4px; background: linear-gradient(135deg, #cc0010, #e60012); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+.photo-grid-item .grid-del { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; opacity: 0.7; transition: all 0.2s; }
+.photo-grid-item .grid-del:hover { opacity: 1; background: rgba(220,38,38,0.85); transform: scale(1.1); }
+.photo-grid-add { aspect-ratio: 1; border: 2px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 28px; font-weight: 300; transition: all 0.2s; }
+.photo-grid-add:hover { border-color: #e60012; color: #e60012; background: #fff5f5; }
 .photo-count { font-size: 12px; color: #64748b; margin-top: 4px; text-align: center; }
 
-.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-.img-lightbox-overlay img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 4px; transition: transform 0.3s ease; }
-.img-lightbox-close { position: fixed; top: 16px; right: 20px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 20px; cursor: pointer; z-index: 10000; display: flex; align-items: center; justify-content: center; }
-.img-lightbox-close:hover { background: rgba(255,255,255,0.3); }
-.img-lightbox-rotate { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: 20px; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 14px; cursor: pointer; z-index: 10000; font-weight: 600; }
-.img-lightbox-rotate:hover { background: rgba(255,255,255,0.3); }
+.img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.img-lightbox-overlay img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 6px; cursor: grab; user-select: none; -webkit-user-select: none; }
+.img-lightbox-overlay img:active { cursor: grabbing; }
+.img-lightbox-close { position: fixed; top: 16px; right: 20px; width: 40px; height: 40px; border-radius: 20px; border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 20px; cursor: pointer; z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); transition: all 0.2s; }
+.img-lightbox-close:hover { background: rgba(255,255,255,0.25); transform: scale(1.05); }
+.img-lightbox-rotate { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 24px; border-radius: 20px; border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 14px; cursor: pointer; z-index: 10000; font-weight: 600; backdrop-filter: blur(8px); transition: all 0.2s; }
+.img-lightbox-rotate:hover { background: rgba(255,255,255,0.25); }
+.toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10001; padding: 12px 24px; border-radius: 10px; font-size: 13px; font-weight: 600; color: #fff; background: rgba(15,23,42,0.9); backdrop-filter: blur(12px); animation: fadeSlideIn 0.3s ease; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+@keyframes fadeSlideIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
 /* Bottom sheet */
-.bottom-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.35); z-index: 9000; display: none; align-items: flex-end; justify-content: center; }
+.bottom-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 9000; display: none; align-items: flex-end; justify-content: center; backdrop-filter: blur(2px); }
 .bottom-sheet-overlay.open { display: flex; }
-.bottom-sheet { background: #fff; width: 100%; max-width: 480px; border-radius: 20px 20px 0 0; max-height: 75vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); padding: 0 20px 28px; }
+.bottom-sheet { background: #fff; width: 100%; max-width: 480px; border-radius: 24px 24px 0 0; max-height: 80vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.32,0.72,0,1); padding: 0 20px 28px; box-shadow: 0 -8px 30px rgba(0,0,0,0.1); }
 .bottom-sheet-overlay.open .bottom-sheet { transform: translateY(0); }
-.bottom-sheet-handle { width: 40px; height: 4px; background: #d1d5db; border-radius: 2px; margin: 12px auto 16px; }
-.bottom-sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.bottom-sheet-handle { width: 40px; height: 4px; background: #d1d5db; border-radius: 2px; margin: 12px auto 16px; flex-shrink: 0; }
+.bottom-sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-top: 4px; }
 .bottom-sheet-header .sheet-title { font-size: 16px; font-weight: 700; color: #1e293b; }
-.bottom-sheet-close { width: 32px; height: 32px; border-radius: 16px; border: none; background: #f1f5f9; color: #64748b; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.bottom-sheet-close { width: 32px; height: 32px; border-radius: 16px; border: none; background: #f1f5f9; color: #64748b; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .bottom-sheet-close:hover { background: #e2e8f0; color: #334155; }
+
+/* 粘贴链接弹窗 */
+.overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 9500; display: flex; align-items: center; justify-content: center; }
+.paste-url-card { background: #fff; width: 92%; max-width: 400px; border-radius: 16px; padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+.paste-url-title { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 14px; }
+.paste-url-input { width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; transition: border-color 0.2s; }
+.paste-url-input:focus { border-color: #e60012; }
+.paste-url-preview { display: block; max-width: 100%; max-height: 180px; margin-top: 12px; border-radius: 8px; background: #f1f5f9; object-fit: contain; }
+.paste-url-error { font-size: 12px; color: #dc2626; margin-top: 8px; padding: 6px 10px; background: #fef2f2; border-radius: 6px; }
+.paste-url-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.paste-url-actions .btn-cancel { padding: 8px 20px; border: 1px solid #d1d5db; background: #fff; border-radius: 8px; font-size: 13px; color: #64748b; cursor: pointer; }
+.paste-url-actions .btn-confirm { padding: 8px 20px; border: none; background: #e60012; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.paste-url-actions .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 
 </style>
 </head>
@@ -182,11 +230,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 <div class="app">
   <div class="header">
     <h1>屏损故障鉴定</h1>
-    <div class="sub">TCL 智能判定助手 · v1.0</div>
+    <div class="sub">TCL 智能判定助手<span class="sub-version">v1.0</span></div>
   </div>
   <div class="steps" id="steps">
-    <div class="step-dot active" data-step="1"></div>
-    <div class="step-dot" data-step="2"></div>
+    <div class="step-dot active" data-step="1" data-label="拍照取证"></div>
+    <div class="step-dot" data-step="2" data-label="鉴定结果"></div>
   </div>
 
   <!-- 第1步：拍照取证 -->
@@ -195,12 +243,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
     <div class="page-desc">请对准屏幕损伤位置拍摄，系统将自动添加时间戳水印</div>
     <div class="camera-view" id="cameraView">
       <div class="camera-consent" id="cameraConsent">
-        <div class="consent-icon">📷</div>
+        <div class="consent-icon"></div>
         <div class="consent-title">授权相机与位置信息</div>
         <div class="consent-desc">为了拍摄屏幕损伤照片并记录现场位置，需要您授权以下权限，所有数据仅用于 TCL 鉴定系统案例判定：</div>
         <div class="consent-perm-list">
-          <div class="consent-perm-item"><span class="perm-icon">📷</span><span>摄像头 — 拍摄屏幕损伤照片</span></div>
-          <div class="consent-perm-item"><span class="perm-icon">📍</span><span>位置信息 — 记录拍照地点</span></div>
+          <div class="consent-perm-item"><span class="perm-icon"></span><span>摄像头 — 拍摄屏幕损伤照片</span></div>
+          <div class="consent-perm-item"><span class="perm-icon"></span><span>位置信息 — 记录拍照地点</span></div>
         </div>
         <div class="consent-btns">
           <button class="btn btn-primary consent-btn" onclick="onConsentGranted()">同意并授权</button>
@@ -217,14 +265,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
       <div class="photo-grid" id="photoGrid"></div>
       <div class="photo-count" id="photoCount"></div>
       <div class="btn-row" id="btnInfoRow" style="margin-top:6px;display:none">
-        <button class="btn btn-outline btn-sm" id="btnOpenInfo" onclick="openInfoSheet()">📋 安装与故障信息</button>
+        <button class="btn btn-outline btn-sm" id="btnOpenInfo" onclick="openInfoSheet()" style="width:92%;margin:0 auto">安装与故障信息</button>
       </div>
     </div>
     <div id="analysisHint" style="display:none;text-align:center;padding:16px;color:#94a3b8;font-size:13px;">
       请上传图片并填写安装与故障信息后，查看分析结果
     </div>
     <div class="analysis-panel" id="analysisPanel">
-      <div class="analysis-title">🔍 RAG 分析结果</div>
+      <div class="analysis-title"> RAG 分析结果</div>
       <div class="analysis-loading" id="analysisLoading">正在分析屏损特征...</div>
       <div id="analysisResult" style="display:none">
         <div class="analysis-detail" id="analysisDetail"></div>
@@ -233,8 +281,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
       </div>
     </div>
     <div class="ai-panel" id="aiAnalysisPanel">
-      <div class="analysis-title">🧠 屏损鉴定分析</div>
-      <button class="llm-btn" id="llmAnalyzeBtn" onclick="runLLMAnalysis()">🤖 启动屏损鉴定分析</button>
+      <div class="analysis-title">屏损鉴定分析</div>
+      <button class="llm-btn" id="llmAnalyzeBtn" onclick="runLLMAnalysis()">启动屏损鉴定分析</button>
       <div id="llmResult" style="display:none">
         <div class="llm-progress" id="llmProgress">
           <div class="llm-progress-bar"><div class="llm-progress-fill" id="llmProgressFill"></div></div>
@@ -244,36 +292,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
         <div class="llm-result-label">鉴定分析结果 <span id="llmModelTag"></span></div>
         <div class="llm-result-text" id="llmResultText"></div>
         <div class="llm-result-meta" id="llmResultMeta"></div>
+        <button class="correct-btn llm-correct-btn" onclick="showCorrection()" style="display:none;">分析不准？点此纠正 →</button>
       </div>
     </div>
     <div class="correction-panel" id="correctionPanel">
-      <div class="corr-title">✏️ 纠正分析结果（将作为训练数据提升后续准确率）</div>
-      <div class="correction-row">
-        <select id="corrLocation">
-          <option value="">选择正确位置</option>
-          <option>天侧</option><option>地侧</option><option>左侧右侧</option>
-          <option>四角区域</option><option>中央区域</option><option>全屏区域</option>
-          <option>局部不规则区域</option>
-        </select>
-        <select id="corrShape">
-          <option value="">选择正确形状</option>
-          <option>单条线状屏裂</option><option>多条线状屏裂</option>
-          <option>点放射状屏裂</option><option>发散性线状屏裂</option>
-          <option>环状/圈状屏裂</option><option>网状(大面积无规则)屏裂</option>
-        </select>
-        <button class="btn-confirm" id="corrConfirmBtn" onclick="submitCorrection()">确认提交</button>
+      <div class="corr-title">纠正分析结果（将作为训练数据提升后续准确率，提交后同步至案例库）</div>
+      <div id="corrFieldsContainer"></div>
+      <div class="correction-actions">
+        <button class="btn-cancel" onclick="hideCorrection()">取消</button>
+        <button class="btn-confirm" id="corrConfirmBtn" onclick="submitCorrection()">确认提交并同步至案例库</button>
       </div>
-      <div id="corrMsg" style="font-size:11px;color:#059669;margin-top:6px;"></div>
+      <div class="correction-feedback" id="corrFeedback"></div>
     </div>
     <input type="file" accept="image/*" multiple id="fileInput" style="display:none" onchange="uploadFromAlbum(event)" />
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btnCapture" onclick="capture()">📷 拍照</button>
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('fileInput').click()">🖼️ 上传相册</button>
-      <button class="btn btn-outline btn-sm" id="btnRetake" onclick="retake()" style="display:none">🔄 重拍全部</button>
+    <div class="btn-row" id="actionButtons" style="display:none">
+      <button class="btn btn-primary" id="btnCapture" onclick="capture()">拍照</button>
+      <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">上传相册</button>
+      <div class="btn-row-footer">
+        <span>支持 Ctrl+V 粘贴图片或链接</span>
+        <button class="btn-retake-link" id="btnRetake" onclick="retake()" style="display:none">重拍全部</button>
+      </div>
     </div>
-    <div style="margin-top:auto;padding-top:12px;">
+    <div id="submitArea" style="margin-top:auto;padding-top:12px;display:none;">
       <button class="btn btn-primary" onclick="submitCase()" id="btnSubmit" disabled>提交判定 →</button>
-      <div id="submitHint" style="text-align:center;font-size:12px;color:#d97706;margin-top:6px;display:none;">⚠️ 请先点击上方「安装与故障信息」填写后提交</div>
+      <div id="submitHint" style="text-align:center;font-size:12px;color:#d97706;margin-top:6px;display:none;">请先点击上方「安装与故障信息」填写后提交</div>
     </div>
   </div>
 
@@ -282,7 +324,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
     <div class="bottom-sheet" onclick="event.stopPropagation()">
       <div class="bottom-sheet-handle"></div>
       <div class="bottom-sheet-header">
-        <div class="sheet-title">📋 安装与故障信息</div>
+        <div class="sheet-title">安装与故障信息</div>
         <button class="bottom-sheet-close" onclick="closeInfoSheet()">✕</button>
       </div>
       <div class="form-group">
@@ -317,7 +359,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 
   <!-- 第2步：判定结果 -->
   <div class="page" id="page2">
-    <div class="page-title">② 判定结果</div>
+    <div class="page-title-row">
+      <button class="page-back-btn" onclick="goBack()" title="返回拍照取证">←</button>
+      <div class="page-title">判定结果</div>
+    </div>
     <div class="page-desc">系统已完成自动判定，结果如下：</div>
     <div id="resultContent">
       <div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>
@@ -336,6 +381,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
   <img id="lightboxImg" src="" alt="预览原图" />
 </div>
 
+<!-- 粘贴图片链接确认弹窗 -->
+<div class="overlay" id="pasteUrlOverlay" style="display:none" onclick="if(event.target===this)closePasteUrlDialog()">
+  <div class="paste-url-card" onclick="event.stopPropagation()">
+    <div class="paste-url-title"> 检测到图片链接</div>
+    <input type="url" class="paste-url-input" id="pasteUrlInput" placeholder="https://..." spellcheck="false" />
+    <img id="pasteUrlPreview" class="paste-url-preview" style="display:none" alt="预览" />
+    <div class="paste-url-error" id="pasteUrlError" style="display:none"></div>
+    <div class="paste-url-actions">
+      <button class="btn-cancel" onclick="closePasteUrlDialog()">取消</button>
+      <button class="btn-confirm" onclick="confirmPasteUrl()">确认加载</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin + '/api/v1/cases/decide'
 
@@ -349,7 +408,14 @@ let state = {
 let stream = null
 let lightboxAngle = 0
 let lightboxScale = 1
-let panelConfig = { showRagPanel: true, showAiPanel: true }
+let lightboxX = 0
+let lightboxY = 0
+let lbDragging = false
+let lbDragStartX = 0
+let lbDragStartY = 0
+let lbStartX = 0
+let lbStartY = 0
+let panelConfig = { showRagPanel: true, showAiPanel: true, analysisMode: 'hybrid' }
 
 async function loadPanelConfig() {
   try {
@@ -358,6 +424,8 @@ async function loadPanelConfig() {
     if (data.success && data.data) {
       panelConfig.showRagPanel = data.data.showRagPanel !== false
       panelConfig.showAiPanel = data.data.showAiPanel !== false
+      // 分析模式由管理后台配置（hybrid / rag / llm），前端不提供切换
+      panelConfig.analysisMode = ['hybrid', 'rag', 'llm'].includes(data.data.analysisMode) ? data.data.analysisMode : 'hybrid'
     }
   } catch {
     // 使用默认值 (两个面板都显示)
@@ -371,6 +439,7 @@ let locationAddr = ''  // 当前位置文本
 function init() {
   showCameraConsent()
   loadPanelConfig()
+  loadFieldDefs()
 }
 
 // ---------- 权限同意 ----------
@@ -389,19 +458,23 @@ function showCameraConsent() {
   consent.style.display = 'flex'
   document.getElementById('guideOverlay').classList.remove('on')
   document.getElementById('guideToggle').style.display = 'none'
+  document.getElementById('actionButtons').style.display = 'none'
+  document.getElementById('submitArea').style.display = 'none'
 
   // 隐藏 fallback（如果之前显示过）
   const fb = document.getElementById('cameraFallback')
   if (fb) fb.style.display = 'none'
 
   btn.disabled = true
-  btn.textContent = '📷 拍照'
+  btn.textContent = '拍照'
   btn.onclick = capture
 }
 
 function onConsentGranted() {
   cameraConsented = true
   document.getElementById('cameraConsent').style.display = 'none'
+  document.getElementById('actionButtons').style.display = ''
+  document.getElementById('submitArea').style.display = ''
   startCameraAndLocation()
 }
 
@@ -441,6 +514,8 @@ function onConsentDeny() {
   cameraConsented = false
   document.getElementById('cameraConsent').style.display = 'none'
   document.getElementById('cameraView').classList.remove('dark')
+  document.getElementById('actionButtons').style.display = ''
+  document.getElementById('submitArea').style.display = ''
   // 拒绝权限后给出提示，引导用户使用相册上传
   const v = document.getElementById('video')
   v.style.display = 'none'
@@ -449,7 +524,7 @@ function onConsentDeny() {
     fb = document.createElement('div')
     fb.id = 'cameraFallback'
     fb.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:280px;color:#555;text-align:center;padding:24px;'
-    fb.innerHTML = '<div style="font-size:44px;margin-bottom:14px;">🖼️</div><div style="font-size:15px;font-weight:600;color:#333;margin-bottom:6px;">摄像头未启用</div><div style="font-size:13px;color:#888;line-height:1.6;">您选择了暂不使用摄像头<br>可使用下方「上传相册」按钮选择已拍摄的照片</div>'
+    fb.innerHTML = '<div style="font-size:44px;margin-bottom:14px;"></div><div style="font-size:15px;font-weight:600;color:#333;margin-bottom:6px;">摄像头未启用</div><div style="font-size:13px;color:#888;line-height:1.6;">您选择了暂不使用摄像头<br>可使用下方「上传相册」按钮选择已拍摄的照片</div>'
     v.parentNode.insertBefore(fb, v.nextSibling)
   }
   fb.style.display = 'flex'
@@ -479,13 +554,13 @@ function initCamera() {
         cameraReady = true
         showGuide()
         btn.disabled = false
-        btn.textContent = '📷 拍照'
+        btn.textContent = '拍照'
       }).catch(() => {
         // play() 失败但仍可能显示静态帧
         cameraReady = true
         showGuide()
         btn.disabled = false
-        btn.textContent = '📷 拍照'
+        btn.textContent = '拍照'
       })
     })
     .catch(err => {
@@ -517,14 +592,14 @@ function showCameraFallback() {
     fb = document.createElement('div')
     fb.id = 'cameraFallback'
     fb.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:280px;color:#555;text-align:center;padding:24px;'
-    fb.innerHTML = `<div style="font-size:44px;margin-bottom:14px;">📷</div><div style="font-size:15px;font-weight:600;color:#333;margin-bottom:6px;">无法访问摄像头</div><div style="font-size:13px;color:#888;line-height:1.6;">${tipText}</div>`
+    fb.innerHTML = `<div style="font-size:44px;margin-bottom:14px;"></div><div style="font-size:15px;font-weight:600;color:#333;margin-bottom:6px;">无法访问摄像头</div><div style="font-size:13px;color:#888;line-height:1.6;">${tipText}</div>`
     v.parentNode.insertBefore(fb, v.nextSibling)
   } else {
     fb.querySelector('div:last-child').innerHTML = tipText
   }
   fb.style.display = 'flex'
   hideGuide()
-  btn.textContent = '📷 系统相机拍照'
+  btn.textContent = '系统相机拍照'
   btn.disabled = false
   // 将拍照按钮改为触发系统相机
   btn.onclick = function() {
@@ -647,10 +722,10 @@ function addPhotoFromCanvas(canvas) {
   const fontSize2 = Math.max(10, Math.round(tempCanvas.width / 60))
   // 第一行：时间戳 + 标识
   ctx.fillStyle = '#fff'; ctx.font = `bold ${fontSize1}px sans-serif`
-  ctx.fillText(`📷 ${ts}  TCL智能鉴定`, 12, tempCanvas.height - fh + fontSize1 + 4)
+  ctx.fillText(`${ts}  TCL智能鉴定`, 12, tempCanvas.height - fh + fontSize1 + 4)
   // 第二行：ID + 位置
   ctx.font = `${fontSize2}px sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.7)'
-  ctx.fillText(`ID:${Date.now().toString(36)}${hasLoc ? '  📍 ' + locationAddr : ''}`, 12, tempCanvas.height - fh + fontSize1 + fontSize2 + 8)
+  ctx.fillText(`ID:${Date.now().toString(36)}${hasLoc ? '  ' + locationAddr : ''}`, 12, tempCanvas.height - fh + fontSize1 + fontSize2 + 8)
   state.photos.push({ id: Date.now().toString(36), ts: ts, url: tempCanvas.toDataURL('image/jpeg', IMG_JPEG_Q) })
   renderPhotoGrid()
 }
@@ -670,13 +745,26 @@ function removePhoto(index) {
     document.getElementById('infoSheetOverlay').classList.remove('open')
     state.analysis = null
     state.infoConfirmed = false
+    document.getElementById('correctionPanel').style.display = 'none'
+    document.getElementById('analysisSource').innerHTML = ''
     resetLLMResult()
   } else {
     updateSubmitState()
+    // 删除后清除确认状态和分析，等待重新确认
+    state.analysis = null
+    state.infoConfirmed = false
+    resetLLMResult()
+    document.getElementById('analysisPanel').style.display = 'none'
+    document.getElementById('aiAnalysisPanel').style.display = 'none'
+    document.getElementById('analysisHint').style.display = ''
   }
 }
 
+// 拍照防抖锁
+let captureLock = false
+
 function capture() {
+  if (captureLock) return
   const v = document.getElementById('video')
   if (state.photos.length >= MAX_PHOTOS) { alert(`最多只能拍摄 ${MAX_PHOTOS} 张照片`); return }
 
@@ -686,6 +774,7 @@ function capture() {
     return
   }
 
+  captureLock = true
   const c = document.createElement('canvas')
   c.width = v.videoWidth || 1280; c.height = v.videoHeight || 720
   const tempCanvas = document.createElement('canvas')
@@ -701,6 +790,7 @@ function capture() {
   if (state.photos.length >= MAX_PHOTOS) { document.getElementById('btnCapture').disabled = true }
   maybeRunInitialAnalysis()
   state.analysis = null
+  captureLock = false
 }
 
 function restoreCameraUI() {
@@ -715,7 +805,7 @@ function restoreCameraUI() {
   // 恢复拍照按钮原始行为
   const btn = document.getElementById('btnCapture')
   btn.onclick = capture
-  btn.textContent = '📷 拍照'
+  btn.textContent = '拍照'
   // 恢复 consent 弹窗（每次进入拍照都需重新授权）
   cameraConsented = false
   document.getElementById('cameraView').classList.remove('dark')
@@ -730,7 +820,6 @@ function retake() {
   document.getElementById('cameraView').style.display = 'block'
   document.getElementById('photoPreview').style.display = 'none'
   document.getElementById('analysisPanel').style.display = 'none'
-  document.getElementById('aiAnalysisPanel').style.display = 'none'
   document.getElementById('analysisHint').style.display = 'none'
   document.getElementById('btnRetake').style.display = 'none'
   document.getElementById('btnCapture').disabled = true
@@ -774,6 +863,134 @@ function uploadFromAlbum(event) {
   })
   event.target.value = ''
 }
+
+// ─── 粘贴图片 / URL ──────────────────────────────────────────
+let _pendingPasteUrl = ''
+
+// 判断文本是否可能是图片链接
+function _looksLikeImageUrl(text) {
+  text = text.trim()
+  if (text.startsWith('data:image/')) return true
+  try {
+    const url = new URL(text)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch { return false }
+}
+
+// 从 URL 加载图片 → canvas → addPhotoFromCanvas
+async function _loadUrlAsPhoto(url) {
+  // 先用 fetch 下载为 Blob（跨域图片也支持，canvas 不会污染）
+  let img
+  try {
+    const resp = await fetch(url, { mode: 'cors' })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const blob = await resp.blob()
+    if (!blob.type.startsWith('image/')) throw new Error('链接不是图片格式')
+    const blobUrl = URL.createObjectURL(blob)
+    img = await new Promise((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => { URL.revokeObjectURL(blobUrl); resolve(i) }
+      i.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('图片解码失败')) }
+      i.src = blobUrl
+    })
+  } catch (e) {
+    // fetch 失败 → 降级：直接用 Image + crossOrigin 加载（依赖服务器 CORS）
+    img = await new Promise((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = () => reject(new Error('图片加载失败，链接可能不可访问或需要登录'))
+      i.crossOrigin = 'anonymous'
+      i.src = url
+    })
+  }
+  // canvas 绘制（此时 Blob URL 是同源的，或 CORS 已通过，不会污染）
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth; c.height = img.naturalHeight
+  const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0)
+  addPhotoFromCanvas(c)
+}
+
+// 显示粘贴 URL 确认弹窗
+function showPasteUrlDialog(url) {
+  _pendingPasteUrl = url
+  document.getElementById('pasteUrlInput').value = url
+  document.getElementById('pasteUrlPreview').style.display = 'none'
+  document.getElementById('pasteUrlPreview').src = ''
+  document.getElementById('pasteUrlError').style.display = 'none'
+  document.getElementById('pasteUrlOverlay').style.display = 'flex'
+  // 尝试加载预览
+  const preview = document.getElementById('pasteUrlPreview')
+  preview.onload = () => { preview.style.display = 'block'; document.getElementById('pasteUrlError').style.display = 'none' }
+  preview.onerror = () => {}
+  preview.src = url
+}
+
+function closePasteUrlDialog() {
+  document.getElementById('pasteUrlOverlay').style.display = 'none'
+  _pendingPasteUrl = ''
+}
+
+async function confirmPasteUrl() {
+  const url = document.getElementById('pasteUrlInput').value.trim()
+  if (!url) return
+  const btn = document.querySelector('.paste-url-actions .btn-confirm')
+  btn.disabled = true; btn.textContent = '加载中...'
+  try {
+    await _loadUrlAsPhoto(url)
+    closePasteUrlDialog()
+    document.getElementById('cameraView').style.display = 'none'
+    document.getElementById('photoPreview').style.display = 'block'
+    updateSubmitState()
+    document.getElementById('btnInfoRow').style.display = ''
+    if (state.photos.length >= MAX_PHOTOS) document.getElementById('btnCapture').disabled = true
+    maybeRunInitialAnalysis()
+    showToast('已加载图片')
+  } catch (e) {
+    document.getElementById('pasteUrlError').textContent = '' + e.message
+    document.getElementById('pasteUrlError').style.display = 'block'
+  } finally {
+    btn.disabled = false; btn.textContent = '确认加载'
+  }
+}
+
+// 全局 paste 监听：自动识别剪贴板中的图片或 URL
+document.addEventListener('paste', (e) => {
+  const items = e.clipboardData.items
+  let handled = false
+
+  // 1) 粘贴的是图片数据 → 直接加载
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const blob = item.getAsFile()
+      if (!blob) continue
+      e.preventDefault(); handled = true
+      const img = new Image()
+      img.onload = () => {
+        const c = document.createElement('canvas')
+        c.width = img.naturalWidth; c.height = img.naturalHeight
+        c.getContext('2d').drawImage(img, 0, 0)
+        addPhotoFromCanvas(c)
+        document.getElementById('cameraView').style.display = 'none'
+        document.getElementById('photoPreview').style.display = 'block'
+        updateSubmitState(); document.getElementById('btnInfoRow').style.display = ''
+        if (state.photos.length >= MAX_PHOTOS) document.getElementById('btnCapture').disabled = true
+        maybeRunInitialAnalysis()
+        showToast('已粘贴图片')
+      }
+      img.src = URL.createObjectURL(blob)
+      break
+    }
+  }
+  if (handled) return
+
+  // 2) 粘贴的是文本 → 检查是否是 URL
+  const text = e.clipboardData.getData('text/plain')
+  if (text && _looksLikeImageUrl(text)) {
+    e.preventDefault()
+    showPasteUrlDialog(text.trim())
+  }
+})
+
 function resetLLMResult() {
   const r = document.getElementById('llmResult')
   r.style.display = 'none'
@@ -784,13 +1001,9 @@ function resetLLMResult() {
   const btn = document.getElementById('llmAnalyzeBtn')
   btn.style.display = ''
   btn.classList.remove('loading')
-  btn.textContent = '🤖 启动屏损鉴定分析'
-  btn.style.color = '#6d28d9'
-  btn.style.borderColor = '#7c3aed'
-  // 确保 AI 面板可见（如果配置允许）
-  if (panelConfig.showAiPanel) {
-    document.getElementById('aiAnalysisPanel').style.display = 'block'
-  }
+  btn.textContent = '启动屏损鉴定分析'
+  btn.style.color = '#b91c1c'
+  btn.style.borderColor = '#fca5a5'
 }
 function togglePill(el) {
   el.classList.toggle('selected')
@@ -828,7 +1041,7 @@ function updateUncertaintyHint() {
   if (state.faultLinks.includes('unknown') || state.faultLinks.length === 0) count++
   hint.style.display = count > 0 ? '' : 'none'
   if (count >= 2) {
-    hint.textContent = '⚠️ 已选择 ' + count + ' 项不确定，系统将建议转人工复核'
+    hint.textContent = '已选择 ' + count + ' 项不确定，系统将建议转人工复核'
   }
 }
 function syncFormState() {
@@ -856,6 +1069,7 @@ function setStep(n) {
   document.getElementById('page'+n).scrollTop = 0
 }
 function goToResult() { setStep(2) }
+function goBack() { setStep(1) }
 function openInfoSheet() {
   document.getElementById('infoSheetOverlay').classList.add('open')
 }
@@ -883,8 +1097,21 @@ function maybeRunInitialAnalysis() {
   }
   // photos + info confirmed → run analysis
   document.getElementById('analysisHint').style.display = 'none'
-  document.getElementById('analysisPanel').style.display = panelConfig.showRagPanel ? '' : 'none'
-  document.getElementById('aiAnalysisPanel').style.display = panelConfig.showAiPanel ? '' : 'none'
+  const mode = panelConfig.analysisMode || 'hybrid'
+  const ragPanel = document.getElementById('analysisPanel')
+  const aiPanel = document.getElementById('aiAnalysisPanel')
+  if (mode === 'rag') {
+    // 仅RAG识别：只显示 RAG 分析面板
+    ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
+    aiPanel.style.display = 'none'
+  } else if (mode === 'llm') {
+    // 仅LLM识别：只显示 LLM 分析面板
+    ragPanel.style.display = 'none'
+    aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
+  } else {
+    ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
+    aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
+  }
   // 取第一张做主图跑 RAG 分析
   const first = state.photos[0]
   const img = new Image()
@@ -892,9 +1119,13 @@ function maybeRunInitialAnalysis() {
     const c = document.createElement('canvas')
     c.width = img.width; c.height = img.height
     c.getContext('2d').drawImage(img, 0, 0)
-    runAnalysis(c)
-    // RAG 分析启动后，同步自动启动 AI LLM 分析
-    if (panelConfig.showAiPanel) runLLMAnalysis()
+    if (mode === 'llm') {
+      if (panelConfig.showAiPanel) runLLMAnalysis()
+    } else {
+      runAnalysis(c)
+      // 混合模式：RAG 分析启动后同步自动启动 AI LLM 分析
+      if (mode === 'hybrid' && panelConfig.showAiPanel) runLLMAnalysis()
+    }
   }
   img.src = first.url
 }
@@ -910,9 +1141,11 @@ function resetAll() {
   document.getElementById('btnInfoRow').style.display = 'none'
   document.getElementById('infoSheetOverlay').classList.remove('open')
   document.getElementById('analysisPanel').style.display = 'none'
+  document.getElementById('correctionPanel').style.display = 'none'
+  document.getElementById('analysisSource').innerHTML = ''
   document.getElementById('analysisHint').style.display = 'none'
-  document.getElementById('aiAnalysisPanel').style.display = 'none'
   resetLLMResult()
+  document.getElementById('aiAnalysisPanel').style.display = 'none'
   setStep(1)
   showCameraConsent()
 }
@@ -928,6 +1161,9 @@ async function submitCase() {
     faultLinks: state.faultLinks,
     crackLocation: state.analysis ? state.analysis.location : '',
     crackShape: state.analysis ? state.analysis.shape : '',
+    crackPrinciple: state.analysis ? (state.analysis.principle || '') : '',
+    crackStage: state.analysis ? (state.analysis.stage || '') : '',
+    conclusion: state.analysis ? (state.analysis.conclusion || '') : '',
   }
 
   const DECIDE_TIMEOUT = 15000 // 15 秒超时
@@ -972,24 +1208,31 @@ async function submitCase() {
     : (lastError?.message || '未知错误')
 
   rc.innerHTML = `<div style="text-align:center;padding:40px 0;color:#dc2626">
-    <div style="font-size:48px;margin-bottom:12px">😞</div>
     <div>判定请求失败</div><div style="font-size:12px;color:#999;margin-top:8px">${errMsg}</div>
-    <div style="margin-top:16px">${!navigator.onLine ? '⚠️ 网络连接异常' : '⚠️ 后端服务可能未启动'}</div>
+    <div style="margin-top:16px">${!navigator.onLine ? '网络连接异常' : '后端服务可能未启动'}</div>
     <button class="btn btn-outline" style="margin-top:16px" onclick="submitCase()">重试</button>
   </div>`
 }
 function renderResult(data) {
   const d = data.decision
-  const clsMap = { product_quality_issue:'quality', logistics_issue:'logistics', needs_further_review:'review' }
+  // 从 field-defs 动态生成映射
+  let clsMap = {}
+  if (_fieldDefs && _fieldDefs.conclusion && _fieldDefs.conclusion.options) {
+    for (const o of _fieldDefs.conclusion.options) {
+      const v = typeof o === 'string' ? o : o.value
+      const cssClass = typeof o === 'object' ? (o.cssClass || '') : ''
+      clsMap[v] = cssClass
+    }
+  } else {
+    clsMap = { product_quality_issue:'quality', logistics_issue:'logistics', needs_further_review:'review' }
+  }
   const cls = clsMap[d.result] || 'review'
-  const iconMap = { product_quality_issue:'✅', logistics_issue:'🚚', needs_further_review:'🔍', not_product_quality:'❌' }
   const rc = document.getElementById('resultContent')
   rc.innerHTML = `
     <div class="result-card ${cls}">
-      <div class="result-icon">${iconMap[d.result] || '📋'}</div>
-      <div class="result-title">${d.resultLabel}</div>
-      <div class="result-subtitle">Case: ${data.caseId}</div>
-      <div style="font-size:12px;margin-top:6px;opacity:0.7">规则版本: ${d.ruleVersion}</div>
+      <div class="result-title">${escHtml(d.resultLabel)}</div>
+      <div class="result-subtitle">Case: ${escHtml(data.caseId)}</div>
+      <div style="font-size:12px;margin-top:6px;opacity:0.7">规则版本: ${escHtml(d.ruleVersion)}</div>
     </div>
     ${state.analysis ? (() => {
       const report = generateAnalysisReport(state.analysis)
@@ -1016,24 +1259,29 @@ function renderResult(data) {
       return `
     <div class="result-report" style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:16px 20px;margin-bottom:16px;font-size:13px;line-height:1.9;color:#333;">
       <div class="report-section">
-        <h4>📌 屏损概况</h4>
+        <h4>屏损概况</h4>
         <div style="margin-top:4px;">${report.summary}</div>
       </div>
-      <div class="report-section"><h4>📦 当前状态</h4>${env}</div>
+      <div class="report-section"><h4>当前状态</h4>${env}</div>
       <div class="report-section" style="margin-top:14px;padding-top:12px;border-top:1px solid #e8e8e8;">
-        <h4>📋 初步鉴定结论</h4>
-        <div style="margin-top:4px;"><strong>故障类型：</strong>${state.analysis.location}受力导致的${state.analysis.shape}</div>
-        <div style="margin-top:4px;" id="resultCause"><strong>屏损原理：</strong>${causeText}</div>
+        <h4>初步鉴定结论</h4>
+        <div style="margin-top:4px;"><strong>故障类型：</strong>${(() => {
+          const s = (state.analysis.shape || '').toLowerCase()
+          if (s.includes('漏液')) return `屏幕出现液晶泄漏现象`
+          if (s.includes('熔屏')) return `屏幕出现高温熔损现象`
+          return `${escHtml(state.analysis.location)}受力导致的${escHtml(state.analysis.shape)}`
+        })()}</div>
+        <div style="margin-top:4px;" id="resultCause"><strong>故障原理：</strong>${escHtml(causeText)}</div>
       </div>
     </div>`
     })() : ''}
     <div class="path-list">
-      <h4>📋 判定路径回溯</h4>
+      <h4>判定路径回溯</h4>
       ${(d.decisionPath||[]).map((p,i) => `
         <div class="path-item">
           <div class="step-num">${i+1}</div>
-          <div>${p.question}</div>
-          <div class="step-answer">→ ${p.answer}</div>
+          <div>${escHtml(p.question)}</div>
+          <div class="step-answer">→ ${escHtml(p.answer)}</div>
         </div>
       `).join('')}
     </div>
@@ -1042,7 +1290,7 @@ function renderResult(data) {
 
 async function fetchSimilarCases(decision) {
   const sc = document.getElementById('similarContent')
-  sc.innerHTML = '<div style="text-align:center;padding:16px;color:#888;font-size:13px;">🔍 正在向量检索相似案例...</div>'
+  sc.innerHTML = '<div style="text-align:center;padding:16px;color:#888;font-size:13px;">正在向量检索相似案例...</div>'
   try {
     const body = {
       symptoms: [],
@@ -1069,18 +1317,18 @@ async function fetchSimilarCases(decision) {
     const engineLabel = data.data.engine || ''
     const isVector = engineLabel.includes('vector')
     sc.innerHTML = `<div class="similar-section">
-      <h4>📚 ${isVector ? '向量+标签融合匹配' : '标签匹配'} Top ${data.data.results.length} 相似案例</h4>
+      <h4>${isVector ? '向量+标签融合匹配' : '标签匹配'} Top ${data.data.results.length} 相似案例</h4>
       ${data.data.results.map((c,i) => {
         const cls = c.similarity >= 70 ? 'high' : 'medium'
         // 高匹配（>=80%）：用案例库结论覆盖自动分析
         if (c.similarity >= 80 && c.possibleCause) {
           const detailEl = document.getElementById('analysisDetail')
           let detailText = '<p>' + escHtml(c.possibleCause) + '</p>'
-          if (c.warrantyTip) detailText += '<p style="margin-top:8px;padding:8px 12px;background:#fff3cd;border-left:3px solid #ffc107;border-radius:4px;font-size:13px;">📋 保修提示：' + escHtml(c.warrantyTip) + '</p>'
+          if (c.warrantyTip) detailText += '<p style="margin-top:8px;padding:8px 12px;background:#fff3cd;border-left:3px solid #ffc107;border-radius:4px;font-size:13px;">保修提示：' + escHtml(c.warrantyTip) + '</p>'
           detailEl.innerHTML = detailText
           document.getElementById('analysisSource').textContent = '向量融合匹配：' + c.title + ' (融合相似度 ' + c.similarity + '%)'
           const rc = document.getElementById('resultCause')
-          if (rc) rc.innerHTML = '<strong>屏损原理：</strong>' + escHtml(c.possibleCause)
+          if (rc) rc.innerHTML = '<strong>故障原理：</strong>' + escHtml(c.possibleCause)
         }
         // 构建相似度明细
         let scoreDetail = ''
@@ -1095,20 +1343,30 @@ async function fetchSimilarCases(decision) {
             <div class="sim-score ${cls}">相似度 ${c.similarity}%</div>
           </div>
           ${scoreDetail}
-          <div class="sim-model">📺 ${c.deviceModel} | 结论: ${c.resultLabel}</div>
+          <div class="sim-model">${c.deviceModel} | 结论: ${c.resultLabel}</div>
           ${c.image ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:140px;"><img src="/api/knowledge/images?name=${encodeURIComponent(c.image)}" style="width:100%;max-height:140px;object-fit:cover;cursor:pointer;" onclick="event.stopPropagation();openLightbox('/api/knowledge/images?name=${encodeURIComponent(c.image)}')" title="点击查看原图" loading="lazy" /></div>` : ''}
           <div class="sim-summary">${escHtml(c.summary)}</div>
-          ${c.possibleCause ? '<div class="sim-cause">🔍 屏损原理：' + escHtml(c.possibleCause) + '</div>' : ''}
-          ${c.warrantyTip ? '<div class="sim-warranty">📋 保修提示：' + escHtml(c.warrantyTip) + '</div>' : ''}
+          ${c.possibleCause ? '<div class="sim-cause">故障原理：' + escHtml(c.possibleCause) + '</div>' : ''}
+          ${c.warrantyTip ? '<div class="sim-warranty">保修提示：' + escHtml(c.warrantyTip) + '</div>' : ''}
         </div>`
       }).join('')}
     </div>`
   } catch (e) {
-    sc.innerHTML = '<div style="text-align:center;padding:16px;color:#999;font-size:13px;">⚠️ 案例检索服务暂不可用</div>'
+    sc.innerHTML = '<div style="text-align:center;padding:16px;color:#999;font-size:13px;">案例检索服务暂不可用</div>'
   }
 }
 
 function escHtml(s) { return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+let _toastTimer = null
+function showToast(msg, duration = 2500) {
+  if (_toastTimer) { clearTimeout(_toastTimer); document.querySelector('.toast')?.remove() }
+  const el = document.createElement('div')
+  el.className = 'toast'
+  el.textContent = msg
+  document.body.appendChild(el)
+  _toastTimer = setTimeout(() => { el.remove(); _toastTimer = null }, duration)
+}
 
 const ANALYSIS_TARGET_W = 400
 
@@ -1312,6 +1570,8 @@ function normalizeLabel(text, type) {
   if (t.includes('点放射') || t.includes('放射状')) return '点放射状屏裂'
   if (t.includes('发散') || t.includes('延伸')) return '发散性线状屏裂'
   if (t.includes('多条') || t.includes('多道')) return '多条线状屏裂'
+  if (t.includes('漏液') || t.includes('泄漏') || t.includes('浸润')) return '漏液'
+  if (t.includes('熔屏') || t.includes('熔损') || t.includes('烧焦') || t.includes('碳化')) return '熔屏'
   return '点放射状屏裂'
 }
 
@@ -1319,9 +1579,12 @@ function generateAnalysisReport(analysis) {
   // 使用原始标注文本：向量检索返回案例库详细标注，启发式回退返回短标签
   const loc = analysis.location || '未知'
   const shape = analysis.shape || '未知'
+  const stage = analysis.stage || ''
+  const conclusion = analysis.conclusion || ''
+  const principle = analysis.principle || ''
 
   // ---- 摘要 ----
-  const summary = `📍 屏损位置：<strong>${loc}</strong>，屏损形状：<strong>${shape}</strong>`
+  const summary = `故障位置：<strong>${loc}</strong>，故障形状：<strong>${shape}</strong>`
 
   // ---- 详细报告 ----
   const locDesc = {
@@ -1341,6 +1604,8 @@ function generateAnalysisReport(analysis) {
     '发散性线状屏裂': '呈现<strong>发散性线状屏裂</strong>，多条裂纹从受力中心向四周延伸贯穿，表明受力强度较大且方向分散。',
     '环状/圈状屏裂': '呈现<strong>环状/圈状屏裂</strong>，裂纹呈环形或弧形分布，推测为圆形物体集中撞击或局部强力挤压所致。',
     '网状(大面积无规则)屏裂': '呈现<strong>大面积的网状无规则屏裂</strong>，裂纹纵横交错、无明确方向性，通常由极大的外部冲击力或整机弯曲变形导致。',
+    '漏液': '屏幕出现<strong>液晶泄漏</strong>现象，表现为黑色圆形或不规则浸润区域，边界清晰平滑，表面无凹凸感，无撞击痕迹。',
+    '熔屏': '屏幕出现<strong>高温熔损</strong>现象，表现为黑色焦灼斑块或鼓包变形，边界呈烧灼状，颜色发黄/发紫/碳化黑，无撞击痕迹。',
   }
 
   const locText = locDesc[loc] || `<strong>${loc}</strong>`
@@ -1348,7 +1613,7 @@ function generateAnalysisReport(analysis) {
 
   let report = `从您提供的照片来看，屏幕存在<strong>明显的</strong>物理损伤，具体特征如下：`
 
-  report += `<div class="report-section"><h4>📌 屏损位置</h4>`
+  report += `<div class="report-section"><h4>故障位置</h4>`
   // 短标签走模板，详细标注（案例库）直接显示原文
   if (locDesc[loc]) {
     if (loc === '全屏区域') {
@@ -1366,7 +1631,11 @@ function generateAnalysisReport(analysis) {
   }
   report += `</div>`
 
-  report += `<div class="report-section"><h4>🔍 屏损形状</h4>${shapeText}</div>`
+  report += `<div class="report-section"><h4>故障形状</h4>${shapeText}</div>`
+
+  if (stage) report += `<div class="report-section"><h4>故障环节</h4>${stage}</div>`
+  if (principle) report += `<div class="report-section"><h4>故障原理</h4>${principle}</div>`
+  if (conclusion) report += `<div class="report-section"><h4>鉴定结论</h4>${conclusion}</div>`
 
   return { summary, report }
 }
@@ -1396,24 +1665,45 @@ async function runAnalysis(canvas) {
     // 1. 优先尝试 CLIP 向量检索（带 2s 超时回退）
     try {
       const base64 = state.photos[0].url
+      const clipController = new AbortController()
+      const clipTimer = setTimeout(() => clipController.abort(), 2000)
       const resp = await Promise.race([
         fetch('/api/knowledge/search-vector', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, topK: 3 }),
+          body: JSON.stringify({ imageBase64: base64, topK: 3, mode: panelConfig.analysisMode === 'rag' ? 'rag' : undefined }),
+          signal: clipController.signal,
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
       ])
+      clearTimeout(clipTimer)
       const data = await resp.json()
       if (data.success && data.data?.results?.length > 0) {
         const top = data.data.results[0]
-        analysis = {
-          location: top.crackLocation || '局部不规则区域',
-          locationConfidence: Math.round(top.similarity),
-          shape: top.crackShape || '点放射状屏裂',
-          shapeConfidence: Math.round(top.similarity),
+        const agg = data.data.aggregated
+        if (agg && agg.location) {
+          // 仅RAG模式：使用 Top-K 加权投票聚合的结构化识别结果
+          const conf = Math.round(agg.aggregateConfidence || top.similarity)
+          const conclusionLabelMap = { product_quality_issue: '产品质量问题', not_product_quality: '非产品质量问题', no_damage: '屏幕完好', logistics_issue: '物流问题', needs_further_review: '需进一步鉴定' }
+          analysis = {
+            location: agg.location,
+            locationConfidence: conf,
+            shape: agg.shape,
+            shapeConfidence: conf,
+            stage: agg.stage || '',
+            conclusion: conclusionLabelMap[agg.conclusion] || agg.conclusion || '',
+            principle: agg.principle || '',
+          }
+          sourceText = `基于案例库 Top-K 聚合识别 (命中 ${data.data.results.length} 条，置信度 ${conf}%)`
+        } else {
+          analysis = {
+            location: top.crackLocation || '局部不规则区域',
+            locationConfidence: Math.round(top.similarity),
+            shape: Array.isArray(top.crackShape) ? top.crackShape.join('、') : (top.crackShape || '点放射状屏裂'),
+            shapeConfidence: Math.round(top.similarity),
+          }
+          sourceText = `基于 CLIP ViT-B/32 向量检索匹配 (相似度 ${top.similarity}%，共检索 ${data.data.totalHits} 条)`
         }
-        sourceText = `基于 CLIP ViT-B/32 向量检索匹配 (相似度 ${top.similarity}%，共检索 ${data.data.totalHits} 条)`
         clipUsed = true
       }
     } catch (e) {
@@ -1435,8 +1725,8 @@ async function runAnalysis(canvas) {
       document.getElementById('analysisDetail').innerHTML = report.report
       source.textContent = sourceText
 
-      // 显示 AI 分析面板（如果配置允许）
-      if (panelConfig.showAiPanel) {
+      // 混合模式：显示 AI 分析面板（如果配置允许）；仅RAG模式不显示
+      if (panelConfig.showAiPanel && panelConfig.analysisMode === 'hybrid') {
         document.getElementById('aiAnalysisPanel').style.display = 'block'
       }
     } catch (e) {
@@ -1550,9 +1840,9 @@ function knnClassify(features, trainingData, k) {
 // 轻量 Markdown 转 HTML（支持 **粗体**、*斜体*、标题、列表、代码）
 function renderMarkdown(text) {
   if (!text) return ''
+  // 先对文本中的 HTML 特殊字符进行转义
   let html = text
-    // 转义 HTML 特殊字符（保留已转义内容）
-    .replace(/&(?!amp;|lt;|gt;|quot;|#\d+;|#x[\da-f]+;)/g, '&amp;')
+    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
   // 粗体
@@ -1590,7 +1880,7 @@ async function runLLMAnalysis() {
 
   // 重置状态
   btn.classList.add('loading')
-  btn.textContent = '⏳ 分析中...'
+  btn.textContent = ' 分析中...'
   label.style.display = 'none'
   textDiv.innerHTML = ''
   metaDiv.innerHTML = ''
@@ -1618,7 +1908,7 @@ async function runLLMAnalysis() {
     const resp = await fetch('/api/knowledge/analyze-llm-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: state.photos.map(p => p.url), context }),
+      body: JSON.stringify({ images: state.photos.map(p => p.url), context, mode: panelConfig.analysisMode === 'llm' ? 'llm' : 'hybrid' }),
     })
 
     if (!resp.ok) {
@@ -1654,7 +1944,7 @@ async function runLLMAnalysis() {
         if (event.stage === 'token' && event.token) {
           streamFullText = event.token
           streamBox.style.display = 'block'
-          streamBox.textContent = '⏳ 正在生成分析内容...\n\n' + streamFullText
+          streamBox.textContent = '正在生成分析内容...\n\n' + streamFullText
           streamBox.scrollTop = streamBox.scrollHeight
         }
 
@@ -1670,12 +1960,30 @@ async function runLLMAnalysis() {
           progressDiv.style.display = 'none'
 
           const r = event.result
+          // 保存 LLM 原始结果，供纠正时回传对比
+          state.llmResult = {
+            statusObs: r.statusObs || '',
+            location: r.location || '',
+            shape: r.shape || '',
+            principle: r.principle || '',
+            stage: r.stage || '',
+            conclusion: r.conclusion || '',
+          }
           // LLM 结果仅在 LLM 面板展示，不覆盖 RAG 分析结果面板
           label.style.display = ''
           tag.textContent = `(基于 ${r.model}，耗时 ${(r.elapsed/1000).toFixed(1)}s)`
           textDiv.innerHTML = renderMarkdown(r.description) || renderMarkdown(report.report)
-          metaDiv.innerHTML = `📍 位置: ${r.location} | 🔍 形状: ${r.shape} | ⚠️ 严重程度: ${r.severity}`
+          metaDiv.innerHTML = `位置: ${r.location} | 形状: ${r.shape} | 环节: ${r.stage || '未知'} | 严重程度: ${r.severity}`
+          // 故障原理和鉴定结论单独展示
+          if (r.principle) metaDiv.innerHTML += `<br/>故障原理: ${r.principle}`
+          if (r.conclusion) {
+            const conclusionLabelMap = { product_quality_issue: '产品质量问题', not_product_quality: '非产品质量问题', no_damage: '屏幕完好' }
+            metaDiv.innerHTML += `<br/>鉴定结论: ${conclusionLabelMap[r.conclusion] || r.conclusion}`
+          }
           btn.style.display = 'none'
+          // 显示纠错按钮
+          const llmCorrBtn = resultDiv.querySelector('.llm-correct-btn')
+          if (llmCorrBtn) llmCorrBtn.style.display = ''
           return
         }
       }
@@ -1685,13 +1993,13 @@ async function runLLMAnalysis() {
     streamBox.style.display = 'none'
     label.style.display = ''
     btn.classList.remove('loading')
-    btn.textContent = '⚠️ 分析失败，点击重试'
+    btn.textContent = '分析失败，点击重试'
     btn.style.color = '#dc2626'
     btn.style.borderColor = '#dc2626'
     setTimeout(() => {
-      btn.textContent = '🤖 启动屏损鉴定分析'
-      btn.style.color = '#6d28d9'
-      btn.style.borderColor = '#7c3aed'
+      btn.textContent = '启动屏损鉴定分析'
+      btn.style.color = '#991b1b'
+      btn.style.borderColor = '#e60012'
     }, 3000)
     textDiv.textContent = '错误: ' + e.message
     metaDiv.textContent = ''
@@ -1699,52 +2007,221 @@ async function runLLMAnalysis() {
   }
 }
 
+let corrSelected = { statusObs: '', loc: '', shape: '', principle: '', stage: '', conclusion: '' }
+let _fieldDefs = null
+
+// 从 API 加载字段定义并渲染纠正面板
+async function loadFieldDefs() {
+  if (_fieldDefs) return
+  try {
+    const resp = await fetch('/api/knowledge/field-defs')
+    const data = await resp.json()
+    if (data.success) _fieldDefs = data.data
+    renderCorrectionFields()
+  } catch (e) {
+    console.error('[field-defs] 加载失败:', e)
+  }
+}
+
+function renderCorrectionFields() {
+  const container = document.getElementById('corrFieldsContainer')
+  if (!_fieldDefs) return
+
+  const defs = _fieldDefs
+  const fieldOrder = ['statusObs', 'location', 'shape', 'principle', 'stage', 'conclusion']
+  let html = ''
+
+  for (const fid of fieldOrder) {
+    const f = defs[fid]
+    if (!f) continue
+    const required = f.required ? ' <span class="field-required">*</span>' : ''
+    const pillId = `corrPills_${fid}`
+
+    if (f.type === 'textarea') {
+      html += `<div class="correction-field">
+        <div class="field-label">${f.label}</div>
+        <textarea id="corrField_${fid}" class="corr-textarea" placeholder="${f.placeholder || ''}" rows="2"></textarea>
+      </div>`
+    } else {
+      const options = f.options || []
+      html += `<div class="correction-field">
+        <div class="field-label">${f.label}${required}</div>
+        <div class="correction-pills" id="${pillId}">`
+
+      for (const opt of options) {
+        const val = typeof opt === 'string' ? opt : opt.value
+        let label = typeof opt === 'string' ? opt : opt.label
+        // 使用 pillLabels 缩略显示（如果配置了）
+        if (f.pillLabels && f.pillLabels[val]) label = f.pillLabels[val]
+        html += `<div class="correction-pill" data-val="${escHtml(val)}" data-field="${fid}">${escHtml(label)}</div>`
+      }
+
+      // 故障位置和故障形态增加自定义填写
+      if (fid === 'location' || fid === 'shape') {
+        html += `<div class="correction-pill corr-pill-custom" data-val="__custom__" data-field="${fid}">自定义</div>`
+        html += `</div>`
+        html += `<input type="text" id="corrField_${fid}_custom" class="corr-custom-input" placeholder="自行输入..." style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" />`
+      } else {
+        html += `</div>`
+      }
+    }
+    html += `</div>`
+  }
+
+  container.innerHTML = html
+}
+
 function showCorrection() {
   const panel = document.getElementById('correctionPanel')
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none'
-  document.getElementById('corrMsg').textContent = ''
-  document.getElementById('corrLocation').value = ''
-  document.getElementById('corrShape').value = ''
+  const isOpen = panel.style.display === 'block'
+  if (isOpen) {
+    hideCorrection()
+    return
+  }
+  // 确保字段定义已加载
+  if (!_fieldDefs) {
+    loadFieldDefs().then(() => {
+      // 延迟显示，等字段渲染完
+      panel.style.display = 'block'
+    })
+    return
+  }
+  // 重置选择
+  corrSelected = { statusObs: '', loc: '', shape: '', principle: '', stage: '', conclusion: '' }
+  document.getElementById('corrFeedback').className = 'correction-feedback'
+  document.getElementById('corrFeedback').textContent = ''
+  document.getElementById('corrConfirmBtn').disabled = true
+  // 重置所有 textarea 和 pills
+  document.querySelectorAll('#corrFieldsContainer textarea').forEach(t => t.value = '')
+  document.querySelectorAll('#corrFieldsContainer .correction-pill').forEach(p => p.classList.remove('selected'))
+  panel.style.display = 'block'
+}
+
+function hideCorrection() {
+  document.getElementById('correctionPanel').style.display = 'none'
+}
+
+// 统一绑定所有纠正面板 pill + textarea 事件
+document.getElementById('correctionPanel').addEventListener('click', function(e) {
+  const pill = e.target.closest('.correction-pill')
+  if (!pill) return
+  const parent = pill.parentElement
+  parent.querySelectorAll('.correction-pill').forEach(p => p.classList.remove('selected'))
+  pill.classList.add('selected')
+
+  const val = pill.dataset.val
+  const field = pill.dataset.field
+
+  // 处理自定义输入框的显示/隐藏
+  if (val === '__custom__') {
+    const customInput = document.getElementById(`corrField_${field}_custom`)
+    if (customInput) customInput.style.display = ''
+  } else {
+    const customInput = document.getElementById(`corrField_${field}_custom`)
+    if (customInput) { customInput.style.display = 'none'; customInput.value = '' }
+  }
+
+  if (field === 'location') corrSelected.loc = val
+  else if (field === 'shape') corrSelected.shape = val
+  else if (field === 'stage') corrSelected.stage = val
+  else if (field === 'conclusion') corrSelected.conclusion = val
+  updateCorrConfirm()
+})
+
+// 文本域变化时更新 corrSelected（委托监听）
+document.getElementById('corrFieldsContainer').addEventListener('input', function(e) {
+  const fid = e.target.id.replace('corrField_', '')
+  if (e.target.tagName === 'TEXTAREA') {
+    if (fid === 'statusObs') corrSelected.statusObs = e.target.value
+    else if (fid === 'principle') corrSelected.principle = e.target.value
+  }
+  // 自定义输入框变化时更新
+  if (fid === 'location_custom') corrSelected.locCustom = e.target.value
+  if (fid === 'shape_custom') corrSelected.shapeCustom = e.target.value
+  updateCorrConfirm()
+})
+
+function updateCorrConfirm() {
+  const hasLoc = corrSelected.loc === '__custom__' ? !!corrSelected.locCustom : !!corrSelected.loc
+  const hasShape = corrSelected.shape === '__custom__' ? !!corrSelected.shapeCustom : !!corrSelected.shape
+  document.getElementById('corrConfirmBtn').disabled = !(hasLoc && hasShape && corrSelected.stage && corrSelected.conclusion)
 }
 
 async function submitCorrection() {
-  const loc = document.getElementById('corrLocation').value
-  const shape = document.getElementById('corrShape').value
-  if (!loc || !shape) return
+  // 解析自定义值
+  const loc = corrSelected.loc === '__custom__' ? (corrSelected.locCustom || '') : corrSelected.loc
+  const shape = corrSelected.shape === '__custom__' ? (corrSelected.shapeCustom || '') : corrSelected.shape
 
-  // CLIP 模式下，直接在分析结果中体现纠正
+  if (!loc || !shape || !corrSelected.stage || !corrSelected.conclusion) return
+
+  const btn = document.getElementById('corrConfirmBtn')
+  btn.disabled = true
+  btn.textContent = '提交中...'
+
+  // 存储纠正前分析结果（用于回传 original）
+  if (!state.originalAnalysis) {
+    state.originalAnalysis = state.analysis ? { ...state.analysis } : {}
+    if (!state.originalLLM) state.originalLLM = state.llmResult ? { ...state.llmResult } : {}
+  }
+
+  // 更新分析结果
   state.analysis = {
+    statusObs: corrSelected.statusObs || '',
     location: loc,
     locationConfidence: 100,
     shape: shape,
     shapeConfidence: 100,
+    principle: corrSelected.principle || '',
+    stage: corrSelected.stage,
+    conclusion: corrSelected.conclusion,
+    corrected: true,
   }
   const report = generateAnalysisReport(state.analysis)
   document.getElementById('analysisDetail').innerHTML = report.report
-  document.getElementById('analysisSource').textContent = '人工校正 (CLIP 模型将持续学习优化)'
+  const srcEl = document.getElementById('analysisSource')
+  srcEl.innerHTML = '人工校正 <span class="corrected-badge">已纠正</span>'
   document.getElementById('correctionPanel').style.display = 'none'
-  document.getElementById('corrMsg').textContent = '分析结果已手动校正，已提交训练数据 ✓'
 
-  // 将纠正数据回传到后端知识库（训练闭环）
+  // 回传后端 — 纠正数据 + 同步到案例库
+  const fb = document.getElementById('corrFeedback')
   try {
     const payload = {
+      correctedStatusObs: corrSelected.statusObs || '',
       correctedLocation: loc,
       correctedShape: shape,
-      originalLocation: (typeof state.originalAnalysis === 'object' && state.originalAnalysis) ? state.originalAnalysis.location : '',
-      originalShape: (typeof state.originalAnalysis === 'object' && state.originalAnalysis) ? state.originalAnalysis.shape : '',
+      correctedPrinciple: corrSelected.principle || '',
+      correctedStage: corrSelected.stage,
+      correctedConclusion: corrSelected.conclusion,
+      originalStatusObs: (state.originalLLM && state.originalLLM) ? (state.originalLLM.statusObs || '') : '',
+      originalLocation: (state.originalAnalysis && state.originalAnalysis) ? (state.originalAnalysis.location || '') : '',
+      originalShape: (state.originalAnalysis && state.originalAnalysis) ? (state.originalAnalysis.shape || '') : '',
+      originalPrinciple: (state.originalLLM && state.originalLLM) ? (state.originalLLM.principle || '') : '',
+      originalStage: (state.originalLLM && state.originalLLM) ? (state.originalLLM.stage || '') : '',
+      originalConclusion: (state.originalLLM && state.originalLLM) ? (state.originalLLM.conclusion || '') : '',
       caseId: state.topSimilarCaseId || '',
     }
-    // 附带当前照片（缩小后）用于训练
     if (state.photos[0] && state.photos[0].url) {
       payload.imageBase64 = state.photos[0].url
     }
-    await fetch('/api/knowledge/correction', {
+    const res = await fetch('/api/knowledge/correction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-  } catch {
-    // 静默失败，不影响前端展示
+    const data = await res.json()
+    if (data?.data?.totalTraining) {
+      showToast(`训练数据已入库，当前共 ${data.data.totalTraining} 条反馈`)
+    }
+    if (data?.data?.caseCreated) {
+      showToast(`已自动创建案例并同步至案例库`)
+    } else if (data?.data?.caseUpdated) {
+      showToast(`已同步至案例库`)
+    }
+  } catch (e) {
+    showToast('提交纠正失败: ' + (e.message || '网络错误'))
+    console.error('[correction] 提交纠正失败:', e)
+  } finally {
+    btn.textContent = '确认提交并同步至案例库'
   }
 }
 
@@ -1764,9 +2241,11 @@ document.getElementById('packageDamage').addEventListener('change', function() {
 function openLightbox(src) {
   lightboxAngle = 0
   lightboxScale = 1
+  lightboxX = 0
+  lightboxY = 0
   const img = document.getElementById('lightboxImg')
   img.src = src
-  img.style.transform = 'rotate(0deg) scale(1)'
+  img.style.transform = 'rotate(0deg) scale(1) translate(0px,0px)'
   document.getElementById('imgLightbox').style.display = 'flex'
 }
 function closeLightbox() {
@@ -1778,8 +2257,49 @@ function rotateLightboxImg() {
 }
 function updateLightboxTransform() {
   const img = document.getElementById('lightboxImg')
-  img.style.transform = `rotate(${lightboxAngle}deg) scale(${lightboxScale})`
+  img.style.transform = `rotate(${lightboxAngle}deg) scale(${lightboxScale}) translate(${lightboxX}px, ${lightboxY}px)`
 }
+// 鼠标拖拽平移
+const lbImg = document.getElementById('lightboxImg')
+lbImg.addEventListener('mousedown', function(e) {
+  if (e.button !== 0) return
+  lbDragging = true
+  lbDragStartX = e.clientX
+  lbDragStartY = e.clientY
+  lbStartX = lightboxX
+  lbStartY = lightboxY
+  e.preventDefault()
+})
+document.addEventListener('mousemove', function(e) {
+  if (!lbDragging) return
+  lightboxX = lbStartX + (e.clientX - lbDragStartX)
+  lightboxY = lbStartY + (e.clientY - lbDragStartY)
+  updateLightboxTransform()
+})
+document.addEventListener('mouseup', function() {
+  lbDragging = false
+})
+// 触摸拖拽平移（移动端）
+lbImg.addEventListener('touchstart', function(e) {
+  const t = e.touches[0]
+  if (e.touches.length === 1) {
+    lbDragging = true
+    lbDragStartX = t.clientX
+    lbDragStartY = t.clientY
+    lbStartX = lightboxX
+    lbStartY = lightboxY
+  }
+}, { passive: true })
+lbImg.addEventListener('touchmove', function(e) {
+  if (!lbDragging || e.touches.length !== 1) return
+  const t = e.touches[0]
+  lightboxX = lbStartX + (t.clientX - lbDragStartX)
+  lightboxY = lbStartY + (t.clientY - lbDragStartY)
+  updateLightboxTransform()
+}, { passive: true })
+lbImg.addEventListener('touchend', function() {
+  lbDragging = false
+}, { passive: true })
 document.getElementById('imgLightbox').addEventListener('wheel', function(e) {
   e.preventDefault()
   const delta = e.deltaY > 0 ? -0.15 : 0.15

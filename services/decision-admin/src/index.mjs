@@ -1,4 +1,4 @@
-import { createServer, json } from './server-utils.mjs'
+import { createServer, json, fetchJson } from './server-utils.mjs'
 import { store } from './rules-store.mjs'
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.ADMIN_PORT || '8082', 10)
+const KNOWLEDGE_AI_URL = process.env.KNOWLEDGE_AI_URL || 'http://localhost:8083'
 const startTime = Date.now()
 
 const DEFAULT_RULES_NODES = [
@@ -43,7 +44,7 @@ async function seedDefaultRules() {
 function serveFile(res, filePath, contentType) {
   readFile(filePath)
     .then(data => {
-      res.writeHead(200, { 'Content-Type': contentType })
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache, no-store, must-revalidate' })
       res.end(data)
     })
     .catch(() => {
@@ -137,6 +138,19 @@ const routes = [
       const ok = await store.remove(query.id)
       if (!ok) return json(res, 404, { success: false, error: { code: 'NOT_FOUND', message: '规则不存在' } })
       json(res, 200, { success: true, message: '已删除' })
+    },
+  },
+  // ========== 数据库备份（通过 /api/admin 路径避免与通用代理冲突） ==========
+  {
+    method: 'POST',
+    path: '/api/admin/backup',
+    handler: async (_req, res) => {
+      try {
+        const result = await fetchJson(`${KNOWLEDGE_AI_URL}/api/knowledge/backup`, { method: 'POST', timeout: 30000 })
+        json(res, 200, result)
+      } catch (e) {
+        json(res, 502, { success: false, error: { code: 'PROXY_ERROR', message: `备份失败: ${e.message}` } })
+      }
     },
   },
   // ========== 静态文件：管理后台页面 ==========
