@@ -23,12 +23,12 @@ const DEFAULT_RULES_NODES = [
     branches: [{ answer: '是', nextNodeId: 'outcome_K' }, { answer: '否', nextNodeId: 'decision_install_use' }] },
   { id: 'decision_install_use', type: 'decision', question: '故障环节是否包含"拆机验机安装"或"使用保管不当"？',
     branches: [{ answer: '是', nextNodeId: 'outcome_N' }, { answer: '否', nextNodeId: 'outcome_O' }] },
-  { id: 'outcome_C', type: 'outcome', result: '非产品质量问题', conditionSummary: '已安装', nextNodeId: 'node_end' },
-  { id: 'outcome_E', type: 'outcome', result: '非产品质量问题', conditionSummary: '未安装 + 非授权开箱', nextNodeId: 'node_end' },
-  { id: 'outcome_H', type: 'outcome', result: '产品质量问题', conditionSummary: '未安装 + 授权开箱 + 包装完好 + 故障环节包含产品因素', nextNodeId: 'node_end' },
-  { id: 'outcome_K', type: 'outcome', result: '物流问题', conditionSummary: '未安装 + 授权开箱 + 包装破损 + 故障环节包含物流运输搬运', nextNodeId: 'node_end' },
-  { id: 'outcome_N', type: 'outcome', result: '非产品质量问题', conditionSummary: '故障环节包含拆机验机安装或使用保管不当', nextNodeId: 'node_end' },
-  { id: 'outcome_O', type: 'outcome', result: '需进一步综合判定', conditionSummary: '排除产品因素、物流因素、安装/使用因素后，参考具体屏裂类型及案例指导', nextNodeId: 'node_end' },
+  { id: 'outcome_C', type: 'outcome', result: '非质量问题', conditionSummary: '已安装', nextNodeId: 'node_end' },
+  { id: 'outcome_E', type: 'outcome', result: '非质量问题', conditionSummary: '未安装 + 非授权开箱', nextNodeId: 'node_end' },
+  { id: 'outcome_H', type: 'outcome', result: '质量问题', conditionSummary: '未安装 + 授权开箱 + 包装完好 + 故障环节包含产品因素', nextNodeId: 'node_end' },
+  { id: 'outcome_K', type: 'outcome', result: '非质量问题', conditionSummary: '未安装 + 授权开箱 + 包装破损 + 故障环节包含物流运输搬运', nextNodeId: 'node_end' },
+  { id: 'outcome_N', type: 'outcome', result: '非质量问题', conditionSummary: '故障环节包含拆机验机安装或使用保管不当', nextNodeId: 'node_end' },
+  { id: 'outcome_O', type: 'outcome', result: '非质量问题', conditionSummary: '排除产品因素、物流因素、安装/使用因素后，参考具体屏裂类型及案例指导', nextNodeId: 'node_end' },
   { id: 'node_end', type: 'end', description: '判定结束' },
 ]
 

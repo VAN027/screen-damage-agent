@@ -76,11 +76,11 @@ const ALIAS = {
 
 // 结论：中文标签 → 代码（统一存代码，与 field-defs conclusion 的 option value 一致）
 const CONCLUSION_LABEL_TO_CODE = {
-  '产品质量问题': 'product_quality_issue',
-  '非产品质量问题': 'not_product_quality',
+  '质量问题': 'product_quality_issue',
+  '产品质量问题': 'product_quality_issue',  // 兼容旧输出
+  '非质量问题': 'not_product_quality',
+  '非产品质量问题': 'not_product_quality',  // 兼容旧输出
   '屏幕完好': 'no_damage',
-  '物流问题': 'logistics_issue',
-  '需进一步鉴定': 'needs_further_review',
 }
 
 // 去除常见中英文标点

@@ -218,7 +218,7 @@ function exactMatch(a, b) {
 }
 
 const VALID_SYMPTOMS = ['linear_streak', 'dot_star', 'patch_leak', 'rainbow_melt', 'polarizer_scratch']
-const VALID_RESULTS = ['product_quality_issue', 'logistics_issue', 'not_product_quality', 'needs_further_review']
+const VALID_RESULTS = ['product_quality_issue', 'not_product_quality', 'no_damage']
 
 // 从模型配置中动态读取必填字段
 async function getRequiredFields() {
@@ -233,10 +233,9 @@ async function getRequiredFields() {
 }
 
 const RESULT_LABELS = {
-  product_quality_issue: '产品质量问题',
-  logistics_issue: '物流问题',
-  not_product_quality: '非产品质量问题',
-  needs_further_review: '需进一步综合判定',
+  product_quality_issue: '质量问题',
+  not_product_quality: '非质量问题',
+  no_damage: '屏幕完好',
 }
 
 function autoTitle(data) {
@@ -789,9 +788,14 @@ export async function rebuildVectorIndex() {
 
 export async function saveCorrection(entry) {
   await ensureStmts()
-  const { caseId, originalLocation, originalShape, correctedLocation, correctedShape, imageBase64 } = entry || {}
+  const {
+    caseId, originalLocation, originalShape,
+    correctedLocation, correctedShape,
+    correctedStatusObs, correctedPrinciple, correctedStage, correctedConclusion,
+    imageBase64,
+  } = entry || {}
 
-  // 1. 写入训练数据
+  // 1. 写入训练数据（用于 KNN 本地模型训练）
   const trainingEntry = {
     location: correctedLocation || '',
     shape: correctedShape || '',
@@ -828,5 +832,28 @@ export async function saveCorrection(entry) {
     }
   }
 
-  return { success: true, totalTraining, caseUpdated }
+  // 3. 如果有图片且有纠错标注结果，创建新案例同步到案例库
+  let caseCreated = false
+  if (imageBase64 && imageBase64.startsWith('data:image/') && correctedLocation && correctedShape) {
+    try {
+      const locationLabel = correctedLocation || '未知位置'
+      const shapeLabel = correctedShape || '未知形态'
+      const title = `人工校正 - ${locationLabel} - ${shapeLabel}`
+
+      await createCase({
+        title,
+        imageData: imageBase64,
+        crackLocation: correctedLocation,
+        crackShape: correctedShape,
+        crackStage: correctedStage || '',
+        result: correctedConclusion || '',
+        possibleCause: correctedPrinciple || '',
+      })
+      caseCreated = true
+    } catch (e) {
+      console.error('[saveCorrection] 案例创建失败:', e.message)
+    }
+  }
+
+  return { success: true, totalTraining, caseUpdated, caseCreated: caseCreated || undefined }
 }

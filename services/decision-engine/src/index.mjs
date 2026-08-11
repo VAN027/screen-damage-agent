@@ -73,13 +73,13 @@ function buildAnswers(req) {
 }
 
 function outcomeToEnum(outcome) {
-  if (outcome === '产品质量问题') return 'product_quality_issue'
+  if (outcome === '质量问题' || outcome === '产品质量问题') return 'product_quality_issue'
   return 'not_product_quality'
 }
 
 const RESULT_LABELS = {
-  product_quality_issue: '产品质量问题',
-  not_product_quality: '非产品质量问题',
+  product_quality_issue: '质量问题',
+  not_product_quality: '非质量问题',
   no_damage: '屏幕完好',
 }
 
@@ -109,7 +109,7 @@ const routes = [
       if (unknownCount >= 2 && unknownCount < 4) {
         result = 'not_product_quality'
       }
-      const resultLabel = RESULT_LABELS[result] || '非产品质量问题'
+      const resultLabel = RESULT_LABELS[result] || '非质量问题'
 
       json(res, 200, {
         success: true,

@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
     { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
     { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','__custom__'] },
     { id: 'crackStage', label: '屏损环节', type: 'tag-grid', required: false, options: ['产品因素','物流运输搬运','拆机验机安装','使用保管不当','__custom__'] },
-    { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'产品质量问题',cls:'pq'},{value:'logistics_issue',label:'物流问题',cls:'logistics'},{value:'not_product_quality',label:'非产品质量问题',cls:'npq'},{value:'needs_further_review',label:'需进一步鉴定',cls:'review'}] },
+    { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'质量问题',cls:'pq'},{value:'not_product_quality',label:'非质量问题',cls:'npq'},{value:'no_damage',label:'屏幕完好',cls:''}] },
     { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
     { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
     { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
@@ -108,7 +108,7 @@ function buildPrompt(config, imageCount = 1) {
   "shape": "屏损形态（从以下中选择一个：单条线状屏裂、多条线状屏裂、点放射状屏裂、发散性线状屏裂、环状/圈状屏裂、网状(大面积无规则)屏裂、漏液、熔屏）",
   "shapeConfidence": 0-100的置信度数字,
   "stage": "故障环节（从以下中选择一个：产品因素、物流运输搬运、拆机验机安装、使用保管不当；无法判断填\"无\"）",
-  "conclusion": "鉴定结论（从以下中选择一个：产品质量问题、非产品质量问题、屏幕完好；不确定填\"需进一步鉴定\"）",
+  "conclusion": "鉴定结论（从以下中选择一个：质量问题、非质量问题、屏幕完好）",
   "statusObs": "状态观察（屏幕安装状态、保护膜情况、有无外部损伤痕迹等，一句话）",
   "principle": "故障原理（简要描述损伤的形成机理和原因，一句话）",
   "description": "请按系统提示词要求的格式输出详细分析（状态观察、屏损现象、屏损原理、屏损环节、鉴定结论），可使用 Markdown 格式",
@@ -131,7 +131,7 @@ function buildPrompt(config, imageCount = 1) {
   "shape": "屏损形状（从以下中选择一个：单条线状屏裂、多条线状屏裂、点放射状屏裂、发散性线状屏裂、环状/圈状屏裂、网状(大面积无规则)屏裂、漏液、熔屏）",
   "shapeConfidence": 0-100的置信度数字,
   "stage": "故障环节（从以下中选择一个：产品因素、物流运输搬运、拆机验机安装、使用保管不当；无法判断填\"无\"）",
-  "conclusion": "鉴定结论（从以下中选择一个：产品质量问题、非产品质量问题、屏幕完好；不确定填\"需进一步鉴定\"）",
+  "conclusion": "鉴定结论（从以下中选择一个：质量问题、非质量问题、屏幕完好）",
   "statusObs": "状态观察（屏幕安装状态、保护膜情况、有无外部损伤痕迹等，一句话）",
   "principle": "故障原理（简要描述损伤的形成机理和原因，一句话）",
   "description": "用中文详细描述屏损情况。可使用 Markdown 格式：用 **粗体** 强调关键诊断结论，换行分段组织内容。包括：受力点位置、裂纹走向、损伤程度、可能的撞击痕迹等，150-300字",
@@ -197,8 +197,8 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
       ...imageBlocks,
     ],
   })
-  // 合并用户传入的 signal + 默认 300s 超时（推理模型耗时较长）
-  const timeoutSignal = AbortSignal.timeout(300000)
+  // 120 秒超时（已关闭深度思考）
+  const timeoutSignal = AbortSignal.timeout(120000)
   const effectiveSignal = signal
     ? AbortSignal.any([signal, timeoutSignal])
     : timeoutSignal
@@ -213,6 +213,7 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
       messages,
       temperature: config.temperature,
       max_tokens: config.maxTokens,
+      thinking: { type: 'disabled' },
     }),
     signal: effectiveSignal,
   })
@@ -239,9 +240,9 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
       ...imageBlocks,
     ],
   })
-  // 300 秒超时（推理模型流式输出通常较慢）
+  // 120 秒超时（已关闭深度思考，速度快很多）
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(new Error('LLM 流式请求超时 (300s)')), 300000)
+  const timeoutId = setTimeout(() => controller.abort(new Error('LLM 流式请求超时 (120s)')), 120000)
   const resp = await fetch(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
@@ -255,6 +256,7 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
       messages,
       temperature: config.temperature,
       max_tokens: config.maxTokens,
+      thinking: { type: 'disabled' },
     }),
     signal: controller.signal,
   })
@@ -686,14 +688,14 @@ function buildAnnotationPrompt(config = {}, ragContext = '') {
   "crackShape": "屏损形态（从以下选择一个：单条线状屏裂、多条线状屏裂、点放射状屏裂、发散性线状屏裂、环状/圈状屏裂、网状(大面积无规则)屏裂）",
   "crackPrinciple": "屏损原理（30-80字，仅基于图片可见痕迹推断，格式如"右下角存在明显磕碰点，放射状裂纹由此发散"）",
   "crackStage": "屏损环节（从以下选择一个：产品因素、物流运输搬运、拆机验机安装、使用保管不当）",
-  "result": "鉴定结论（从以下选择一个：product_quality_issue、logistics_issue、not_product_quality、needs_further_review）",
+  "result": "鉴定结论（从以下选择一个：product_quality_issue、not_product_quality、no_damage）",
   "summary": "一句话摘要（格式：\"屏损位置: XX, 形状: XX\"，15-30字）"
 }
 
 注意：
 - **首先根据电视机边框、品牌logo、底座/支架位置判断屏幕正方向（照片可能倒置或旋转），位置判断必须基于屏幕正方向。**
 - crackLocation 和 crackShape 必须从给定选项中选择，不得编造
-- result 映射关系：外力痕迹明显 → not_product_quality；无外力痕迹且有产品缺陷特征 → product_quality_issue；包装相关问题 → logistics_issue；无法确定 → needs_further_review
+- result 映射关系：外力痕迹明显 → not_product_quality；无外力痕迹且有产品缺陷特征 → product_quality_issue；无任何损伤痕迹 → no_damage
 - crackPrinciple 仅描述图片可见痕迹（如"右下角存在明显磕碰点，放射状裂纹由此发散"），不要写"可能是用户..."这类猜测`;
   let userMessage = '请分析这张屏幕照片生成标注。注意：crackPrinciple 是分析"为什么会坏"（成因推断），不是描述"坏了什么样子"（状态描述）。严格只返回 JSON，不要包含其他文字。'
   if (ragContext) {

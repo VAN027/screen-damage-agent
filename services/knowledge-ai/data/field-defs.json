@@ -85,13 +85,13 @@
       "type": "tag-grid",
       "required": false,
       "options": [
-        {"value": "product_quality_issue", "label": "产品质量问题", "cssClass": "quality", "icon": "✅"},
-        {"value": "not_product_quality", "label": "非产品质量问题", "cssClass": "npq", "icon": "❌"},
+        {"value": "product_quality_issue", "label": "质量问题", "cssClass": "quality", "icon": "✅"},
+        {"value": "not_product_quality", "label": "非质量问题", "cssClass": "npq", "icon": "❌"},
         {"value": "no_damage", "label": "屏幕完好", "cssClass": "", "icon": "📋"}
       ],
       "labelMap": {
-        "product_quality_issue": "产品质量问题",
-        "not_product_quality": "非产品质量问题",
+        "product_quality_issue": "质量问题",
+        "not_product_quality": "非质量问题",
         "no_damage": "屏幕完好"
       }
     }

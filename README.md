@@ -1,21 +1,26 @@
 # 屏损故障鉴定智能体
 
-> **版本**：v5.1 | **更新**：2026-06-28
+> **版本**：v5.2 | **更新**：2026-08-11
 
 ---
 
 ## 一、系统概述
 
-屏损智能体是一套面向 TCL 一线售后人员的智能鉴定系统。售后人员在现场遇到屏幕故障时，通过手机 H5 完成「症状采集 → 拍照取证 → 物理触感检测 → 安装信息录入」，系统**自动以图像向量检索匹配历史案例** + 决策树判定故障责任归属，并输出相似案例供现场比对。
+屏损智能体是一套面向 TCL 一线售后人员的智能鉴定系统。售后人员在现场遇到屏幕故障时，通过手机 H5 完成「症状采集 → 拍照取证 → 物理触感检测 → 安装信息录入」，系统**自动以 DINOv2 深度特征向量检索匹配历史案例** + 决策树判定故障责任归属，并输出相似案例供现场比对。
 
 核心亮点：
-- **向量检索**：512维图像特征（色阶直方图 + 分块均值 + Sobel边缘 + LBP纹理）→ 余弦相似度匹配
+- **DINOv2 深度特征**：384 维语义向量（facebook/dinov2-small ViT-S/14）→ 余弦相似度匹配，替代传统手工特征
 - **搜索融合**：图像相似度(60%) + 标签匹配(40%) 加权融合，准确率远超纯标签匹配
-- **LLM 智能鉴定**：支持多模态大模型分析屏损位置、形态、原理、环节，流式输出鉴定报告
+- **LLM 智能鉴定**：支持多模态大模型分析屏损位置、形态、原理、环节，SSE 流式输出鉴定报告
+- **鉴定分析模式**：支持 RAG 纯检索 / LLM 纯大模型 / Hybird 混合三种分析模式，通过管理后台配置切换
+- **手动鉴定按钮**：H5 页面提供「鉴定分析」按钮，支持拍照后手动触发分析，失败时显示错误信息
+- **纠正反馈同步案例库**：一线人员纠正分析结果后，自动生成 "人工校正 - {位置} - {形态}" 格式案例同步到案例库
+- **评估体系**：内置 LLM vs 人工标注对比评估，支持批量评测 + 混淆矩阵 + Excel 导出
 - **快速标注**：管理后台批量导入图片 → AI 自动预填 + 一键标注 → 入库为案例
 - **自动索引**：创建/导入案例时自动提取特征写入向量库，无需手动训练
 - **管理后台**：案例库 CRUD + 批量图片入库 + 一键重建向量索引 + 规则发布
-- **全 JavaScript**：已移除所有 TypeScript，统一为纯 Node.js + Python
+- **SQL 自助查询**：支持自定义 SQL 查询 + Excel 导出
+- **全 JavaScript**：统一为纯 Node.js ESM + Python FastAPI
 
 ---
 
@@ -25,12 +30,12 @@
 ┌───────────────────────────────────────────────────────────┐
 │              一线售后人员 (手机浏览器)                       │
 │          http://localhost:8080/                            │
-│  症状采集 → 拍照取证 → 触感检测 → 安装信息 → 判定结果        │
+│  症状采集 → 拍照取证 → 鉴定分析 → 结果查看 → 纠正反馈       │
 └──────────────────────┬────────────────────────────────────┘
                        │ HTTP
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│  gateway-bff     :8080    Node.js                        │
+│  gateway-bff     :8080    Node.js (Fastify-like)        │
 │  前端托管 + 请求聚合 + API 代理 + SSE 流式透传              │
 └──┬───────────┬──────────────┬───────────────────────────┘
    │           │              │
@@ -40,29 +45,29 @@
 │:8081    │ │:8083       │ │:8082                   │
 │Node.js  │ │Node.js     │ │Node.js                  │
 │         │ │            │ │                        │
-│决策树   │ │向量+标签    │ │案例管理 + 批量导入       │
-│判定引擎 │ │融合检索     │ │标注字段配置              │
+│决策树   │ │DINOv2 向量 │ │案例管理 + 批量导入       │
+│判定引擎 │ │+ 标签融合   │ │评估体系管理              │
 │置信度   │ │LLM 分析    │ │向量索引重建 + 规则管理   │
-│打分机制 │ │知识库 RAG   │ │模型配置管理              │
+│打分机制 │ │知识库 RAG  │ │模型配置管理              │
 └─────────┘ └─────┬──────┘ └───────────────────────┘
                   │
                   ▼
          ┌───────────────────┐
          │ Python 特征服务    │
          │ :8084              │
-         │ PIL+Numpy 512维    │
-         │ 图像特征提取        │
+         │ DINOv2 ViT-S/14    │
+         │ 384维 语义向量      │
          │ (内存索引/Milvus)  │
          └───────────────────┘
 ```
 
 | 服务 | 端口 | 职责 |
 |------|:---:|------|
-| **gateway-bff** | 8080 | 前端托管 + 请求聚合 + API 代理 + SSE 流式透传 |
+| **gateway-bff** | 8080 | 前端 H5 托管 + API 聚合代理 + SSE 流式透传 |
 | **decision-engine** | 8081 | 决策树判定引擎 + 置信度打分 |
-| **decision-admin** | 8082 | 管理中台（案例库 + 向量索引 + 规则 + 模型配置） |
-| **knowledge-ai** | 8083 | 知识检索 + 向量融合匹配 + LLM 分析 + RAG |
-| **python-features** | 8084 | 图像特征提取 (PIL+Numpy, 512维) |
+| **decision-admin** | 8082 | 管理中台（案例库 + 向量索引 + 评估 + 规则 + 模型配置） |
+| **knowledge-ai** | 8083 | 知识检索 + DINOv2 向量融合匹配 + LLM 分析 + RAG |
+| **python-features** | 8084 | DINOv2 ViT-S/14 图像特征提取 (384维) + 向量数据库 |
 
 ---
 
@@ -75,13 +80,14 @@
 | 步骤 | 功能 | 操作 |
 |:---:|------|------|
 | ① | 症状初筛：屏损类型可视化卡片，多选 | 点击卡片 |
-| ② | 拍照取证：调用摄像头（后置优先），自动水印 | 点击「📷 拍照」 |
+| ② | 拍照取证：调用摄像头（后置优先），支持多张 | 点击「📷 拍照」 |
 | ② | 微距引导：虚线框 + 强制对焦提示 | 点击「微距辅助线」 |
+| ② | 鉴定分析：手动触发按钮，遵循管理后台配置的分析模式 | 点击「鉴定分析」 |
 | ③ | 物理触感：凹凸感/内屏裂痕 | 开关选择 |
 | ④ | 安装信息：安装状态/开箱人员/包装/故障环节 | 下拉 + 多选 |
-| ⑤ | LLM 流式分析：多模态大模型实时输出鉴定报告 | 自动执行 |
+| ⑤ | LLM 流式分析：多模态大模型实时输出鉴定报告 | 自动或手动触发 |
 | ⑤ | 相似案例：向量+标签融合匹配，Top 5 推荐 | 自动加载 |
-| ⑤ | 纠正反馈：对分析结果纠错，提交为训练数据 | 手动操作 |
+| ⑤ | 纠正反馈：对分析结果纠错，自动同步案例库 | 手动操作 |
 
 ### 3.2 管理后台
 
@@ -93,7 +99,7 @@
 - 自定义标注字段（Tag 标签、结论按钮、文本域、输入框）
 - 图片批量入库 + 快速标注
 
-#### 快速标注（⚡ 核心功能）
+#### 快速标注（核心功能）
 - 拖拽批量导入图片
 - **AI 批量预填**：对未标注图片逐张调 LLM，带实时进度条
 - **AI 分析此图**：单张调用 LLM 填入全部字段
@@ -103,6 +109,7 @@
 - 标签按钮点击切换：选中再次点击取消
 
 #### 模型配置
+- **标注分析模式**：RAG / LLM / Hybird 三种模式可切换
 - **主模型**：LLM 接口配置（API Key / Endpoint / 温度 / Max Token）
 - **系统提示词**：自定义鉴定指令，支持任意格式输出
 - **标注模型**：独立配置标注专用模型（支持便宜模型降本）
@@ -110,20 +117,27 @@
 - **RAG 知识库**：文档上传 / 检索配置 / 开关控制
 - 模型测试：上传图片实时验证配置
 
+#### 评估体系
+- LLM 标注 vs 人工标注对比评估
+- 批量评测 + 混淆矩阵分析
+- 分字段准确率统计（位置/形态/环节/结论/状态观测/原理）
+- Excel 评估报告导出
+
 #### 向量检索
 - 一键重建向量索引
 - 向量服务状态监控
-- CLIP 可用性检测
+- DINOv2 可用性检测
 
 ### 3.3 向量检索
 
 | 特性 | 说明 |
 |------|------|
-| **特征维度** | 512 维：色阶(128) + 分块均值(128) + Sobel边缘(128) + LBP纹理(128) |
+| **特征维度** | 384 维：DINOv2 ViT-S/14 CLS Token |
+| **模型** | facebook/dinov2-small |
 | **相似度算法** | L2归一化 → 余弦相似度（点积） |
 | **融合得分** | 图像相似度 × 0.6 + 标签匹配 × 0.4 |
 | **匹配阈值** | ≥80% 覆盖分析结论 / ≥70% 高亮推荐 / <50% 过滤 |
-| **存储引擎** | 内存索引 + JSON持久化，可选 Milvus |
+| **存储引擎** | 内存索引（numpy 余弦相似度），可选 Milvus |
 | **自动索引** | 创建案例时自动提取特征写入向量库 |
 
 ---
@@ -133,34 +147,11 @@
 ### 4.1 环境要求
 
 - **Node.js** v18+
-- **Python** 3.9+
+- **Python** 3.9+（含 venv）
+- Python 依赖需提前安装：`pip install -r services/knowledge-ai/python/requirements.txt`
+- DINOv2 模型需提前下载至本地缓存（首次运行自动下载 `facebook/dinov2-small`）
 
-### 4.2 一键启动
-
-```powershell
-.\start.ps1          # 四个服务分窗口启动
-```
-
-### 4.3 分步启动（推荐调试用）
-
-```powershell
-# 终端 1 — Python 图像特征服务 :8084（必须先启动）
-python services/knowledge-ai/python/main.py
-
-# 终端 2 — Node.js 知识库服务 :8083
-node services/knowledge-ai/src/index.mjs
-
-# 终端 3 — Node.js 管理中台 :8082
-node services/decision-admin/src/index.mjs
-
-# 终端 4 — Node.js BFF 网关 :8080
-node services/gateway-bff/src/index.mjs
-
-# 可选 — 决策引擎 :8081
-node services/decision-engine/src/index.mjs
-```
-
-### 4.4 生产部署（PM2 + Nginx）
+### 4.2 一键启动（PM2 推荐）
 
 ```bash
 # 安装 PM2
@@ -169,16 +160,43 @@ npm install -g pm2
 # 启动所有服务
 pm2 start ecosystem.config.cjs
 
-# Nginx 反向代理（参考 nginx-site.conf）
+# 查看状态
+pm2 status
+
+# 查看日志
+pm2 logs
 ```
 
-### 4.5 可选：Milvus 向量数据库
+### 4.3 分步启动（调试用）
+
+```bash
+# 终端 1 — Python 特征服务 :8084（必须先启动）
+python services/knowledge-ai/python/main.py
+
+# 终端 2 — Node.js 知识库服务 :8083
+node services/knowledge-ai/src/index.mjs
+
+# 终端 3 — Node.js 管理中台 :8082
+node services/decision-admin/src/index.mjs
+
+# 终端 4 — Node.js 决策引擎 :8081
+node services/decision-engine/src/index.mjs
+
+# 终端 5 — Node.js BFF 网关 :8080
+node services/gateway-bff/src/index.mjs
+```
+
+### 4.4 可选：Milvus 向量数据库
 
 ```bash
 docker run -d --name milvus-standalone -p 19530:19530 -p 9091:9091 milvusdb/milvus:latest
 ```
 
 Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测到则回退内存索引。
+
+### 4.5 Nginx 反向代理（生产部署）
+
+参考项目根目录 `nginx-site.conf` 配置。
 
 ### 4.6 访问地址
 
@@ -192,7 +210,83 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 
 ## 五、API 接口
 
-### 5.1 案例判定
+### 5.1 BFF 网关原生端点 (:8080)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/health` | 网关健康检查 |
+| POST | `/api/v1/cases/decide` | 案例判定（调决策引擎 + 知识检索） |
+| POST | `/api/v1/cases/search-similar` | 相似案例搜索 |
+| GET | `/` | H5 前端页面 |
+| GET | `/index.html` | H5 前端页面 |
+
+### 5.2 Knowledge-AI 代理端点 (:8080 → :8083)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET/POST | `/api/knowledge/model-config` | 主模型配置 |
+| GET/POST | `/api/knowledge/annotation-config` | 标注模型配置 |
+| POST | `/api/knowledge/search-vector` | 纯向量检索 |
+| POST | `/api/knowledge/correction` | 提交纠错（含同步案例库） |
+| POST | `/api/knowledge/annotate-single` | 单张图片 AI 标注 |
+| POST | `/api/knowledge/annotate-batch` | 批量图片 AI 标注 |
+| GET | `/api/knowledge/cases/result-stats` | 案例结果统计 |
+| POST | `/api/knowledge/analyze-llm-stream` | LLM 流式分析 (SSE) |
+| GET | `/api/knowledge/field-defs` | 集中式字段定义 |
+| GET | `/api/knowledge/images` | 案例图片代理（二进制透传） |
+| POST | `/api/knowledge/sql-query` | SQL 自助查询 |
+| POST | `/api/knowledge/sql-query/export` | SQL 结果 Excel 导出 |
+
+### 5.3 Knowledge-AI 内部端点 (:8083)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/knowledge/health` | 服务健康检查 |
+| GET | `/api/knowledge/stats` | 知识库统计 |
+| GET | `/api/knowledge/backup` | 数据备份 |
+| GET | `/api/knowledge/case` | 案例详情 |
+| POST | `/api/knowledge/search` | 融合检索（图像+标签） |
+| POST | `/api/knowledge/search-vector` | 纯向量检索 |
+| GET | `/api/knowledge/vector-stats` | 向量服务状态 |
+| POST | `/api/knowledge/rebuild-index` | 重建向量索引 |
+| POST | `/api/knowledge/extract` | 图像特征提取 |
+| GET/POST/PUT/DELETE | `/api/knowledge/cases` | 案例 CRUD |
+| POST | `/api/knowledge/cases/batch-delete` | 批量删除案例 |
+| POST | `/api/knowledge/cases/batch` | 批量导入案例 |
+| GET | `/api/knowledge/images` | 案例图片 |
+| POST | `/api/knowledge/cases/from-images` | 图片批量入库 |
+| GET/POST | `/api/knowledge/training` | 训练数据管理 |
+| POST | `/api/knowledge/correction` | 纠错反馈 |
+| POST | `/api/knowledge/analyze-llm` | LLM 分析（非流式） |
+| POST | `/api/knowledge/analyze-llm-stream` | LLM 流式分析 (SSE) |
+| POST | `/api/knowledge/annotate-single` | 单张 AI 标注 |
+| POST | `/api/knowledge/annotate-batch` | 批量 AI 标注 |
+| GET/POST | `/api/knowledge/model-config` | 模型配置 |
+| GET/POST | `/api/knowledge/annotation-config` | 标注配置 |
+| GET | `/api/knowledge/field-defs` | 字段定义 |
+| GET | `/api/knowledge/eval/list` | 评估列表 |
+| POST | `/api/knowledge/eval/create` | 创建评估 |
+| POST | `/api/knowledge/eval/upload-images` | 评估图片上传 |
+| POST | `/api/knowledge/eval/save` | 保存评估标注 |
+| POST | `/api/knowledge/eval/batch-analyze` | 批量评估分析 |
+| GET | `/api/knowledge/eval/stats` | 评估统计 |
+| GET | `/api/knowledge/eval/export-xlsx` | 评估 Excel 导出 |
+| POST | `/api/knowledge/eval/batch` | 批量评估操作 |
+| POST | `/api/knowledge/eval/sync-to-cases` | 评估同步到案例 |
+| POST | `/api/knowledge/eval/batch-delete` | 批量删除评估 |
+| POST | `/api/knowledge/eval/clean-orphans` | 清理孤立评估 |
+| GET | `/api/knowledge/kb/stats` | 知识库统计 |
+| GET | `/api/knowledge/kb/documents` | 知识库文档列表 |
+| GET | `/api/knowledge/kb/document` | 知识库文档详情 |
+| POST | `/api/knowledge/kb/upload` | 文档上传 |
+| DELETE | `/api/knowledge/kb/document` | 文档删除 |
+| POST | `/api/knowledge/kb/search` | 知识库检索 |
+| GET | `/api/knowledge/dashboard` | 仪表盘统计 |
+| GET | `/api/knowledge/sql-schema` | SQL 数据库结构 |
+| POST | `/api/knowledge/sql-query` | SQL 自助查询 |
+| POST | `/api/knowledge/sql-query/export` | SQL 结果导出 |
+
+### 5.4 案例判定请求体
 
 ```
 POST /api/v1/cases/decide
@@ -208,10 +302,10 @@ Content-Type: application/json
 }
 ```
 
-### 5.2 LLM 流式分析（SSE）
+### 5.5 LLM 流式分析 (SSE)
 
 ```
-POST /api/v1/llm/analyze-stream
+POST /api/knowledge/analyze-llm-stream
 Content-Type: application/json
 
 {
@@ -221,42 +315,6 @@ Content-Type: application/json
 ```
 
 响应为 SSE 流式，实时输出鉴定报告。
-
-### 5.3 标注 API (8083)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/knowledge/annotate-single` | 单张图片 AI 标注（返回 JSON 字段） |
-| POST | `/api/knowledge/annotate-batch` | 批量图片 AI 标注 |
-| GET/POST | `/api/knowledge/annotation-config` | 标注模型配置（模型/提示词/参数） |
-
-### 5.4 知识库 API (8083)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/knowledge/case?id=` | 案例详情 |
-| POST | `/api/knowledge/search` | 融合检索（图像+标签） |
-| POST | `/api/knowledge/search-vector` | 纯向量检索 |
-| POST | `/api/knowledge/rebuild-index` | 触发重建向量库 |
-| GET | `/api/knowledge/vector-stats` | 向量服务状态 |
-| POST | `/api/knowledge/analyze` | LLM 深度分析 |
-| POST | `/api/knowledge/analyze-stream` | LLM 流式分析 (SSE) |
-| GET/POST | `/api/knowledge/cases*` | 案例 CRUD |
-| POST | `/api/knowledge/cases/batch-delete` | 批量删除 |
-| GET/POST | `/api/knowledge/model-config` | 主模型配置 |
-| GET/POST | `/api/knowledge/annotation-config` | 标注模型配置 |
-| POST | `/api/knowledge/kb/upload` | 知识库文档上传 |
-| GET | `/api/knowledge/kb/search` | 知识库检索 |
-| POST | `/api/knowledge/correction` | 提交纠错训练数据 |
-
-### 5.5 规则管理 (8082)
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/admin/rules` | 规则列表 |
-| POST | `/api/admin/rules` | 创建规则 |
-| PUT | `/api/admin/rules/update` | 更新规则 |
-| POST | `/api/admin/rules/publish` | 发布规则 |
 
 ---
 
@@ -292,7 +350,70 @@ Content-Type: application/json
 
 ---
 
-## 七、快速标注字段配置
+## 七、数据库结构
+
+### SQLite 数据库 (knowledge.db)
+
+#### cases 表
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT (PK) | 案例 ID |
+| title | TEXT | 标题 |
+| deviceModel | TEXT | 设备型号 |
+| symptoms | JSON | 症状列表 |
+| crackShape | JSON | 屏损形态 |
+| crackLocation | TEXT | 屏损位置 |
+| physicalFeature | TEXT | 物理特征 |
+| liquidState | TEXT | 漏液状态 |
+| installStatus | TEXT | 安装状态 |
+| packageDamage | TEXT | 包装损坏 |
+| crackStage | TEXT | 屏损环节 |
+| crackPrinciple | TEXT | 屏损原理 |
+| result | TEXT | 鉴定结果 |
+| resultLabel | TEXT | 结果标签 |
+| summary | TEXT | 摘要 |
+| tags | JSON | 标签 |
+| images | JSON | 图片列表 |
+| possibleCause | TEXT | 可能原因 |
+| warrantyTip | TEXT | 保修提示 |
+| corrections | JSON | 纠正记录 |
+| needsReview | INTEGER | 是否需要复核 |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 更新时间 |
+
+#### training 表
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER (PK) | 自增 ID |
+| features | JSON | 特征向量 |
+| statusObs | TEXT | 状态观测 |
+| location | TEXT | 屏损位置 |
+| shape | TEXT | 屏损形态 |
+| principle | TEXT | 屏损原理 |
+| stage | TEXT | 屏损环节 |
+| conclusion | TEXT | 鉴定结论 |
+| caseId | TEXT | 关联案例 ID |
+| source | TEXT | 数据来源 |
+| imageBase64 | TEXT | 图片 Base64 |
+| created_at | TEXT | 创建时间 |
+
+#### evaluations 表
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER (PK) | 自增 ID |
+| case_id | TEXT (UNIQUE) | 案例 ID |
+| case_title | TEXT | 案例标题 |
+| image_name | TEXT | 图片名 |
+| llm_* | TEXT | LLM 标注字段 |
+| human_* | TEXT | 人工标注字段 |
+| match_* | INTEGER | 匹配结果（-1=未判断, 0=不匹配, 1=匹配） |
+| rag_* | TEXT | RAG 推断字段 |
+| analyzed | INTEGER | 是否已分析 |
+| judged_by | TEXT | 判定人 |
+
+---
+
+## 八、快速标注字段配置
 
 管理后台支持动态配置标注字段，默认包含：
 
@@ -302,7 +423,7 @@ Content-Type: application/json
 | `crackLocation` | 屏损位置 | tag-grid | ✓ | 天侧/地侧/左侧/右侧/四角区域/中央区域/全屏区域/局部不规则区域 |
 | `crackShape` | 屏损形态 | tag-grid | ✓ | 单条线状屏裂/多条线状屏裂/点放射状屏裂/发散性线状屏裂/环状圈状屏裂/网状屏裂/漏液/熔屏 |
 | `crackStage` | 屏损环节 | tag-grid | | 产品因素/物流运输搬运/拆机验机安装/使用保管不当 |
-| `result` | 鉴定结论 | result-btns | | 产品质量问题/物流问题/非产品质量问题/需进一步鉴定 |
+| `result` | 鉴定结论 | result-btns | | 质量问题/非质量问题/屏幕完好 |
 | `installStatus` | 安装状态 | tag-grid | | 已安装/未安装 |
 | `packageDamage` | 包装状态 | tag-grid | | 无损坏/轻微损坏/严重损坏 |
 | `crackPrinciple` | 屏损原理 | textarea | | 自由文本（分析为何损坏的成因推断） |
@@ -311,61 +432,73 @@ Content-Type: application/json
 
 ---
 
-## 八、项目文件结构
+## 九、项目文件结构
 
 ```
 屏损智能体/
 ├── frontend/
-│   └── index.html                     ← H5 单文件 SPA
+│   └── index.html                     ← H5 单文件 SPA（~3000 行）
 ├── services/
 │   ├── shared/
 │   │   └── server-utils.mjs           ← 公共 HTTP 工具模块
 │   ├── gateway-bff/                   ← :8080 请求聚合 + 前端托管
+│   │   ├── Dockerfile
 │   │   └── src/
-│   │       ├── index.mjs
-│   │       └── server-utils.mjs
+│   │       └── index.mjs              ← BFF 路由 + API 代理 + SSE 透传
 │   ├── decision-engine/               ← :8081 决策树判定引擎
+│   │   ├── Dockerfile
 │   │   └── src/
-│   │       ├── index.mjs
-│   │       └── decision-tree.mjs
+│   │       ├── index.mjs              ← 决策 API + 规则加载
+│   │       └── decision-tree.mjs      ← 决策树评估逻辑
 │   ├── decision-admin/                ← :8082 管理中台
+│   │   ├── Dockerfile
 │   │   ├── src/
-│   │   │   ├── index.mjs
+│   │   │   ├── index.mjs              ← 规则 CRUD + 发布 + 知识代理
+│   │   │   ├── rules-store.mjs        ← 基于 JSON 文件的规则存储
 │   │   │   └── server-utils.mjs
-│   │   └── static/admin.html          ← 导师后台 (3000行)
+│   │   └── static/
+│   │       └── admin.html             ← 管理后台 SPA（~3000 行）
 │   └── knowledge-ai/                  ← :8083 知识检索 + 向量融合 + LLM
+│       ├── Dockerfile
+│       ├── Dockerfile.python
 │       ├── src/
-│       │   ├── index.mjs              ← API 路由
-│       │   ├── search-engine.mjs      ← 向量融合检索 + 案例 CRUD
-│       │   ├── llm-analyzer.mjs       ← LLM 分析 + 标注模型
+│       │   ├── index.mjs              ← API 路由（~50 个端点）
+│       │   ├── search-engine.mjs      ← 向量融合检索 + 案例 CRUD + 纠正反馈
+│       │   ├── llm-analyzer.mjs       ← LLM 分析 + 标注模型 + SSE 流式
 │       │   ├── knowledge-base.mjs     ← RAG 知识库管理
+│       │   ├── clip-client.mjs        ← Python 特征服务 HTTP 客户端
+│       │   ├── db.mjs                 ← SQLite 数据库 + 迁移 + 备份
+│       │   ├── field-normalize.mjs    ← 字段值规范化（中英文映射）
 │       │   └── server-utils.mjs
 │       ├── data/
-│       │   ├── cases.json             ← 案例库持久化
-│       │   ├── training.json          ← 纠错训练数据
-│       │   ├── vector-index.json      ← 向量索引持久化
-│       │   ├── model-config.json      ← 主模型配置 (含 Key，不入库)
-│       │   ├── model-config.template.json ← 模型配置模板
-│       │   ├── annotation-config.json ← 标注模型配置 (含 Key，不入库)
-│       │   ├── annotation-config.template.json ← 标注配置模板
-│       │   ├── knowledge-base.json     ← 知识库文档索引
-│       │   └── images/                ← 案例图片 (24张)
+│       │   ├── knowledge.db           ← SQLite 数据库
+│       │   ├── model-config.json      ← 主模型配置（含 Key，不入库）
+│       │   ├── annotation-config.json ← 标注模型配置（含 Key，不入库）
+│       │   ├── field-defs.json        ← 集中式字段定义
+│       │   ├── knowledge-base.json    ← 知识库文档索引
+│       │   ├── backup/                ← 数据库自动备份（保留 7 天）
+│       │   └── images/                ← 案例图片存储
 │       └── python/
-│           └── main.py                ← 图像特征服务 (PIL+Numpy, 512维)
+│           ├── main.py                ← DINOv2 特征服务 (FastAPI)
+│           └── requirements.txt       ← Python 依赖
+├── docker-compose.yml                 ← 5 服务编排
 ├── ecosystem.config.cjs               ← PM2 生产部署配置
 ├── nginx-site.conf                    ← Nginx 反向代理配置
+├── start.ps1                          ← Windows 开发启动脚本
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
-## 九、如何提升准确率
+## 十、如何提升准确率
 
 1. **积累高质量案例**：在管理后台录入清晰的特征图片 + 准确的标签（crackLocation/crackShape），创建即自动索引
 2. **标签准确**：融合分依赖标签匹配（权重 40%），标签越准融合分越可靠
 3. **类型覆盖**：每种屏损（漏液/裂纹/冲击点/偏光片划伤）至少 3 个案例
 4. **重建索引**：特征算法更新后，在管理后台点击「重建向量库」
 5. **标注提示词优化**：在标注模型配置中微调 systemPrompt，让 LLM 输出更精准的成因分析
+6. **利用评估体系**：通过 LLM vs 人工对比评估，持续监控模型标注准确率
+7. **纠正反馈闭环**：一线人员的纠正结果会自动同步到案例库，形成数据闭环
 
 准确率取决于案例库质量而非模型训练——**创建案例 = 训练**。

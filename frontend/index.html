@@ -271,6 +271,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
     <div id="analysisHint" style="display:none;text-align:center;padding:16px;color:#94a3b8;font-size:13px;">
       请上传图片并填写安装与故障信息后，查看分析结果
     </div>
+    <div id="analysisActions" style="display:none;text-align:center;padding:12px 0;">
+      <button class="btn btn-primary" id="manualAnalyzeBtn" onclick="triggerManualAnalysis()" style="width:82%;padding:14px 20px;font-size:16px;">
+        鉴定分析
+      </button>
+      <div id="analysisErrorBox" style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#dc2626;font-size:13px;text-align:left;"></div>
+    </div>
     <div class="analysis-panel" id="analysisPanel">
       <div class="analysis-title"> RAG 分析结果</div>
       <div class="analysis-loading" id="analysisLoading">正在分析屏损特征...</div>
@@ -739,6 +745,7 @@ function removePhoto(index) {
     document.getElementById('analysisPanel').style.display = 'none'
     document.getElementById('aiAnalysisPanel').style.display = 'none'
     document.getElementById('analysisHint').style.display = 'none'
+    document.getElementById('analysisActions').style.display = 'none'
     updateSubmitState()
     document.getElementById('btnRetake').style.display = 'none'
     document.getElementById('btnInfoRow').style.display = 'none'
@@ -757,6 +764,7 @@ function removePhoto(index) {
     document.getElementById('analysisPanel').style.display = 'none'
     document.getElementById('aiAnalysisPanel').style.display = 'none'
     document.getElementById('analysisHint').style.display = ''
+    document.getElementById('analysisActions').style.display = 'none'
   }
 }
 
@@ -821,6 +829,7 @@ function retake() {
   document.getElementById('photoPreview').style.display = 'none'
   document.getElementById('analysisPanel').style.display = 'none'
   document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('analysisActions').style.display = 'none'
   document.getElementById('btnRetake').style.display = 'none'
   document.getElementById('btnCapture').disabled = true
   document.getElementById('btnInfoRow').style.display = 'none'
@@ -1004,6 +1013,13 @@ function resetLLMResult() {
   btn.textContent = '启动屏损鉴定分析'
   btn.style.color = '#b91c1c'
   btn.style.borderColor = '#fca5a5'
+  // 重置手动分析按钮
+  const manualBtn = document.getElementById('manualAnalyzeBtn')
+  manualBtn.disabled = false
+  manualBtn.textContent = '鉴定分析'
+  manualBtn.style.opacity = '1'
+  manualBtn.style.background = ''
+  document.getElementById('analysisErrorBox').style.display = 'none'
 }
 function togglePill(el) {
   el.classList.toggle('selected')
@@ -1087,16 +1103,19 @@ function maybeRunInitialAnalysis() {
     document.getElementById('analysisPanel').style.display = 'none'
     document.getElementById('aiAnalysisPanel').style.display = 'none'
     document.getElementById('analysisHint').style.display = 'none'
+    document.getElementById('analysisActions').style.display = 'none'
     return
   }
   if (!state.infoConfirmed) {
     document.getElementById('analysisPanel').style.display = 'none'
     document.getElementById('aiAnalysisPanel').style.display = 'none'
     document.getElementById('analysisHint').style.display = ''
+    document.getElementById('analysisActions').style.display = 'none'
     return
   }
-  // photos + info confirmed → run analysis
+  // photos + info confirmed → show analysis button and run analysis
   document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('analysisActions').style.display = ''
   const mode = panelConfig.analysisMode || 'hybrid'
   const ragPanel = document.getElementById('analysisPanel')
   const aiPanel = document.getElementById('aiAnalysisPanel')
@@ -1105,27 +1124,30 @@ function maybeRunInitialAnalysis() {
     ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
     aiPanel.style.display = 'none'
   } else if (mode === 'llm') {
-    // 仅LLM识别：只显示 LLM 分析面板
-    ragPanel.style.display = 'none'
-    aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
-  } else {
+      // 仅LLM识别：只显示 LLM 分析面板
+      ragPanel.style.display = 'none'
+      aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
+      console.log('[LLM] maybeRunInitialAnalysis: llm模式, showAiPanel:', panelConfig.showAiPanel, 'photo0.url前50字符:', first.url?.substring(0,50))
+    } else {
     ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
     aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
   }
-  // 取第一张做主图跑 RAG 分析
+  // 纯 LLM 模式直接触发，不需要加载图片进 canvas
+  if (mode === 'llm') {
+    if (panelConfig.showAiPanel) runLLMAnalysis()
+    return
+  }
+
+  // RAG / hybrid 模式：加载图片进 canvas 做边缘检测
   const first = state.photos[0]
   const img = new Image()
   img.onload = () => {
     const c = document.createElement('canvas')
     c.width = img.width; c.height = img.height
     c.getContext('2d').drawImage(img, 0, 0)
-    if (mode === 'llm') {
-      if (panelConfig.showAiPanel) runLLMAnalysis()
-    } else {
-      runAnalysis(c)
-      // 混合模式：RAG 分析启动后同步自动启动 AI LLM 分析
-      if (mode === 'hybrid' && panelConfig.showAiPanel) runLLMAnalysis()
-    }
+    runAnalysis(c)
+    // 混合模式：RAG 分析启动后同步自动启动 AI LLM 分析
+    if (mode === 'hybrid' && panelConfig.showAiPanel) runLLMAnalysis()
   }
   img.src = first.url
 }
@@ -1144,6 +1166,7 @@ function resetAll() {
   document.getElementById('correctionPanel').style.display = 'none'
   document.getElementById('analysisSource').innerHTML = ''
   document.getElementById('analysisHint').style.display = 'none'
+  document.getElementById('analysisActions').style.display = 'none'
   resetLLMResult()
   document.getElementById('aiAnalysisPanel').style.display = 'none'
   setStep(1)
@@ -1224,7 +1247,7 @@ function renderResult(data) {
       clsMap[v] = cssClass
     }
   } else {
-    clsMap = { product_quality_issue:'quality', logistics_issue:'logistics', needs_further_review:'review' }
+    clsMap = { product_quality_issue:'quality', not_product_quality:'review', no_damage:'' }
   }
   const cls = clsMap[d.result] || 'review'
   const rc = document.getElementById('resultContent')
@@ -1250,11 +1273,10 @@ function renderResult(data) {
       const d2 = data.decision
       const causeMap = {
         product_quality_issue: '屏幕本身的制造工艺或元器件老化等产品质量问题所致。建议进一步核实生产批次信息。',
-        logistics_issue: '物流运输途中的外力碰撞、挤压或跌落导致的物理屏损。建议核查物流环节的监控记录。',
-        needs_further_review: '需进一步综合判定，建议结合实物检查和更多信息确认具体原因。',
-        not_product_quality: '非屏幕本身的产品质量问题，属于外部因素导致的物理屏损。',
+        not_product_quality: '非屏幕本身的产品质量问题，属于外部因素（外力碰撞、物流运输、安装或使用不当等）导致的物理屏损。',
+        no_damage: '屏幕无损伤，完好。',
       }
-      const causeText = causeMap[d2.result] || causeMap['needs_further_review']
+      const causeText = causeMap[d2.result] || causeMap['not_product_quality']
 
       return `
     <div class="result-report" style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:16px 20px;margin-bottom:16px;font-size:13px;line-height:1.9;color:#333;">
@@ -1684,7 +1706,7 @@ async function runAnalysis(canvas) {
         if (agg && agg.location) {
           // 仅RAG模式：使用 Top-K 加权投票聚合的结构化识别结果
           const conf = Math.round(agg.aggregateConfidence || top.similarity)
-          const conclusionLabelMap = { product_quality_issue: '产品质量问题', not_product_quality: '非产品质量问题', no_damage: '屏幕完好', logistics_issue: '物流问题', needs_further_review: '需进一步鉴定' }
+          const conclusionLabelMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好' }
           analysis = {
             location: agg.location,
             locationConfidence: conf,
@@ -1865,7 +1887,49 @@ function renderMarkdown(text) {
   return html
 }
 
+function triggerManualAnalysis() {
+  const btn = document.getElementById('manualAnalyzeBtn')
+  btn.disabled = true
+  btn.textContent = '⏳ 分析中...'
+  btn.style.opacity = '0.7'
+  btn.style.background = ''
+  document.getElementById('analysisErrorBox').style.display = 'none'
+
+  const mode = panelConfig.analysisMode || 'hybrid'
+
+  if (mode === 'rag') {
+    // 纯RAG模式：运行边缘检测 + CLIP向量检索
+    // RAG分析完成后保持按钮可见，允许用户再次手动触发
+    const first = state.photos[0]
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = img.width; c.height = img.height
+      c.getContext('2d').drawImage(img, 0, 0)
+      runAnalysis(c).finally(() => {
+        btn.disabled = false
+        btn.textContent = '鉴定分析'
+        btn.style.opacity = '1'
+      })
+    }
+    img.onerror = () => {
+      btn.disabled = false
+      btn.textContent = '鉴定分析'
+      btn.style.opacity = '1'
+      showToast('图片加载失败', 3000)
+      document.getElementById('analysisErrorBox').textContent = '鉴定分析失败: 图片加载失败'
+      document.getElementById('analysisErrorBox').style.display = 'block'
+    }
+    img.src = first.url
+  } else {
+    // LLM 或混合模式：运行大模型分析
+    document.getElementById('aiAnalysisPanel').style.display = 'block'
+    runLLMAnalysis()
+  }
+}
+
 async function runLLMAnalysis() {
+  console.log('[LLM] runLLMAnalysis 开始, photos:', state.photos.length, 'mode:', panelConfig.analysisMode)
   const btn = document.getElementById('llmAnalyzeBtn')
   const resultDiv = document.getElementById('llmResult')
   const textDiv = document.getElementById('llmResultText')
@@ -1885,6 +1949,14 @@ async function runLLMAnalysis() {
   textDiv.innerHTML = ''
   metaDiv.innerHTML = ''
   tag.textContent = ''
+
+  // 同步更新手动分析按钮为加载状态
+  const manualBtn = document.getElementById('manualAnalyzeBtn')
+  manualBtn.disabled = true
+  manualBtn.textContent = '⏳ 分析中...'
+  manualBtn.style.opacity = '0.7'
+  manualBtn.style.background = ''
+  document.getElementById('analysisErrorBox').style.display = 'none'
 
   // 显示进度条
   progressDiv.style.display = 'block'
@@ -1977,10 +2049,12 @@ async function runLLMAnalysis() {
           // 故障原理和鉴定结论单独展示
           if (r.principle) metaDiv.innerHTML += `<br/>故障原理: ${r.principle}`
           if (r.conclusion) {
-            const conclusionLabelMap = { product_quality_issue: '产品质量问题', not_product_quality: '非产品质量问题', no_damage: '屏幕完好' }
+            const conclusionLabelMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好' }
             metaDiv.innerHTML += `<br/>鉴定结论: ${conclusionLabelMap[r.conclusion] || r.conclusion}`
           }
           btn.style.display = 'none'
+          // 隐藏手动分析按钮
+          document.getElementById('analysisActions').style.display = 'none'
           // 显示纠错按钮
           const llmCorrBtn = resultDiv.querySelector('.llm-correct-btn')
           if (llmCorrBtn) llmCorrBtn.style.display = ''
@@ -1989,6 +2063,7 @@ async function runLLMAnalysis() {
       }
     }
   } catch (e) {
+    console.error('[LLM] runLLMAnalysis 失败:', e.message, e)
     progressDiv.style.display = 'none'
     streamBox.style.display = 'none'
     label.style.display = ''
@@ -2004,6 +2079,26 @@ async function runLLMAnalysis() {
     textDiv.textContent = '错误: ' + e.message
     metaDiv.textContent = ''
     tag.textContent = ''
+
+    // 显示报错信息
+    showToast('鉴定分析失败: ' + e.message, 4000)
+    const errBox = document.getElementById('analysisErrorBox')
+    const errDetail = e.name === 'TypeError' && e.message.includes('fetch')
+      ? '网络连接异常，请检查后端服务是否运行'
+      : (e.message || '未知错误')
+    errBox.textContent = '鉴定分析失败: ' + errDetail
+    errBox.style.display = 'block'
+
+    // 恢复手动分析按钮为重试状态
+    const manualBtn = document.getElementById('manualAnalyzeBtn')
+    manualBtn.disabled = false
+    manualBtn.textContent = '鉴定分析（重试）'
+    manualBtn.style.opacity = '1'
+    manualBtn.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+    setTimeout(() => {
+      manualBtn.textContent = '鉴定分析'
+      manualBtn.style.background = ''
+    }, 5000)
   }
 }
 

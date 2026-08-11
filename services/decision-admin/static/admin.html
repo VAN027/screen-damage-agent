@@ -45,9 +45,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .badge-published { background: #d1fae5; color: #065f46; }
 .badge-draft { background: #fef3c7; color: #92400e; }
 .badge-pq { background: #fee2e2; color: #991b1b; }
-.badge-logistics { background: #fef3c7; color: #92400e; }
 .badge-npq { background: #dbeafe; color: #1e40af; }
-.badge-review { background: #f3e8ff; color: #6b21a8; }
+.badge-ok { background: #dcfce7; color: #166534; }
 .main { flex: 1; display: flex; flex-direction: column; }
 .toolbar { padding: 14px 24px; background: #fff; border-bottom: 1px solid #e8e8e8; display: flex; gap: 10px; align-items: center; }
 .gear-wrapper { position: relative; display: inline-flex; }
@@ -240,6 +239,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .ipreview-btn:hover { background: rgba(0,0,0,0.75); }
 .ipreview-info { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.7); background: rgba(0,0,0,0.4); padding: 2px 10px; border-radius: 10px; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
 .ipreview-wrap:hover .ipreview-info { opacity: 1; }
+#evalTableBody tr.eval-row-sel { background: #fef3c7 !important; }
 .anno-sidebar { width: 360px; background: var(--bg-sidebar); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; }
 .anno-sidebar .field-group {}
 .anno-sidebar .field-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -363,10 +363,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <input type="text" id="caseSearch" placeholder="搜索标题/型号/标签..." oninput="loadCaseList()" />
       <select id="caseFilter" onchange="loadCaseList()">
         <option value="">全部结论</option>
-        <option value="product_quality_issue">产品质量问题</option>
-        <option value="logistics_issue">物流问题</option>
-        <option value="not_product_quality">非产品质量问题</option>
-        <option value="needs_further_review">需进一步鉴定</option>
+        <option value="product_quality_issue">质量问题</option>
+        <option value="not_product_quality">非质量问题</option>
+        <option value="no_damage">屏幕完好</option>
       </select>
     </div>
     <div class="item-list" id="caseList"></div>
@@ -791,6 +790,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="btn btn-outline" onclick="evalExportCSV()" style="display:none;" id="evalExportBtn">📥 导出 Excel 报告</button>
     <button class="btn btn-outline" onclick="evalSync()" style="display:none;" id="evalSyncBtn">🔄 同步</button>
     <button class="btn btn-danger" onclick="evalDeleteBatch()" style="display:none;" id="evalDeleteBtn">🗑 删除批次</button>
+    <button class="btn btn-danger" onclick="evalDeleteSelected()" style="display:none;" id="evalDeleteSelectedBtn">🗑 删除选中 (0)</button>
     <span id="evalSyncStatus" style="display:none;font-size:11px;color:#10b981;font-weight:600;"></span>
     <span id="evalProgress" style="display:none;font-size:12px;color:#888;"></span>
     <progress id="evalProgressBar" value="0" max="100" style="display:none;width:160px;height:20px;border-radius:10px;accent-color:var(--primary);"></progress>
@@ -806,11 +806,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <table id="evalTable" style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead>
         <tr style="background:var(--bg-sidebar);">
+          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:36px;"><input type="checkbox" id="evalSelectAll" title="全选" onchange="evalToggleSelectAll(this.checked)" /></th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:left;min-width:40px;">#</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:left;min-width:100px;">案例</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">位置</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">形态</th>
-          <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">环节</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">结论</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">状态观察</th>
           <th style="padding:6px 8px;border:1px solid var(--border);text-align:center;min-width:100px;">屏损原理</th>
@@ -989,16 +989,14 @@ function esc(s) { return (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 
 const resultBadgeMap = {
   product_quality_issue: 'badge-pq',
-  logistics_issue: 'badge-logistics',
   not_product_quality: 'badge-npq',
-  needs_further_review: 'badge-review',
+  no_damage: 'badge-ok',
 }
 
 const resultLabelMap = {
-  product_quality_issue: '产品质量问题',
-  logistics_issue: '物流问题',
-  not_product_quality: '非产品质量问题',
-  needs_further_review: '需进一步鉴定',
+  product_quality_issue: '质量问题',
+  not_product_quality: '非质量问题',
+  no_damage: '屏幕完好',
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1250,7 +1248,7 @@ const DEFAULT_ANNO_FIELDS = [
   { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
   { id: 'crackShape', label: '屏损形态', type: 'tag-grid', required: true, options: ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','漏液（有缺角、裂纹、腐蚀）','漏液（无缺角、裂纹、腐蚀）','熔屏（有缺角、裂纹、腐蚀）','熔屏（无缺角、裂纹、腐蚀）','__custom__'] },
   { id: 'crackStage', label: '屏损环节', type: 'tag-grid', required: false, options: ['产品因素','物流运输搬运','拆机验机安装','使用保管不当','__custom__'] },
-  { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'产品质量问题',cls:'pq'},{value:'logistics_issue',label:'物流问题',cls:'logistics'},{value:'not_product_quality',label:'非产品质量问题',cls:'npq'},{value:'needs_further_review',label:'需进一步鉴定',cls:'review'}] },
+  { id: 'result', label: '鉴定结论', type: 'result-btns', required: false, options: [{value:'product_quality_issue',label:'质量问题',cls:'pq'},{value:'not_product_quality',label:'非质量问题',cls:'npq'},{value:'no_damage',label:'屏幕完好',cls:'ok'}] },
   { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
   { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
   { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
@@ -1863,10 +1861,11 @@ async function loadCaseList() {
     const list = document.getElementById('caseList')
     const validIds = new Set(data.map(c => c.id))
     selectedCaseIds = new Set([...selectedCaseIds].filter(id => validIds.has(id)))
+    _caseLastCheckIndex = -1  // 列表刷新后顺序可能变化，重置连选锚点
     list.innerHTML = data.map(c => `
       <div class="item ${c.id === currentCaseId ? 'active' : ''} ${selectedCaseIds.has(c.id) ? 'selected' : ''}">
-        <div class="item-check" onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked)" title="选中此案例">
-          <input type="checkbox" ${selectedCaseIds.has(c.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked)" />
+        <div class="item-check" onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked, event)" title="选中此案例">
+          <input type="checkbox" ${selectedCaseIds.has(c.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleCaseSelection('${c.id}', this.checked, event)" />
         </div>
         <div class="item-body" onclick="selectCase('${c.id}')">
           <div class="name">${c.image ? '📷 ' : ''}${esc(c.title)}</div>
@@ -2222,12 +2221,52 @@ async function deleteCase() {
   }
 }
 
-function toggleCaseSelection(id, checked) {
+let _caseLastCheckIndex = -1  // Shift 连选的锚点（当前列表顺序下标）
+
+// 当前列表可见案例 id（按渲染顺序）
+function _caseVisibleIds() {
+  return [...document.querySelectorAll('#caseList .item .item-body')]
+    .map(el => {
+      const m = el.getAttribute('onclick').match(/'([^']+)'/)
+      return m ? m[1] : null
+    })
+    .filter(Boolean)
+}
+
+// 同步所有勾选框与行选中态（Shift 连选后统一刷新）
+function _syncCaseSelectionUI() {
+  document.querySelectorAll('#caseList .item').forEach(item => {
+    const body = item.querySelector('.item-body')
+    const m = body && body.getAttribute('onclick').match(/'([^']+)'/)
+    if (!m) return
+    const id = m[1]
+    const cb = item.querySelector('.item-check input[type="checkbox"]')
+    if (cb) cb.checked = selectedCaseIds.has(id)
+    item.classList.toggle('selected', selectedCaseIds.has(id))
+  })
+}
+
+function toggleCaseSelection(id, checked, e) {
+  // Shift：从上次点击位置到当前勾选位置连续选中
+  if (e && e.shiftKey && _caseLastCheckIndex >= 0) {
+    const ids = _caseVisibleIds()
+    const idx = ids.indexOf(id)
+    if (idx >= 0) {
+      const a = Math.min(_caseLastCheckIndex, idx)
+      const b = Math.max(_caseLastCheckIndex, idx)
+      for (let i = a; i <= b; i++) selectedCaseIds.add(ids[i])
+      _caseLastCheckIndex = idx
+      _syncCaseSelectionUI()
+      updateBatchUI()
+      return
+    }
+  }
   if (checked) {
     selectedCaseIds.add(id)
   } else {
     selectedCaseIds.delete(id)
   }
+  _caseLastCheckIndex = _caseVisibleIds().indexOf(id)
   const item = document.querySelector(`#caseList .item-body[onclick*="'${id}'"]`)?.closest('.item')
   if (item) {
     if (checked) item.classList.add('selected')
@@ -2250,6 +2289,7 @@ function toggleSelectAll(checked) {
       item.classList.remove('selected')
     }
   })
+  _caseLastCheckIndex = -1
   updateBatchUI()
 }
 
@@ -2763,9 +2803,9 @@ class InteractivePreview {
           if (cw > 0 && ch > 0) {
             this.scale = Math.min(cw / this._naturalW, ch / this._naturalH, 1)
           }
-          // ox/oy 零点 = 图片中心在容器中心；初始偏移让 translate 将图片中心对齐容器中心
-          this.ox = -this._naturalW * this.scale / 2
-          this.oy = -this._naturalH * this.scale / 2
+          // ox/oy = 图片中心相对容器中心的偏移；初始为 0 即图片中心对齐容器中心
+          this.ox = 0
+          this.oy = 0
           this.rotate = 0
         }
         this._applyTransform()
@@ -2852,10 +2892,14 @@ class InteractivePreview {
     this._updateInfo()
   }
 
-  // transform-origin: center center → translate 移动的是图片中心
+  // transform-origin: center center → translate 移动的是元素左上角，故需减去自然尺寸/2
+  // 使图片中心精确落在 (容器中心 + ox/oy) 位置
   _applyTransform() {
+    const nw = this._naturalW || 1, nh = this._naturalH || 1
+    const tx = this._centerX() - nw / 2
+    const ty = this._centerY() - nh / 2
     this.img.style.transform =
-      `translate(${this._centerX()}px, ${this._centerY()}px) rotate(${this.rotate}deg) scale(${this.scale})`
+      `translate(${tx}px, ${ty}px) rotate(${this.rotate}deg) scale(${this.scale})`
   }
 
   _updateInfo() {
@@ -2880,8 +2924,8 @@ class InteractivePreview {
     const cw = this.wrap.clientWidth, ch = this.wrap.clientHeight
     this.scale = Math.min(cw / (this._naturalW || 1), ch / (this._naturalH || 1), 1)
     this.rotate = 0
-    this.ox = -this._naturalW * this.scale / 2
-    this.oy = -this._naturalH * this.scale / 2
+    this.ox = 0
+    this.oy = 0
     this._applyTransform()
     this._updateInfo()
   }
@@ -3482,7 +3526,7 @@ function _evalSetUser(name) {
 const _locList = ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域']
 const _shapeList = ['单条线状屏裂','多条线状屏裂','点放射状屏裂','发散性线状屏裂','环状/圈状屏裂','网状(大面积无规则)屏裂','漏液（无缺角、裂纹、腐蚀）','熔屏（无缺角、裂纹、腐蚀）']
 const _stageList = ['产品因素','物流运输搬运','拆机验机安装','使用保管不当']
-const _conclusionMap = { product_quality_issue: '产品质量问题', logistics_issue: '物流问题', not_product_quality: '非产品质量问题', needs_further_review: '需进一步鉴定' }
+const _conclusionMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好' }
 const _concOpts = Object.keys(_conclusionMap)
 const _concLabels = { ..._conclusionMap }
 const _evalImgBase = () => `${KNOWLEDGE_API}/images?name=`
@@ -3527,7 +3571,7 @@ function _evalJudgeCellText(id, field, llmVal, matchVal) {
 let _evalStatsCache = null
 function _evalBuildStatsCache() {
   const list = _evalData.list
-  const fields = ['location','shape','stage','conclusion','status_obs','principle']
+  const fields = ['location','shape','conclusion','status_obs','principle']
   const s = { total: list.length }
   for (const f of fields) { s[f] = { ok: 0, fail: 0 } }
   for (const r of list) {
@@ -3550,11 +3594,11 @@ function _evalUpdateJudgeCell(id, field, rec) {
   else html = _evalJudgeCellText(id, field, rec['llm_'+field], rec['match_'+field])
   const td = document.getElementById('eval-judge-'+id+'-'+field)
   if (td) td.innerHTML = html
-  // 更新判别人列（第 9 个 td, index 8）
+  // 更新判别人列（第 8 个 td, index 7）
   const tr = document.querySelector('tr[data-eval-id="'+id+'"]')
   if (tr) {
     const tds = tr.querySelectorAll('td')
-    if (tds.length >= 9) tds[8].textContent = rec.judged_by || '-'
+    if (tds.length >= 8) tds[7].textContent = rec.judged_by || '-'
   }
 }
 
@@ -3570,7 +3614,7 @@ function _evalUpdateStatCard(oldRec, newRec, field) {
   if (newV === 1) _evalStatsCache[field].ok++
   else if (newV === 0) _evalStatsCache[field].fail++
 
-  const labels = { location:'屏损位置', shape:'屏损形态', stage:'屏损环节', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
+  const labels = { location:'屏损位置', shape:'屏损形态', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
   const { ok, fail } = _evalStatsCache[field]
   const t = ok + fail
   const pct = t > 0 ? Math.round(ok / t * 100) + '%' : '-'
@@ -3581,32 +3625,42 @@ function _evalUpdateStatCard(oldRec, newRec, field) {
   }
 }
 
-function renderEvalRow(id) {
-  const idx = _evalData.list.findIndex(r => r.id === id)
-  if (idx === -1) return
-  const r = _evalData.list[idx]
+// 公共行模板：evalRender 与 renderEvalRow 共用，保证列结构一致（含勾选列/删除按钮）
+function _evalRowHtml(r, i) {
   const imgUrl = r.image_name ? _evalImgBase() + encodeURIComponent(r.image_name) : ''
   const dataImg = imgUrl ? ` data-eval-img="${imgUrl.replace(/"/g,'&quot;')}"` : ''
-  const html = `<tr style="background:${idx%2?'#f8f9ff':''};border-bottom:1px solid var(--border);cursor:${imgUrl?'pointer':'default'}" data-eval-id="${r.id}"${dataImg} onclick="toggleEvalDetail(event,${r.id})">
-    <td style="padding:4px 6px;">${idx+1}</td>
+  return `<tr style="background:${i%2?'#f8f9ff':''};border-bottom:1px solid var(--border);cursor:${imgUrl?'pointer':'default'}" data-eval-id="${r.id}"${dataImg} onclick="toggleEvalDetail(event,${r.id})">
+    <td style="padding:2px 4px;text-align:center;"><input type="checkbox" data-eval-sel="${r.id}" ${_evalSelectedIds.has(r.id)?'checked':''} /></td>
+    <td style="padding:4px 6px;">${i+1}</td>
     <td style="padding:4px 6px;font-size:11px;">${esc(r.case_title||'-')}</td>
-    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'location',r.llm_location,r.match_location,r.human_location,_locList) : '<span id="evalStatus_'+r.id+'">⏳</span>'}</td>
+    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'location',r.llm_location,r.match_location,r.human_location,_locList) : '<span id="evalStatus_'+r.id+'"></span>'}</td>
     <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'shape',r.llm_shape,r.match_shape,r.human_shape,_shapeList) : '-'}</td>
-    <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'stage',r.llm_stage,r.match_stage,r.human_stage,_stageList) : '-'}</td>
     <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'conclusion',r.llm_conclusion,r.match_conclusion,r.human_conclusion,_concOpts,_concLabels) : '-'}</td>
     <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'status_obs',r.llm_status_obs,r.match_status_obs) : '-'}</td>
     <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'principle',r.llm_principle,r.match_principle) : '-'}</td>
     <td style="padding:2px 4px;text-align:center;font-size:10px;color:#666;">${esc(r.judged_by||'-')}</td>
-    <td style="padding:4px 6px;text-align:center;"><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();evalShowDetail(${r.id})" style="font-size:10px;padding:2px 6px;">详情</button></td>
+    <td style="padding:4px 6px;text-align:center;white-space:nowrap;">
+      <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();evalShowDetail(${r.id})" style="font-size:10px;padding:2px 6px;">详情</button>
+      <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();evalDeleteOne(${r.id})" style="font-size:10px;padding:2px 6px;margin-left:4px;">删除</button>
+    </td>
   </tr>`
+}
+
+function renderEvalRow(id) {
+  const idx = _evalData.list.findIndex(r => r.id === id)
+  if (idx === -1) return
+  const r = _evalData.list[idx]
   const tr = document.querySelector(`tr[data-eval-id="${r.id}"]`)
-  if (tr) tr.outerHTML = html
+  if (tr) {
+    tr.outerHTML = _evalRowHtml(r, idx)
+    _evalUpdateSelectionUI()
+  }
 }
 
 function renderEvalStats() {
   const { list } = _evalData
-  const fields = ['location','shape','stage','conclusion','status_obs','principle']
-  const fieldLabels = { location:'屏损位置', shape:'屏损形态', stage:'屏损环节', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
+  const fields = ['location','shape','conclusion','status_obs','principle']
+  const fieldLabels = { location:'屏损位置', shape:'屏损形态', conclusion:'鉴定结论', status_obs:'状态观察', principle:'屏损原理' }
   const stats = { total: list.length }
   for (const f of fields) {
     let ok = 0, fail = 0
@@ -3838,6 +3892,8 @@ function evalRender() {
     const deleteBtn = document.getElementById('evalDeleteBtn')
     deleteBtn.style.display = ''
     deleteBtn.disabled = true
+    _evalSelectedIds.clear()
+    _evalUpdateSelectionUI()
     document.getElementById('evalStatsCards').innerHTML = ''
     // 清除进度残留
     document.getElementById('evalProgress').style.display = 'none'
@@ -3857,23 +3913,9 @@ function evalRender() {
   deleteBtn.style.display = ''
   deleteBtn.disabled = false
 
-  tbody.innerHTML = list.map((r, i) => {
-    const imgUrl = r.image_name ? _evalImgBase() + encodeURIComponent(r.image_name) : ''
-    const dataImg = imgUrl ? ` data-eval-img="${imgUrl.replace(/"/g,'&quot;')}"` : ''
-    return `
-    <tr style="background:${i%2?'#f8f9ff':''};border-bottom:1px solid var(--border);cursor:${imgUrl?'pointer':'default'}" data-eval-id="${r.id}"${dataImg} onclick="toggleEvalDetail(event,${r.id})">
-      <td style="padding:4px 6px;">${i+1}</td>
-      <td style="padding:4px 6px;font-size:11px;">${esc(r.case_title||'-')}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'location',r.llm_location,r.match_location,r.human_location,_locList) : '<span id="evalStatus_'+r.id+'"></span>'}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'shape',r.llm_shape,r.match_shape,r.human_shape,_shapeList) : '-'}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'stage',r.llm_stage,r.match_stage,r.human_stage,_stageList) : '-'}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCell(r.id,'conclusion',r.llm_conclusion,r.match_conclusion,r.human_conclusion,_concOpts,_concLabels) : '-'}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'status_obs',r.llm_status_obs,r.match_status_obs) : '-'}</td>
-      <td style="padding:2px 4px;text-align:center;">${r.analyzed ? _evalJudgeCellText(r.id,'principle',r.llm_principle,r.match_principle) : '-'}</td>
-      <td style="padding:4px 6px;text-align:center;"><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();evalShowDetail(${r.id})" style="font-size:10px;padding:2px 6px;">详情</button></td>
-    </tr>`
-  }).join('')
+  tbody.innerHTML = list.map((r, i) => _evalRowHtml(r, i)).join('')
 
+  _evalUpdateSelectionUI()
   renderEvalStats()
 }
 
@@ -4000,7 +4042,7 @@ function _evalStartPoll() {
         if (old.judged_by === meName) continue
         // 检查是否有别人更新的 match 字段
         let changed = false
-        const fields = ['location','shape','stage','conclusion','status_obs','principle']
+        const fields = ['location','shape','conclusion','status_obs','principle']
         for (const f of fields) {
           const mf = 'match_' + f
           if ((row[mf] === 1 || row[mf] === 0) && old[mf] !== row[mf]) changed = true
@@ -4036,10 +4078,97 @@ function _evalStopPoll() {
 }
 
 async function evalDeleteBatch() {
-  if (!confirm('确定删除整个评估批次？LLM 分析结果和人工标注将全部清空，不可恢复。')) return
+  if (!confirm('确定删除整个评估批次？LLM 分析结果和人工标注将全部清空，由「上传图片」创建的案例也会从案例库一并删除，不可恢复。')) return
   try {
-    await fetch(`${KNOWLEDGE_API}/eval/batch`, { method: 'DELETE' })
-    toast('✅ 评估批次已删除')
+    const resp = await fetch(`${KNOWLEDGE_API}/eval/batch`, { method: 'DELETE' })
+    const result = await resp.json()
+    const deletedCases = result.data && result.data.deletedCases
+    toast(`✅ 评估批次已删除${deletedCases ? `，同时清理 ${deletedCases} 条上传图片案例` : ''}`)
+    await evalRefresh()
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error')
+  }
+}
+
+// ===== 评估记录勾选 / 删除选中 / 单条删除 =====
+const _evalSelectedIds = new Set()
+let _evalLastCheckIdx = -1
+
+// 行内勾选框 change（支持 Shift 范围连选；Ctrl/单击切换）
+function _evalOnCheck(e) {
+  const cb = e.target.closest('input[data-eval-sel]')
+  if (!cb) return
+  e.stopPropagation()
+  const id = Number(cb.dataset.evalSel)
+  const ids = _evalData.list.map(r => r.id)
+  const idx = ids.indexOf(id)
+  if (e.shiftKey && _evalLastCheckIdx >= 0) {
+    const a = Math.min(_evalLastCheckIdx, idx), b = Math.max(_evalLastCheckIdx, idx)
+    for (let i = a; i <= b; i++) _evalSelectedIds.add(ids[i])
+  } else {
+    if (_evalSelectedIds.has(id)) _evalSelectedIds.delete(id)
+    else _evalSelectedIds.add(id)
+    _evalLastCheckIdx = idx
+  }
+  _evalUpdateSelectionUI()
+}
+
+function evalToggleSelectAll(checked) {
+  _evalSelectedIds.clear()
+  if (checked) _evalData.list.forEach(r => _evalSelectedIds.add(r.id))
+  _evalUpdateSelectionUI()
+}
+
+// 同步按钮状态 / 行勾选框 / 行高亮 / 表头全选
+function _evalUpdateSelectionUI() {
+  const btn = document.getElementById('evalDeleteSelectedBtn')
+  if (btn) {
+    const n = _evalSelectedIds.size
+    btn.style.display = ''
+    btn.disabled = n === 0
+    btn.textContent = n > 0 ? `🗑 删除选中 (${n})` : '🗑 删除选中 (0)'
+  }
+  const tbody = document.getElementById('evalTableBody')
+  if (tbody) {
+    tbody.querySelectorAll('tr[data-eval-id]').forEach(tr => {
+      const id = Number(tr.getAttribute('data-eval-id'))
+      const cb = tr.querySelector('input[data-eval-sel]')
+      if (cb) cb.checked = _evalSelectedIds.has(id)
+      tr.classList.toggle('eval-row-sel', _evalSelectedIds.has(id))
+    })
+  }
+  const selAll = document.getElementById('evalSelectAll')
+  if (selAll) {
+    selAll.checked = _evalData.list.length > 0 && _evalSelectedIds.size === _evalData.list.length
+    selAll.indeterminate = _evalSelectedIds.size > 0 && _evalSelectedIds.size < _evalData.list.length
+  }
+}
+
+// 删除选中：删评估记录；由「上传图片」自动建的案例一并删除，案例库原有案例不受影响
+async function evalDeleteSelected() {
+  const ids = [..._evalSelectedIds]
+  if (ids.length === 0) return
+  if (!confirm(`确认删除选中的 ${ids.length} 条评估记录？由「上传图片」创建的案例将一并从案例库删除，案例库原有案例不受影响，不可恢复。`)) return
+  try {
+    const data = await knowledgeApi('/eval/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) })
+    const extra = data.deletedCases ? `，同时清理 ${data.deletedCases} 条上传图片案例` : ''
+    toast(`✅ 已删除 ${ids.length} 条评估记录${extra}`)
+    _evalSelectedIds.clear()
+    _evalLastCheckIdx = -1
+    await evalRefresh()
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error')
+  }
+}
+
+// 单条删除
+async function evalDeleteOne(id) {
+  if (!confirm('确认删除该条评估记录？由「上传图片」创建的对应案例将一并从案例库删除，案例库原有案例不受影响，不可恢复。')) return
+  try {
+    const data = await knowledgeApi('/eval/batch-delete', { method: 'POST', body: JSON.stringify({ ids: [id] }) })
+    const extra = data.deletedCases ? `，同时清理 ${data.deletedCases} 条上传图片案例` : ''
+    toast(`✅ 已删除该条评估记录${extra}`)
+    _evalSelectedIds.delete(id)
     await evalRefresh()
   } catch (e) {
     toast('删除失败: ' + e.message, 'error')
@@ -4049,8 +4178,7 @@ async function evalDeleteBatch() {
 function evalShowDetail(id) {
   const rec = _evalData.list.find(r => r.id === id)
   if (!rec) return
-  const desc = rec.llm_description || '暂无 LLM 分析结果'
-  alert(`【案例详情】\n\n案例: ${rec.case_title}\nLLM 位置: ${rec.llm_location||'-'}\nLLM 形态: ${rec.llm_shape||'-'}\nLLM 环节: ${rec.llm_stage||'-'}\nLLM 结论: ${rec.llm_conclusion||'-'}\n\nLLM 描述:\n${desc}`)
+  alert(`【案例详情】\n\n案例: ${rec.case_title}\nLLM 位置: ${rec.llm_location||'-'}\nLLM 形态: ${rec.llm_shape||'-'}\nLLM 结论: ${rec.llm_conclusion||'-'}`)
 }
 
 // Ctrl+悬浮预览 — 通过全局委托监听
@@ -4077,6 +4205,7 @@ function evalShowDetail(id) {
    if (tbody) {
      tbody.addEventListener('mouseover', evalTooltipOn)
      tbody.addEventListener('mouseout', evalTooltipOff)
+     tbody.addEventListener('change', _evalOnCheck)
    }
  })
  // 每次 render 后重新绑定（因为 innerHTML 重建了 tbody）
@@ -4097,7 +4226,7 @@ function evalShowDetail(id) {
 // 点击行展开详情面板
 let _evalDetailId = null
 function toggleEvalDetail(e, id) {
-  if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return
   if (_evalDetailId === id) { closeEvalDetail(); return }
   _evalDetailId = id
   const rec = _evalData.list.find(r => r.id === id)
@@ -4110,7 +4239,7 @@ function toggleEvalDetail(e, id) {
 // 独立函数：渲染详情面板（首次展开 + 标注后增量刷新）
 function _evalRenderDetailForm(rec) {
   const id = rec.id
-  const conclusionMap = { product_quality_issue: '产品质量问题', logistics_issue: '物流问题', not_product_quality: '非产品质量问题', needs_further_review: '需进一步鉴定' }
+  const conclusionMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好' }
   const concOpts = Object.entries(conclusionMap).map(([k,v])=>k)
   const concLabels = Object.entries(conclusionMap).reduce((a,[k,v])=>(a[k]=v,a),{})
 
@@ -4126,14 +4255,12 @@ function _evalRenderDetailForm(rec) {
   }
   // LLM 结果
   document.getElementById('evalDetailLLM').innerHTML = `
+    <div><b>状态观察:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_status_obs||(rec.analyzed?'未知':''))}</span></div>
     <div><b>屏损位置:</b> ${esc(rec.llm_location||(rec.analyzed?'未知':''))}</div>
     <div><b>屏损形态:</b> ${esc(rec.llm_shape||(rec.analyzed?'未知':''))}</div>
-    <div><b>屏损环节:</b> ${esc(rec.llm_stage||(rec.analyzed?'未知':''))}</div>
-    <div><b>状态观察:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_status_obs||(rec.analyzed?'未知':''))}</span></div>
     <div><b>屏损原理:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_principle||(rec.analyzed?'未知':''))}</span></div>
-    <div><b>鉴定结论:</b> ${esc(_conclusionMap[rec.llm_conclusion]||rec.llm_conclusion||(rec.analyzed?'未知':''))}</div>
-    <div style="margin-top:6px;"><b>完整描述:</b> <span style="white-space:pre-wrap;">${esc(rec.llm_description||(rec.analyzed?'未知':''))}</span></div>`
-  // 人工标注 — ✅/❌ 模式 for 6 fields
+    <div><b>鉴定结论:</b> ${esc(_conclusionMap[rec.llm_conclusion]||rec.llm_conclusion||(rec.analyzed?'未知':''))}</div>`
+  // 人工标注 — ✅/❌ 模式 for 5 fields
   const detailBtn = (field, ok, ng) => `
     <button onclick="evalJudge(${id},'${field}',1)" style="font-size:12px;padding:2px 10px;border-radius:4px;cursor:pointer;background:${ok?'#10b981':'#f0f0f0'};border:${ok?'1.5px solid #10b981':'1.5px solid #ddd'};line-height:1.6;">✅ 正确</button>
     <button onclick="evalJudge(${id},'${field}',0)" style="font-size:12px;padding:2px 10px;border-radius:4px;cursor:pointer;background:${ng?'#ef4444':'#f0f0f0'};border:${ng?'1.5px solid #ef4444':'1.5px solid #ddd'};line-height:1.6;">❌ 错误</button>`
@@ -4146,7 +4273,6 @@ function _evalRenderDetailForm(rec) {
     <div id="evalDetailField_location" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损位置</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('location',rec.match_location===1,rec.match_location===0)}${detailSel('location',_locList,rec.human_location)}</div></div>
     <div id="evalDetailField_shape" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损形态</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('shape',rec.match_shape===1,rec.match_shape===0)}${detailSel('shape',_shapeList,rec.human_shape)}</div></div>
     <div id="evalDetailField_principle" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损原理</label><div style="display:flex;align-items:center;gap:6px;">${detailBtn('principle',rec.match_principle===1,rec.match_principle===0)}</div></div>
-    <div id="evalDetailField_stage" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">屏损环节</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('stage',rec.match_stage===1,rec.match_stage===0)}${detailSel('stage',_stageList,rec.human_stage)}</div></div>
     <div id="evalDetailField_conclusion" style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#888;margin-bottom:4px;">鉴定结论</label><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${detailBtn('conclusion',rec.match_conclusion===1,rec.match_conclusion===0)}${detailSel('conclusion',_concOpts,rec.human_conclusion,_concLabels)}</div></div>`
 
   // 更新底部导航信息

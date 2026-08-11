@@ -290,34 +290,8 @@ function buildSummarySheet(wb, records) {
 
   rowIdx++
 
-  // ===== 8. 故障环节准确率 =====
-  sectionTitle('八、故障环节/阶段准确率')
-  const stageJudged = analyzed.filter(r => r.match_stage !== -1)
-  const stageOk = stageJudged.filter(r => r.match_stage === 1).length
-  const stageNg = stageJudged.filter(r => r.match_stage === 0).length
-  headerRow(['字段', 'LLM分析数', '已标注数', '正确数', '错误数', '准确率'])
-  dataRow(['故障环节', analyzed.length, stageJudged.length, stageOk, stageNg, pctStr(stageOk, stageJudged.length)])
-  rowIdx++
-  sectionTitle('  ▸ 故障环节值分布 (LLM vs 人工)')
-  const stageCross = {}
-  const humanStages = new Set()
-  for (const r of stageJudged) {
-    const llmS = r.llm_stage || '(无)'
-    const humanS = r.human_stage || (r.match_stage === 1 ? llmS : '(未填)')
-    humanStages.add(humanS)
-    if (!stageCross[llmS]) stageCross[llmS] = {}
-    stageCross[llmS][humanS] = (stageCross[llmS][humanS] || 0) + 1
-  }
-  const sortedHStages = [...humanStages].sort()
-  headerRow(['LLM ↓  人工 →', ...sortedHStages])
-  for (const llmS of Object.keys(stageCross).sort()) {
-    dataRow([llmS, ...sortedHStages.map(h => stageCross[llmS][h] || '-')])
-  }
-
-  rowIdx++
-
-  // ===== 9. 每字段各选项准确率明细 =====
-  sectionTitle('九、每字段各选项准确率明细')
+  // ===== 8. 每字段各选项准确率明细 =====
+  sectionTitle('八、每字段各选项准确率明细')
   const detailFields = [
     { key: 'status_obs', label: '状态观察', llmField: 'llm_status_obs' },
     { key: 'location', label: '故障位置', llmField: 'llm_location' },
@@ -348,8 +322,8 @@ function buildSummarySheet(wb, records) {
 
   rowIdx++
 
-  // ===== 10. 误判案例明细 =====
-  sectionTitle('十、误判案例明细 (鉴定结论不一致)')
+  // ===== 9. 误判案例明细 =====
+  sectionTitle('九、误判案例明细 (鉴定结论不一致)')
   const wrongConcs = analyzed.filter(r => r.match_conclusion === 0)
   if (wrongConcs.length === 0) {
     dataRow(['无结论误判案例', '', '', '', '', ''])
@@ -960,11 +934,16 @@ const routes = [
     handler: async (_req, res) => {
       try {
       const { getAllEvals, saveEvalLLMResult, saveEvalRAGResult } = await import('./db.mjs')
-      const { analyzeWithLLM } = await import('./llm-analyzer.mjs')
-      const { getCaseById, searchSimilarVector } = await import('./search-engine.mjs')
+      const { analyzeWithLLM, loadModelConfig } = await import('./llm-analyzer.mjs')
+      const { getCaseById, searchSimilarVector, analyzeWithRAG } = await import('./search-engine.mjs')
 
       const records = getAllEvals().filter(r => !r.analyzed)
       let done = 0, errors = 0
+      // 遵循「大模型配置」中的分析模式: hybrid=RAG+LLM 混合 | llm=仅LLM(跳过知识库/相似案例检索) | rag=仅RAG识别
+      const modelConfig = await loadModelConfig()
+      const mode = modelConfig.analysisMode || 'hybrid'
+      const skipRag = mode === 'llm'
+      const ragOnly = mode === 'rag'
 
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -991,16 +970,34 @@ const routes = [
           const imgPath = getPath(imageName)
           const imgDataUrl = `data:image/${imageName.endsWith('png') ? 'png' : (imageName.endsWith('jpg') || imageName.endsWith('jpeg') ? 'jpeg' : 'webp')};base64,${Buffer.from(await import('node:fs/promises').then(m => m.readFile(imgPath))).toString('base64')}`
 
-          const result = await analyzeWithLLM([imgDataUrl], null, llmController.signal)
-          const desc = result.description || ''
-
-          // 直接从 LLM JSON 输出取字段（不再需要正则回捞）
-          const llmLocation = (result.location && result.location !== '未知') ? result.location : ''
-          const llmShape = (result.shape && result.shape !== '未知') ? result.shape : ''
-          const llmStage = result.stage || ''
-          const llmConclusion = result.conclusion || ''
-          const llmStatusObs = result.statusObs || ''
-          const llmPrinciple = result.principle || ''
+          // 按分析模式生成结果
+          let llmLocation = '', llmShape = '', llmStage = '', llmConclusion = '', llmStatusObs = '', llmPrinciple = '', desc = '', severity = ''
+          if (ragOnly) {
+            // 仅 RAG：向量检索 Top-K 加权聚合，不调用大模型
+            const rag = await analyzeWithRAG(imgDataUrl, 5)
+            if (rag.totalHits === 0 || (!rag.location && !rag.shape && !rag.stage && !rag.conclusion && !rag.principle)) {
+              throw new Error('RAG 模式未检索到相似案例，请先重建向量索引或切换为 LLM/混合模式')
+            }
+            llmLocation = rag.location || ''
+            llmShape = rag.shape || ''
+            llmStage = rag.stage || ''
+            llmConclusion = rag.conclusion || ''
+            llmStatusObs = rag.statusObs || ''
+            llmPrinciple = rag.principle || ''
+            desc = rag.description || ''
+            severity = rag.severity || ''
+          } else {
+            // hybrid 或 llm：调用大模型；llm 模式跳过知识库/相似案例上下文注入
+            const result = await analyzeWithLLM([imgDataUrl], null, llmController.signal, { skipRag })
+            llmLocation = (result.location && result.location !== '未知') ? result.location : ''
+            llmShape = (result.shape && result.shape !== '未知') ? result.shape : ''
+            llmStage = result.stage || ''
+            llmConclusion = result.conclusion || ''
+            llmStatusObs = result.statusObs || ''
+            llmPrinciple = result.principle || ''
+            desc = result.description || ''
+            severity = result.severity || ''
+          }
 
           saveEvalLLMResult(rec.id, {
             llm_location: llmLocation,
@@ -1008,22 +1005,27 @@ const routes = [
             llm_stage: llmStage,
             llm_conclusion: llmConclusion,
             llm_description: desc,
-            llm_severity: result.severity || '',
+            llm_severity: severity,
             llm_status_obs: llmStatusObs,
             llm_principle: llmPrinciple,
           })
 
-          // RAG 分析：CLIP 向量检索
+          // RAG 字段：仅 LLM 模式跳过；rag 模式直接复用聚合结果；hybrid 模式单独检索 top-1
           let ragLocation = '', ragShape = ''
-          try {
-            const ragResults = await searchSimilarVector(imgDataUrl, 1, '')
-            if (ragResults && ragResults.length > 0) {
-              const top = ragResults[0]
-              ragLocation = normalizeEvalField('location', top.crackLocation || '')
-              ragShape = normalizeEvalField('shape', Array.isArray(top.crackShape) ? top.crackShape.join('、') : (top.crackShape || ''))
+          if (ragOnly) {
+            ragLocation = normalizeEvalField('location', llmLocation)
+            ragShape = normalizeEvalField('shape', llmShape)
+          } else if (!skipRag) {
+            try {
+              const ragResults = await searchSimilarVector(imgDataUrl, 1, '')
+              if (ragResults && ragResults.length > 0) {
+                const top = ragResults[0]
+                ragLocation = normalizeEvalField('location', top.crackLocation || '')
+                ragShape = normalizeEvalField('shape', Array.isArray(top.crackShape) ? top.crackShape.join('、') : (top.crackShape || ''))
+              }
+            } catch (e) {
+              // CLIP 不可用，RAG 字段留空
             }
-          } catch (e) {
-            // CLIP 不可用，RAG 字段留空
           }
           saveEvalRAGResult(rec.id, { rag_location: ragLocation, rag_shape: ragShape })
 
@@ -1088,9 +1090,8 @@ const routes = [
         '故障位置(LLM)', '故障位置(人工)', '位置一致性', '故障位置(最终)',
         '故障形态(LLM)', '故障形态(人工)', '形态一致性', '故障形态(最终)',
         '故障原理(LLM)', '故障原理(人工)', '原理一致性', '故障原理(最终)',
-        '故障环节(LLM)', '故障环节(人工)', '环节一致性', '故障环节(最终)',
         '鉴定结论(LLM)', '鉴定结论(人工)', '结论一致性', '鉴定结论(最终)',
-        'LLM描述', '判别人',
+        '判别人',
       ]
       const headerRow = ws.addRow(headers)
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
@@ -1118,9 +1119,7 @@ const routes = [
           r.llm_location || '', r.human_location || '', okText(r.match_location), resolve(r.match_location, r.llm_location, r.human_location),
           r.llm_shape || '', r.human_shape || '', okText(r.match_shape), resolve(r.match_shape, r.llm_shape, r.human_shape),
           r.llm_principle || '', r.human_principle || '', okText(r.match_principle), resolve(r.match_principle, r.llm_principle, r.human_principle),
-          r.llm_stage || '', r.human_stage || '', okText(r.match_stage), resolve(r.match_stage, r.llm_stage, r.human_stage),
           r.llm_conclusion || '', r.human_conclusion || '', okText(r.match_conclusion), resolve(r.match_conclusion, r.llm_conclusion, r.human_conclusion),
-          (r.llm_description || '').replace(/\n/g, ' '),
           r.judged_by || '',
         ])
         row.height = IMG_H * 0.75  // 约 67.5 pt
@@ -1146,7 +1145,7 @@ const routes = [
         }
 
         // 一致性列标色（每个字段(最终)插入后索引后移）
-        for (const colIdx of [7, 11, 15, 19, 23, 27]) {
+        for (const colIdx of [7, 11, 15, 19, 23]) {
           const cell = row.getCell(colIdx)
           if (cell.value === '一致') cell.font = { color: { argb: 'FF10B981' }, bold: true }
           else if (cell.value === '不一致') cell.font = { color: { argb: 'FFEF4444' }, bold: true }
@@ -1155,10 +1154,10 @@ const routes = [
         rowNum++
       }
 
-      // 列宽（共30列: ID/案例ID/案例名称/图片 + 6x4组 + 描述 + 判别人）
+      // 列宽（共25列: ID/案例ID/案例名称/图片 + 5x4组 + 判别人）
       ws.columns = headers.map((h, i) => {
         if (i === 3) return { header: h, key: `col${i}`, width: 14 }   // 图片列
-        const w = i <= 2 ? 12 : (i === 29 ? 16 : (i >= 4 && i <= 27 ? 18 : 40))
+        const w = i <= 2 ? 12 : (i === 24 ? 16 : (i >= 4 && i <= 23 ? 18 : 40))
         return { header: h, key: `col${i}`, width: w }
       })
 
@@ -1183,9 +1182,27 @@ const routes = [
     method: 'DELETE',
     path: '/api/knowledge/eval/batch',
     handler: async (_req, res) => {
-      const { deleteAllEvals } = await import('./db.mjs')
-      deleteAllEvals()
-      json(res, 200, { success: true, data: { message: '评估批次已清空' } })
+      try {
+        const { getAllEvals, deleteAllEvals } = await import('./db.mjs')
+        const { getCaseById, deleteCase } = await import('./search-engine.mjs')
+        const records = getAllEvals()
+        // 删除批次时，一并删除由「评估页上传图片」自动创建的案例（标题以"评估图片"开头），案例库原有案例不受影响
+        let deletedCases = 0
+        for (const rec of records) {
+          if (!rec.case_id) continue
+          try {
+            const c = await getCaseById(rec.case_id)
+            if (c && typeof c.title === 'string' && c.title.startsWith('评估图片')) {
+              await deleteCase(c.id)
+              deletedCases++
+            }
+          } catch { /* 单个案例删除失败不影响批次清空 */ }
+        }
+        deleteAllEvals()
+        json(res, 200, { success: true, data: { message: '评估批次已清空', deletedCases } })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'DELETE_FAILED', message: e.message } })
+      }
     },
   },
   {
@@ -1276,9 +1293,23 @@ const routes = [
         return json(res, 400, { success: false, error: { code: 'INVALID', message: '请选择要删除的记录' } })
       }
       try {
-        const { deleteEvalsByIds } = await import('./db.mjs')
+        const { getAllEvals, deleteEvalsByIds } = await import('./db.mjs')
+        const { getCaseById, deleteCase } = await import('./search-engine.mjs')
+        // 被删评估记录中，由「上传图片」自动创建的案例（标题以"评估图片"开头）一并从案例库删除
+        const records = getAllEvals().filter(r => ids.includes(r.id))
+        let deletedCases = 0
+        for (const rec of records) {
+          if (!rec.case_id) continue
+          try {
+            const c = await getCaseById(rec.case_id)
+            if (c && typeof c.title === 'string' && c.title.startsWith('评估图片')) {
+              await deleteCase(c.id)
+              deletedCases++
+            }
+          } catch { /* 单个案例删除失败不影响评估记录删除 */ }
+        }
         const count = deleteEvalsByIds(ids)
-        json(res, 200, { success: true, data: { deleted: count } })
+        json(res, 200, { success: true, data: { deleted: count, deletedCases } })
       } catch (e) {
         json(res, 500, { success: false, error: { code: 'DELETE_FAILED', message: e.message } })
       }
