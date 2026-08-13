@@ -1,0 +1,93 @@
+{
+  "description": "人工标注 Ground Truth - 请逐张判断图片的正确旋转角度",
+  "instructions": [
+    "1. 打开每张图片，判断电视屏幕画面是否正向（电视底部在下方、顶部在上方）",
+    "2. correctRotation: 需要旋转多少度才能使电视画面正向（0 / 90 / 180 / 270）",
+    "3. 参考: EXIF Orientation 1=正常, 6=需顺时针90°, 8=需逆时针90°, 3=需180°",
+    "4. hasTV: 图片中是否包含电视机屏幕（true/false）",
+    "5. 如果图片不是电视屏幕（如特写、标签等），correctRotation 填 0，hasTV 填 false"
+  ],
+  "sampledAt": "2026-08-12T05:47:01.397Z",
+  "items": [
+    {
+      "index": 1,
+      "file": "case-866b9c36.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 2,
+      "file": "case-808fb882.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 3,
+      "file": "case-ce690f89.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 4,
+      "file": "case-30e6bb33.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 5,
+      "file": "case-0f08cc7e.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 6,
+      "file": "case-db519fb3.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 7,
+      "file": "case-97c01737.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 8,
+      "file": "case-6337d4bd.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 9,
+      "file": "case-2e278cd4.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    },
+    {
+      "index": 10,
+      "file": "case-372de4ff.jpg",
+      "exifOrientation": 1,
+      "correctRotation": null,
+      "hasTV": null,
+      "note": ""
+    }
+  ]
+}

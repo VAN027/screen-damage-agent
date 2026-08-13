@@ -5,6 +5,7 @@ import { uploadDocument, listDocuments, getDocument, deleteDocument, getKBStats,
 import { normalizeEvalField } from './field-normalize.mjs'
 import { readFile, stat } from 'node:fs/promises'
 import { loadFieldDefsSync, loadFieldDefs } from './db.mjs'
+import { execFile } from 'node:child_process'
 
 // 加载集中式字段定义
 const _fieldDefs = loadFieldDefsSync()
@@ -1564,6 +1565,79 @@ const routes = [
         res.end(buf)
       } catch (e) {
         json(res, 400, { success: false, error: { code: 'SQL_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/debug/tv-orient',
+    handler: async (_req, res, { body }) => {
+      try {
+        if (!body.image || !body.image.startsWith('data:image/')) {
+          return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 base64 图片' } })
+        }
+        const base64Data = body.image.replace(/^data:image\/\w+;base64,/, '')
+        const imgBuf = Buffer.from(base64Data, 'base64')
+
+        const params = {
+          canny_low: parseInt(body.canny_low) || 30,
+          canny_high: parseInt(body.canny_high) || 100,
+          blur_kernel: parseInt(body.blur_kernel) || 5,
+          dilate_kernel: parseInt(body.dilate_kernel) || 7,
+          dilate_iter: parseInt(body.dilate_iter) || 1,
+          area_min_ratio: parseFloat(body.area_min_ratio) || 0.12,
+          fill_min: parseFloat(body.fill_min) || 0.3,
+          rot90_ratio: parseFloat(body.rot90_ratio) || 1.1,
+          ocr_enabled: body.ocr_enabled !== 'false',
+          ocr_strip_ratio: parseFloat(body.ocr_strip_ratio) || 0.15,
+          ocr_min_score: parseFloat(body.ocr_min_score) || 0.6,
+        }
+
+        const PYTHON_VENV = join(__dirname, '..', 'python', 'venv', 'bin', 'python3')
+        const DETECT_SCRIPT = join(__dirname, '..', 'tools', 'detect-tv-orientation.py')
+
+        const stdout = await new Promise((resolve, reject) => {
+          const child = execFile(PYTHON_VENV, [
+            DETECT_SCRIPT, '--json', '--annotate',
+            '--params', JSON.stringify(params), '-'
+          ], { timeout: 300000, maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) return reject(err)
+            resolve(stdout)
+          })
+          child.stdin.write(imgBuf)
+          child.stdin.end()
+        })
+
+        const result = JSON.parse(stdout.trim())
+        json(res, 200, { success: true, data: result })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'DETECT_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/debug/tv-orient-defaults',
+    handler: async (_req, res) => {
+      json(res, 200, { success: true, data: {
+        canny_low: 30, canny_high: 100,
+        blur_kernel: 5, dilate_kernel: 7, dilate_iter: 1,
+        area_min_ratio: 0.12, fill_min: 0.3,
+        rot90_ratio: 1.1, ocr_enabled: true,
+        ocr_strip_ratio: 0.15, ocr_min_score: 0.6,
+      }})
+    },
+  },
+  {
+    method: 'GET',
+    path: '/debug/tv-orient',
+    handler: async (_req, res) => {
+      try {
+        const html = await readFile(join(__dirname, '..', 'tools', 'tv-orient-debug.html'), 'utf-8')
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(html)
+      } catch {
+        json(res, 404, { success: false, error: { code: 'NOT_FOUND', message: '调试页面不存在' } })
       }
     },
   },

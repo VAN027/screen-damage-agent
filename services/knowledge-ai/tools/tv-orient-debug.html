@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TV 方向检测 — 参数调试图</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+.topbar { background: #16213e; padding: 10px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #0f3460; }
+.topbar h1 { font-size: 18px; color: #e94560; }
+.topbar input[type=text] { flex: 1; padding: 6px 10px; border: 1px solid #0f3460; border-radius: 4px; background: #0f3460; color: #e0e0e0; }
+.layout { display: flex; height: calc(100vh - 50px); }
+.panel { padding: 12px; overflow-y: auto; }
+.left { width: 320px; background: #16213e; border-right: 1px solid #0f3460; flex-shrink: 0; }
+.center { flex: 1; display: flex; flex-direction: column; gap: 8px; background: #1a1a2e; }
+.right { width: 360px; background: #16213e; border-left: 1px solid #0f3460; flex-shrink: 0; font-size: 12px; }
+
+/* Upload area */
+.upload-zone { border: 2px dashed #0f3460; border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; transition: .2s; margin-bottom: 12px; }
+.upload-zone:hover { border-color: #e94560; }
+.upload-zone.dragover { border-color: #e94560; background: rgba(233,69,96,0.1); }
+
+/* Sliders */
+.param-group { margin-bottom: 10px; }
+.param-group h3 { font-size: 12px; color: #e94560; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+.param-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.param-row label { width: 120px; font-size: 11px; color: #8892b0; flex-shrink: 0; text-align: right; }
+.param-row input[type=range] { flex: 1; accent-color: #e94560; }
+.param-row .val { width: 38px; font-size: 11px; color: #64ffda; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Buttons */
+.btn-row { display: flex; gap: 8px; margin-top: 12px; }
+.btn { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.btn-detect { background: #e94560; color: #fff; flex: 1; }
+.btn-detect:disabled { opacity: 0.4; }
+.btn-reset { background: #0f3460; color: #8892b0; }
+.btn-preset { background: #0f3460; color: #64ffda; font-size: 10px; padding: 4px 8px; }
+
+/* Image display */
+.img-container { position: relative; background: #0a0a15; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 200px; }
+.img-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.img-pair { display: flex; gap: 8px; flex: 1; }
+.img-pair .img-container { flex: 1; }
+.img-label { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px; font-size: 11px; color: #64ffda; }
+.loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); font-size: 14px; color: #8892b0; }
+
+/* Result badges */
+.result-badge { display: inline-block; padding: 3px 10px; border-radius: 3px; font-weight: 700; font-size: 14px; }
+.badge-0 { background: #064e3b; color: #34d399; }
+.badge-90 { background: #1e3a5f; color: #60a5fa; }
+.badge-180 { background: #7c2d12; color: #fbbf24; }
+.badge-270 { background: #581c87; color: #c084fc; }
+
+/* Right panel JSON */
+.result-json { background: #0a0a15; border-radius: 6px; padding: 10px; font-family: 'Fira Code', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; }
+.presets { display: flex; gap: 4px; flex-wrap: wrap; }
+.hint { font-size: 10px; color: #546; margin-top: 2px; }
+.status-bar { font-size: 11px; color: #546; padding: 4px 0; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>TV 方向检测调试</h1>
+  <span class="status-bar" id="apiStatus">API: 检测中...</span>
+  <span style="flex:1"></span>
+  <button class="btn btn-reset" onclick="resetAll()">重置全部</button>
+</div>
+
+<div class="layout">
+  <!-- Left: Upload + Params -->
+  <div class="panel left">
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size:28px;margin-bottom:8px;">📁</div>
+      <div style="font-size:13px;">拖放图片到此处<br>或点击选择文件</div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this.files[0])">
+    </div>
+
+    <div class="presets">
+      <button class="btn btn-preset" onclick="applyPreset('default')">默认</button>
+      <button class="btn btn-preset" onclick="applyPreset('sensitive')">敏感边缘</button>
+      <button class="btn btn-preset" onclick="applyPreset('large_tv')">大TV屏</button>
+      <button class="btn btn-preset" onclick="applyPreset('small_tv')">小TV屏</button>
+      <button class="btn btn-preset" onclick="applyPreset('strict_rot')">严格旋转</button>
+    </div>
+
+    <div class="param-group"><h3>边缘检测</h3>
+      <div class="param-row" data-key="canny_low" data-min="5" data-max="150"><label>Canny 低阈值</label><input type="range" value="30"><span class="val">30</span></div>
+      <div class="param-row" data-key="canny_high" data-min="20" data-max="300"><label>Canny 高阈值</label><input type="range" value="100"><span class="val">100</span></div>
+      <div class="param-row" data-key="blur_kernel" data-min="1" data-max="15" data-step="2"><label>高斯模糊核</label><input type="range" value="5"><span class="val">5</span></div>
+    </div>
+    <div class="param-group"><h3>轮廓连接</h3>
+      <div class="param-row" data-key="dilate_kernel" data-min="1" data-max="25" data-step="2"><label>膨胀核大小</label><input type="range" value="7"><span class="val">7</span></div>
+      <div class="param-row" data-key="dilate_iter" data-min="0" data-max="5"><label>膨胀迭代次数</label><input type="range" value="1"><span class="val">1</span></div>
+    </div>
+    <div class="param-group"><h3>TV 筛选</h3>
+      <div class="param-row" data-key="area_min_ratio" data-min="3" data-max="40" data-step="1"><label>最小面积(%)</label><input type="range" value="12"><span class="val">12%</span></div>
+      <div class="param-row" data-key="fill_min" data-min="10" data-max="80" data-step="5"><label>最小填充率(%)</label><input type="range" value="30"><span class="val">30%</span></div>
+      <div class="param-row" data-key="rot90_ratio" data-min="100" data-max="200" data-step="5"><label>Rot90 判定比(%)</label><input type="range" value="110"><span class="val">110%</span></div>
+    </div>
+    <div class="param-group"><h3>OCR 方向判断</h3>
+      <div class="param-row" data-key="ocr_strip_ratio" data-min="5" data-max="40" data-step="1"><label>边框条带(%)</label><input type="range" value="15"><span class="val">15%</span></div>
+      <div class="param-row" data-key="ocr_min_score" data-min="30" data-max="95" data-step="5"><label>最低置信度(%)</label><input type="range" value="60"><span class="val">60%</span></div>
+      <div class="param-row"><label>启用 OCR</label><input type="checkbox" id="ocr_enabled" checked style="width:auto;margin-left:6px;"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-detect" id="btnDetect" onclick="runDetect()" disabled>🔍 开始检测</button>
+    </div>
+    <div class="hint">* 拖动滑块自动实时检测（280ms 防抖）</div>
+  </div>
+
+  <!-- Center: Images -->
+  <div class="panel center" id="imagePanel">
+    <div class="img-pair" style="display:none" id="imgPair">
+      <div class="img-container">
+        <div class="img-label">原图</div>
+        <img id="origImg" alt="原始图片">
+      </div>
+      <div class="img-container">
+        <div class="img-label">检测标注</div>
+        <img id="annotImg" alt="标注图片">
+        <div class="loading" id="imgLoading" style="display:none">检测中...</div>
+      </div>
+      <div class="img-container">
+        <div class="img-label">旋转后</div>
+        <img id="rotImg" alt="旋转后图片">
+      </div>
+    </div>
+    <div class="img-container" id="singleImg">
+      <div style="color:#546;text-align:center;padding:60px 0;">
+        <div style="font-size:40px;">🖼️</div>
+        <div style="margin-top:12px;">请上传一张 TV 屏幕照片</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Results -->
+  <div class="panel right" id="resultPanel">
+    <h3 style="color:#e94560;font-size:13px;margin-bottom:10px;">检测结果</h3>
+    <div id="resultContent" style="color:#546;">等待检测...</div>
+  </div>
+</div>
+
+<script>
+const API = '/api/debug/tv-orient';
+const DEFAULTS_API = '/api/debug/tv-orient-defaults';
+let currentImage = null;
+let defaults = null;
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const PRESETS = {
+  default: { canny_low:30, canny_high:100, blur_kernel:5, dilate_kernel:7, dilate_iter:1, area_min_ratio:12, fill_min:30, rot90_ratio:110, ocr_strip_ratio:15, ocr_min_score:60 },
+  sensitive: { canny_low:10, canny_high:50, blur_kernel:3, dilate_kernel:5, dilate_iter:2, area_min_ratio:8, fill_min:20, rot90_ratio:110, ocr_strip_ratio:15, ocr_min_score:50 },
+  large_tv: { canny_low:20, canny_high:80, blur_kernel:5, dilate_kernel:9, dilate_iter:2, area_min_ratio:20, fill_min:40, rot90_ratio:110, ocr_strip_ratio:20, ocr_min_score:60 },
+  small_tv: { canny_low:40, canny_high:120, blur_kernel:3, dilate_kernel:5, dilate_iter:1, area_min_ratio:5, fill_min:20, rot90_ratio:115, ocr_strip_ratio:10, ocr_min_score:50 },
+  strict_rot: { canny_low:30, canny_high:100, blur_kernel:5, dilate_kernel:7, dilate_iter:1, area_min_ratio:12, fill_min:30, rot90_ratio:130, ocr_strip_ratio:15, ocr_min_score:80 },
+};
+
+function apiVal(key) {
+  const maps = { area_min_ratio: v => v/100, fill_min: v => v/100, rot90_ratio: v => v/100, ocr_strip_ratio: v => v/100, ocr_min_score: v => v/100 };
+  return maps[key] ? maps[key](parseInt(document.querySelector(`[data-key="${key}"] input`).value)) : parseInt(document.querySelector(`[data-key="${key}"] input`).value);
+}
+
+function displayVal(key) {
+  const maps = { area_min_ratio: v => v+'%', fill_min: v => v+'%', rot90_ratio: v => v+'%', ocr_strip_ratio: v => v+'%', ocr_min_score: v => v+'%' };
+  return maps[key] ? maps[key](parseInt(document.querySelector(`[data-key="${key}"] input`).value)) : document.querySelector(`[data-key="${key}"] input`).value;
+}
+
+function applyPreset(name) {
+  const p = PRESETS[name] || PRESETS.default;
+  Object.entries(p).forEach(([k, v]) => {
+    const el = document.querySelector(`[data-key="${k}"] input`);
+    if (el) { el.value = v; el.dispatchEvent(new Event('input')); }
+  });
+  // 预设应用后立即检测（debounce = 0）
+  clearTimeout(debounceTimer);
+  if (currentImage) runDetect();
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    currentImage = e.target.result;
+    document.getElementById('origImg').src = currentImage;
+    document.getElementById('singleImg').style.display = 'none';
+    document.getElementById('imgPair').style.display = 'flex';
+    document.getElementById('btnDetect').disabled = false;
+    document.getElementById('annotImg').src = '';
+    document.getElementById('rotImg').src = '';
+    document.getElementById('resultContent').innerHTML = '<span style="color:#546;">图片已加载，点击"开始检测"</span>';
+    runDetect();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runDetect() {
+  if (!currentImage) return;
+  const btn = document.getElementById('btnDetect');
+  const loading = document.getElementById('imgLoading');
+  btn.disabled = true; loading.style.display = 'flex';
+  btn.textContent = '⏳ 检测中...';
+
+  const body = { image: currentImage };
+  document.querySelectorAll('.param-row[data-key]').forEach(row => {
+    body[row.dataset.key] = apiVal(row.dataset.key);
+  });
+  body.ocr_enabled = document.getElementById('ocr_enabled').checked;
+
+  try {
+    const res = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error?.message || '检测失败');
+
+    const d = json.data;
+    document.getElementById('annotImg').src = 'data:image/jpeg;base64,' + d.annotated_base64;
+    if (d.rotated_base64) document.getElementById('rotImg').src = 'data:image/jpeg;base64,' + d.rotated_base64;
+
+    // Results
+    const badgeClass = `badge-${d.angle}`;
+    const rotLabel = {0:'无需旋转 ✅', 90:'旋转 90° ↻', 180:'翻转 180° ↕', 270:'旋转 270° ↺'};
+    const tv = d.tv_region || {};
+    const ocrTexts = d.ocr_result?.texts || [];
+    const ocrTextsHtml = ocrTexts.length
+      ? `<div style="color:#546;font-size:10px;margin:8px 0 4px;">OCR 识别文字 (${ocrTexts.length})</div>
+         <div class="result-json">${ocrTexts.map(t => `${esc(t.text)}  <span style="color:#64ffda">${(t.score*100).toFixed(0)}%</span>`).join('\n')}</div>`
+      : '';
+
+    document.getElementById('resultContent').innerHTML = `
+      <div style="margin-bottom:8px;">
+        <span class="result-badge ${badgeClass}">${rotLabel[d.angle] || d.angle+'°'}</span>
+        <span style="font-size:11px;margin-left:8px;color:#8892b0;">置信度: ${(d.confidence*100).toFixed(0)}%</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:11px;margin-bottom:10px;">
+        <div><span style="color:#546;">Rot90:</span> <span style="color:${d.need_rot90?'#fbbf24':'#34d399'}">${d.need_rot90?'是':'否'}</span></div>
+        <div><span style="color:#546;">Flip180:</span> <span style="color:${d.need_flip180?'#fbbf24':'#34d399'}">${d.need_flip180?'是':'否'}</span></div>
+        ${tv.cx ? `<div><span style="color:#546;">TV区域:</span> ${tv.w}×${tv.h}</div>` : ''}
+        ${tv.cx ? `<div><span style="color:#546;">中心:</span> (${tv.cx},${tv.cy})</div>` : ''}
+        <div><span style="color:#546;">轮廓数:</span> ${tv.contours_found || 0}</div>
+        <div><span style="color:#546;">通过:</span> ${tv.contours_passed || 0}</div>
+        <div><span style="color:#546;">OCR条带:</span> ${d.ocr_result?.strip || '-'}</div>
+        <div><span style="color:#546;">OCR方向:</span> ${d.ocr_result?.label || '-'}</div>
+        <div><span style="color:#546;">OCR置信度:</span> ${d.ocr_result?.score ? (d.ocr_result.score*100).toFixed(1)+'%' : '-'}</div>
+      </div>
+      ${ocrTextsHtml}
+      <div style="color:#546;font-size:10px;margin-bottom:4px;">当前参数</div>
+      <div class="result-json">${JSON.stringify(d.params_used, null, 1)}</div>
+    `;
+  } catch (e) {
+    document.getElementById('resultContent').innerHTML = `<span style="color:#e94560;">检测失败: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false; loading.style.display = 'none';
+    btn.textContent = '🔍 开始检测';
+  }
+}
+
+function resetAll() {
+  currentImage = null;
+  document.getElementById('singleImg').style.display = 'flex';
+  document.getElementById('imgPair').style.display = 'none';
+  document.getElementById('btnDetect').disabled = true;
+  document.getElementById('annotImg').src = '';
+  document.getElementById('rotImg').src = '';
+  document.getElementById('resultContent').innerHTML = '<span style="color:#546;">等待检测...</span>';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('dropZone').style.borderColor = '#0f3460';
+  applyPreset('default');
+}
+
+// Sliders with live debounced re-detect
+let debounceTimer = null;
+function scheduleDetect() {
+  if (!currentImage) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runDetect, 280);
+}
+
+document.querySelectorAll('.param-row[data-key] input').forEach(s => {
+  s.addEventListener('input', () => {
+    s.parentElement.querySelector('.val').textContent = displayVal(s.parentElement.dataset.key);
+    scheduleDetect();
+  });
+});
+
+// OCR 开关也触发实时检测
+document.getElementById('ocr_enabled').addEventListener('change', scheduleDetect);
+
+// Drag & drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+// Load defaults and check API
+fetch(DEFAULTS_API).then(r=>r.json()).then(d=>{
+  if (d.success) {
+    defaults = d.data;
+    document.getElementById('apiStatus').textContent = 'API: 就绪 ✓';
+    document.getElementById('apiStatus').style.color = '#34d399';
+  }
+}).catch(()=>{
+  document.getElementById('apiStatus').textContent = 'API: 不可用 ✗';
+  document.getElementById('apiStatus').style.color = '#e94560';
+});
+</script>
+</body>
+</html>

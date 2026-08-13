@@ -230,7 +230,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 <div class="app">
   <div class="header">
     <h1>屏损故障鉴定</h1>
-    <div class="sub">TCL 智能判定助手<span class="sub-version">v1.0</span></div>
+    <div class="sub">TCL 智能判定助手<span class="sub-version">v5.2</span></div>
   </div>
   <div class="steps" id="steps">
     <div class="step-dot active" data-step="1" data-label="拍照取证"></div>
@@ -1269,14 +1269,17 @@ function renderResult(data) {
       else if (pkg === 'minor') env += '外包装存在<strong>轻微损坏</strong>。'
       else if (pkg === 'none') env += '外包装<strong>完好</strong>。'
 
-      // 初步结论
-      const d2 = data.decision
-      const causeMap = {
-        product_quality_issue: '屏幕本身的制造工艺或元器件老化等产品质量问题所致。建议进一步核实生产批次信息。',
-        not_product_quality: '非屏幕本身的产品质量问题，属于外部因素（外力碰撞、物流运输、安装或使用不当等）导致的物理屏损。',
-        no_damage: '屏幕无损伤，完好。',
+      // 初步结论：使用 AI 描述或结构化字段客观陈述
+      let conclusionHtml = ''
+      if (state.analysis.description && state.analysis.description.trim()) {
+        conclusionHtml = renderMarkdown(state.analysis.description)
+      } else {
+        const principle = state.analysis.principle || ''
+        const conclusion = state.analysis.conclusion || ''
+        conclusionHtml = `<p><strong>故障类型：</strong>${escHtml(state.analysis.location)}区域出现${escHtml(state.analysis.shape)}</p>`
+        if (principle) conclusionHtml += `<p><strong>故障原理：</strong>${escHtml(principle)}</p>`
+        if (conclusion) conclusionHtml += `<p><strong>鉴定结论：</strong>${escHtml(conclusion)}</p>`
       }
-      const causeText = causeMap[d2.result] || causeMap['not_product_quality']
 
       return `
     <div class="result-report" style="background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:16px 20px;margin-bottom:16px;font-size:13px;line-height:1.9;color:#333;">
@@ -1287,13 +1290,7 @@ function renderResult(data) {
       <div class="report-section"><h4>当前状态</h4>${env}</div>
       <div class="report-section" style="margin-top:14px;padding-top:12px;border-top:1px solid #e8e8e8;">
         <h4>初步鉴定结论</h4>
-        <div style="margin-top:4px;"><strong>故障类型：</strong>${(() => {
-          const s = (state.analysis.shape || '').toLowerCase()
-          if (s.includes('漏液')) return `屏幕出现液晶泄漏现象`
-          if (s.includes('熔屏')) return `屏幕出现高温熔损现象`
-          return `${escHtml(state.analysis.location)}受力导致的${escHtml(state.analysis.shape)}`
-        })()}</div>
-        <div style="margin-top:4px;" id="resultCause"><strong>故障原理：</strong>${escHtml(causeText)}</div>
+        <div style="margin-top:4px;">${conclusionHtml}</div>
       </div>
     </div>`
     })() : ''}
@@ -1349,8 +1346,6 @@ async function fetchSimilarCases(decision) {
           if (c.warrantyTip) detailText += '<p style="margin-top:8px;padding:8px 12px;background:#fff3cd;border-left:3px solid #ffc107;border-radius:4px;font-size:13px;">保修提示：' + escHtml(c.warrantyTip) + '</p>'
           detailEl.innerHTML = detailText
           document.getElementById('analysisSource').textContent = '向量融合匹配：' + c.title + ' (融合相似度 ' + c.similarity + '%)'
-          const rc = document.getElementById('resultCause')
-          if (rc) rc.innerHTML = '<strong>故障原理：</strong>' + escHtml(c.possibleCause)
         }
         // 构建相似度明细
         let scoreDetail = ''
@@ -1598,7 +1593,7 @@ function normalizeLabel(text, type) {
 }
 
 function generateAnalysisReport(analysis) {
-  // 使用原始标注文本：向量检索返回案例库详细标注，启发式回退返回短标签
+  // 使用 AI 生成的 description 作为报告主体；若无则用结构化字段组装最小客观描述
   const loc = analysis.location || '未知'
   const shape = analysis.shape || '未知'
   const stage = analysis.stage || ''
@@ -1606,58 +1601,21 @@ function generateAnalysisReport(analysis) {
   const principle = analysis.principle || ''
 
   // ---- 摘要 ----
-  const summary = `故障位置：<strong>${loc}</strong>，故障形状：<strong>${shape}</strong>`
+  const summary = `故障位置：<strong>${loc}</strong>，故障形态：<strong>${shape}</strong>`
 
   // ---- 详细报告 ----
-  const locDesc = {
-    '天侧': '屏幕<strong>上方（顶部区域）</strong>',
-    '地侧': '屏幕<strong>下方（底部区域）</strong>',
-    '左侧右侧': '屏幕<strong>侧面区域</strong>',
-    '四角区域': '屏幕<strong>角落区域</strong>',
-    '中央区域': '屏幕<strong>中心区域</strong>',
-    '全屏区域': '<strong>整个屏幕</strong>',
-    '局部不规则区域': '屏幕<strong>局部不规则区域</strong>',
-  }
-
-  const shapeDesc = {
-    '单条线状屏裂': '呈现典型的<strong>单条线状屏裂</strong>，裂纹方向集中，受力点较为明确。',
-    '多条线状屏裂': '呈现<strong>多条线状屏裂</strong>，多道裂纹并行或交叉分布，可能由多次受力或大范围冲击导致。',
-    '点放射状屏裂': '呈现典型的<strong>点放射状/网状屏裂</strong>，带有明确的受力中心点，裂纹由此向四周发散，边缘疑似有明显的<strong>外力磕碰/挤压变形</strong>痕迹。此类损伤100%由严重的外部暴力撞击、高处跌落或重物挤压导致，属于典型的物理外力屏损。',
-    '发散性线状屏裂': '呈现<strong>发散性线状屏裂</strong>，多条裂纹从受力中心向四周延伸贯穿，表明受力强度较大且方向分散。',
-    '环状/圈状屏裂': '呈现<strong>环状/圈状屏裂</strong>，裂纹呈环形或弧形分布，推测为圆形物体集中撞击或局部强力挤压所致。',
-    '网状(大面积无规则)屏裂': '呈现<strong>大面积的网状无规则屏裂</strong>，裂纹纵横交错、无明确方向性，通常由极大的外部冲击力或整机弯曲变形导致。',
-    '漏液': '屏幕出现<strong>液晶泄漏</strong>现象，表现为黑色圆形或不规则浸润区域，边界清晰平滑，表面无凹凸感，无撞击痕迹。',
-    '熔屏': '屏幕出现<strong>高温熔损</strong>现象，表现为黑色焦灼斑块或鼓包变形，边界呈烧灼状，颜色发黄/发紫/碳化黑，无撞击痕迹。',
-  }
-
-  const locText = locDesc[loc] || `<strong>${loc}</strong>`
-  const shapeText = shapeDesc[shape] || `呈现<strong>${shape}</strong>特征。`
-
-  let report = `从您提供的照片来看，屏幕存在<strong>明显的</strong>物理损伤，具体特征如下：`
-
-  report += `<div class="report-section"><h4>故障位置</h4>`
-  // 短标签走模板，详细标注（案例库）直接显示原文
-  if (locDesc[loc]) {
-    if (loc === '全屏区域') {
-      report += `裂纹已覆盖${locText}，无单一集中受力点，表明损伤范围极为广泛。`
-    } else if (loc === '四角区域') {
-      report += `主要受力点位于${locText}，此类位置损伤通常由边角跌落或撞击硬物导致。`
-    } else if (loc === '中央区域') {
-      report += `受力点集中于${locText}，常见于正面受到强力按压或撞击。`
-    } else {
-      report += `主要受力点位于${locText}。`
-    }
+  let report
+  if (analysis.description && analysis.description.trim()) {
+    // AI 生成：直接渲染 LLM 输出的 Markdown 文本
+    report = `<div class="report-section">${renderMarkdown(analysis.description)}</div>`
   } else {
-    // 案例库详细标注原文
-    report += `<strong>${loc}</strong>`
+    // 回退：仅基于结构化字段输出客观事实，不做任何归因推断
+    let parts = `<p>经AI检测，屏幕<strong>${loc}</strong>区域出现<strong>${shape}</strong>特征。</p>`
+    if (principle) parts += `<p><strong>故障原理：</strong>${principle}</p>`
+    if (stage) parts += `<p><strong>故障环节：</strong>${stage}</p>`
+    if (conclusion) parts += `<p><strong>鉴定结论：</strong>${conclusion}</p>`
+    report = `<div class="report-section">${parts}</div>`
   }
-  report += `</div>`
-
-  report += `<div class="report-section"><h4>故障形状</h4>${shapeText}</div>`
-
-  if (stage) report += `<div class="report-section"><h4>故障环节</h4>${stage}</div>`
-  if (principle) report += `<div class="report-section"><h4>故障原理</h4>${principle}</div>`
-  if (conclusion) report += `<div class="report-section"><h4>鉴定结论</h4>${conclusion}</div>`
 
   return { summary, report }
 }
@@ -1741,6 +1699,37 @@ async function runAnalysis(canvas) {
       state.analysis = analysis
       // 保存原始分析结果，用于纠正反馈时对比
       state.originalAnalysis = { location: analysis.location, shape: analysis.shape }
+
+      // 调用 LLM 生成 AI 描述文本（带 5s 超时，失败不影响主流程）
+      try {
+        const llmBody = {
+          images: state.photos.map(p => p.url),
+          context: {
+            installStatus: state.installStatus,
+            authPersonnel: state.authPersonnel,
+            packageDamage: state.packageDamage,
+            faultLinks: state.faultLinks,
+          },
+          mode: 'llm',
+        }
+        const llmResp = await Promise.race([
+          fetch('/api/knowledge/analyze-llm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(llmBody),
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ])
+        if (llmResp.ok) {
+          const llmData = await llmResp.json()
+          if (llmData.success && llmData.data) {
+            analysis.description = llmData.data.description || ''
+          }
+        }
+      } catch (e) {
+        console.log('[RAG] LLM 描述生成跳过（超时或不可用）:', e.message)
+      }
+
       loading.style.display = 'none'
       result.style.display = ''
       const report = generateAnalysisReport(analysis)

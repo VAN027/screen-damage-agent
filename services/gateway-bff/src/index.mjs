@@ -231,6 +231,12 @@ const routes = [
       return proxyToKnowledge('GET', '/api/knowledge/cases/result-stats' + (qs ? '?' + qs : ''), null, res)
     },
   },
+  // 非流式 LLM 分析 —— 供 RAG 路径获取 AI 生成的 description
+  {
+    method: 'POST',
+    path: '/api/knowledge/analyze-llm',
+    handler: (_req, res, { body }) => proxyToKnowledge('POST', '/api/knowledge/analyze-llm', body, res),
+  },
   // SSE 流式分析 —— 特殊处理，不能走 fetchJson（会缓冲）
   {
     method: 'POST',
@@ -271,6 +277,11 @@ const routes = [
   {
     method: 'OPTIONS',
     path: '/api/knowledge/analyze-llm-stream',
+    handler: (_req, res) => { res.writeHead(204, corsHeaders()); res.end() },
+  },
+  {
+    method: 'OPTIONS',
+    path: '/api/knowledge/analyze-llm',
     handler: (_req, res) => { res.writeHead(204, corsHeaders()); res.end() },
   },
   // ===== SQL 自助查询 =====

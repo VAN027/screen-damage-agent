@@ -2,6 +2,7 @@ import { writeFile, mkdir, access, readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
+import { execFile } from 'node:child_process'
 import sharp from 'sharp'
 import { searchByImage, indexCase as clipIndexCase, deleteIndex as clipDeleteIndex, rebuildIndex as clipRebuildIndex, clipHealth } from './clip-client.mjs'
 import { initDb, getDb, serializeCase, deserializeCase, serializeTraining, deserializeTraining, migrateFromJson } from './db.mjs'
@@ -109,6 +110,59 @@ async function autoOrientTV(buf) {
   } catch (_) { return buf }
 }
 
+// ==== 基于 OpenCV 轮廓检测的 TV 方向纠正（新方案） ====
+
+const PYTHON_VENV = join(__dirname, '..', 'python', 'venv', 'bin', 'python3')
+const DETECT_SCRIPT = join(__dirname, '..', 'tools', 'detect-tv-orientation.py')
+
+/**
+ * 调用 Python 脚本，用 OpenCV 轮廓 + minAreaRect 检测 TV 屏幕方向
+ * @param {Buffer} buf - 图片 buffer
+ * @returns {Promise<{angle: number}>} 需要旋转的角度 (0/90/180/270)
+ */
+function _runContourDetect(buf) {
+  return new Promise((resolve) => {
+    const child = execFile(PYTHON_VENV, [DETECT_SCRIPT, '--json', '-'], {
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+    }, (err, stdout, stderr) => {
+      if (err) {
+        // 脚本失败时静默返回 0（不旋转）
+        resolve({ angle: 0, error: err.message })
+        return
+      }
+      try {
+        const result = JSON.parse(stdout.trim())
+        resolve(result)
+      } catch {
+        resolve({ angle: 0, error: 'parse error' })
+      }
+    })
+
+    // 把图片 buffer 通过 stdin 传给 Python
+    child.stdin.write(buf)
+    child.stdin.end()
+  })
+}
+
+/**
+ * 基于 OpenCV 轮廓检测的 TV 方向纠正
+ * 先找 TV 屏幕的矩形边框，直接判断横竖和倒立
+ */
+async function autoOrientTV_contour(buf) {
+  try {
+    const result = await _runContourDetect(buf)
+    if (result.error) return buf  // 检测失败，不动原图
+
+    const angle = result.angle || 0
+    if (angle === 0) return buf
+
+    return await sharp(buf).rotate(angle).toBuffer()
+  } catch (_) {
+    return buf
+  }
+}
+
 // 旋转 90° 后对正 180° 方向：比较 TV 底部 vs 顶部的边缘密度
 async function _autoOrient180(buf, pixels, w, h) {
   try {
@@ -151,9 +205,9 @@ export async function saveImages(caseId, dataUrls) {
     let data = Buffer.from(match[2], 'base64')
     if (data.length > MAX_IMAGE_BYTES) continue
 
-    // 两步方向纠正：EXIF 旋转 + TV 屏幕边框检测
+    // 两步方向纠正：EXIF 旋转 + 轮廓检测 TV 方向
     data = await autoOrientImage(data)
-    data = await autoOrientTV(data)
+    data = await autoOrientTV_contour(data)
     const suffix = i > 0 ? `_${i}` : ''
     const filename = `${caseId}${suffix}.${ext}`
     const filepath = join(IMAGES_DIR, filename)
