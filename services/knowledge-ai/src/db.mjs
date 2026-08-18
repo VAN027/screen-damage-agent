@@ -58,8 +58,29 @@ export async function initDb() {
       warrantyTip TEXT DEFAULT '',
       corrections TEXT DEFAULT '[]',
       needsReview INTEGER DEFAULT 0,
+      review_status TEXT DEFAULT 'approved',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS pending_cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT DEFAULT '',
+      deviceModel TEXT DEFAULT '',
+      statusObs TEXT DEFAULT '',
+      crackLocation TEXT DEFAULT '',
+      crackShape TEXT DEFAULT '',
+      crackPrinciple TEXT DEFAULT '',
+      crackStage TEXT DEFAULT '',
+      result TEXT DEFAULT '',
+      remark TEXT DEFAULT '',
+      imageBase64 TEXT DEFAULT '',
+      source TEXT DEFAULT 'manual_correction',
+      status TEXT DEFAULT 'pending',
+      reviewed_by TEXT DEFAULT '',
+      review_remark TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS training (
@@ -105,6 +126,16 @@ export async function initDb() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id TEXT DEFAULT '',
+      conclusion TEXT DEFAULT '',
+      feedback TEXT NOT NULL,
+      remark TEXT DEFAULT '',
+      source TEXT DEFAULT 'h5',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `)
 
   // == 迁移：为已有 evaluations 表补充新字段（忽略已存在的错误） ==
@@ -138,22 +169,37 @@ export async function initDb() {
   migrateCol('training', 'originalPrinciple', "TEXT DEFAULT ''")
   migrateCol('training', 'originalStage', "TEXT DEFAULT ''")
   migrateCol('training', 'originalConclusion', "TEXT DEFAULT ''")
+  migrateCol('cases', 'remark', "TEXT DEFAULT ''")
+  migrateCol('training', 'remark', "TEXT DEFAULT ''")
+  migrateCol('cases', 'review_status', "TEXT DEFAULT 'approved'")
 
   // 预编译常用语句
   const stmts = {
     // cases CRUD
     allCases: db.prepare('SELECT * FROM cases ORDER BY created_at DESC'),
+    approvedCases: db.prepare("SELECT * FROM cases WHERE review_status = 'approved' ORDER BY created_at DESC"),
     caseById: db.prepare('SELECT * FROM cases WHERE id = ?'),
+    insertPending: db.prepare(`INSERT INTO pending_cases (
+      title, deviceModel, statusObs, crackLocation, crackShape, crackPrinciple,
+      crackStage, result, remark, imageBase64, source
+    ) VALUES (
+      @title, @deviceModel, @statusObs, @crackLocation, @crackShape, @crackPrinciple,
+      @crackStage, @result, @remark, @imageBase64, @source
+    )`),
+    pendingAll: db.prepare('SELECT * FROM pending_cases ORDER BY created_at DESC'),
+    pendingById: db.prepare('SELECT * FROM pending_cases WHERE id = ?'),
+    pendingUpdateStatus: db.prepare(`UPDATE pending_cases SET status = ?, reviewed_by = ?, review_remark = ?, reviewed_at = datetime('now') WHERE id = ?`),
+    pendingCount: db.prepare('SELECT COUNT(*) as total FROM pending_cases WHERE status = ?'),
     insertCase: db.prepare(`INSERT INTO cases (
       id, title, deviceModel, symptoms, crackShape, crackLocation,
       physicalFeature, liquidState, installStatus, packageDamage,
       crackStage, crackPrinciple, result, resultLabel, summary, tags,
-      images, possibleCause, warrantyTip, corrections, needsReview
+      images, possibleCause, warrantyTip, corrections, needsReview, remark, review_status
     ) VALUES (
       @id, @title, @deviceModel, @symptoms, @crackShape, @crackLocation,
       @physicalFeature, @liquidState, @installStatus, @packageDamage,
       @crackStage, @crackPrinciple, @result, @resultLabel, @summary, @tags,
-      @images, @possibleCause, @warrantyTip, @corrections, @needsReview
+      @images, @possibleCause, @warrantyTip, @corrections, @needsReview, @remark, @review_status
     )`),
     updateCase: db.prepare(`UPDATE cases SET
       title = @title, deviceModel = @deviceModel, symptoms = @symptoms,
@@ -165,7 +211,7 @@ export async function initDb() {
       summary = @summary, tags = @tags,
       images = @images, possibleCause = @possibleCause,
       warrantyTip = @warrantyTip, corrections = @corrections,
-      needsReview = @needsReview, updated_at = datetime('now')
+      needsReview = @needsReview, remark = @remark, updated_at = datetime('now')
       WHERE id = @id`),
     deleteCase: db.prepare('DELETE FROM cases WHERE id = ?'),
     deleteCasesByIds: (ids) => {
@@ -179,11 +225,11 @@ export async function initDb() {
     insertTraining: db.prepare(`INSERT INTO training (
       features, statusObs, location, shape, principle, stage, conclusion,
       caseId, originalStatusObs, originalLocation, originalShape, originalPrinciple, originalStage, originalConclusion,
-      source, imageBase64
+      source, imageBase64, remark
     ) VALUES (
       @features, @statusObs, @location, @shape, @principle, @stage, @conclusion,
       @caseId, @originalStatusObs, @originalLocation, @originalShape, @originalPrinciple, @originalStage, @originalConclusion,
-      @source, @imageBase64
+      @source, @imageBase64, @remark
     )`),
     countTraining: db.prepare('SELECT COUNT(*) as total FROM training'),
   }
@@ -268,6 +314,8 @@ export function serializeCase(c) {
     warrantyTip: c.warrantyTip || '',
     corrections: JSON.stringify(c.corrections || []),
     needsReview: c.needsReview ? 1 : 0,
+    remark: c.remark || '',
+    review_status: c.review_status || 'approved',
   }
 }
 
@@ -309,6 +357,7 @@ export function serializeTraining(t) {
     originalConclusion: t.originalConclusion || '',
     source: t.source || 'manual',
     imageBase64: t.imageBase64 || '',
+    remark: t.remark || '',
   }
 }
 
@@ -519,6 +568,37 @@ export function deleteEvalsByIds(ids) {
   if (!db || !Array.isArray(ids) || ids.length === 0) return 0
   const placeholders = ids.map(() => '?').join(',')
   return db.prepare(`DELETE FROM evaluations WHERE id IN (${placeholders})`).run(...ids).changes
+}
+
+// ===== 在线判定正确率反馈 =====
+
+export function saveFeedback(data) {
+  if (!db) throw new Error('DB not initialized')
+  const info = db.prepare(`INSERT INTO feedback (case_id, conclusion, feedback, remark, source)
+    VALUES (@case_id, @conclusion, @feedback, @remark, @source)`).run({
+    case_id: data.caseId || '',
+    conclusion: data.conclusion || '',
+    feedback: data.feedback,
+    remark: data.remark || '',
+    source: data.source || 'h5',
+  })
+  return { id: Number(info.lastInsertRowid), ...getFeedbackStats() }
+}
+
+export function reportFeedback(id, remark) {
+  if (!db) throw new Error('DB not initialized')
+  if (!id) throw new Error('缺少反馈记录 id')
+  const info = db.prepare("UPDATE feedback SET feedback = 'incorrect', remark = @remark WHERE id = @id").run({ id, remark: remark || '' })
+  return { updated: info.changes, ...getFeedbackStats() }
+}
+
+export function getFeedbackStats() {
+  if (!db) return { correct: 0, incorrect: 0, total: 0, accuracy: 0 }
+  const correct = db.prepare("SELECT COUNT(*) as c FROM feedback WHERE feedback = 'correct'").get().c
+  const incorrect = db.prepare("SELECT COUNT(*) as c FROM feedback WHERE feedback = 'incorrect'").get().c
+  const total = correct + incorrect
+  const accuracy = total > 0 ? Math.round((correct / total) * 1000) / 10 : 0
+  return { correct, incorrect, total, accuracy }
 }
 
 // ===== 集中式字段定义 =====

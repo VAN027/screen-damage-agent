@@ -1,6 +1,6 @@
 # 屏损故障鉴定智能体
 
-> **版本**：v5.2 | **更新**：2026-08-11
+> **版本**：v5.3 | **更新**：2026-08-18
 
 ---
 
@@ -14,7 +14,9 @@
 - **LLM 智能鉴定**：支持多模态大模型分析屏损位置、形态、原理、环节，SSE 流式输出鉴定报告
 - **鉴定分析模式**：支持 RAG 纯检索 / LLM 纯大模型 / Hybird 混合三种分析模式，通过管理后台配置切换
 - **手动鉴定按钮**：H5 页面提供「鉴定分析」按钮，支持拍照后手动触发分析，失败时显示错误信息
-- **纠正反馈同步案例库**：一线人员纠正分析结果后，自动生成 "人工校正 - {位置} - {形态}" 格式案例同步到案例库
+- **纠正反馈审核入库**：一线人员纠正分析结果后进入待审核队列，管理员审核通过后才正式入库并参与 RAG 检索
+- **人工审核工作台**：管理后台提供待审核/已通过/已驳回三态审核，确保案例库数据质量
+- **判定正确率反馈**：H5 判定结果支持用户「正确/有误」反馈，仪表盘实时展示判定正确率
 - **评估体系**：内置 LLM vs 人工标注对比评估，支持批量评测 + 混淆矩阵 + Excel 导出
 - **快速标注**：管理后台批量导入图片 → AI 自动预填 + 一键标注 → 入库为案例
 - **自动索引**：创建/导入案例时自动提取特征写入向量库，无需手动训练
@@ -87,7 +89,8 @@
 | ④ | 安装信息：安装状态/开箱人员/包装/故障环节 | 下拉 + 多选 |
 | ⑤ | LLM 流式分析：多模态大模型实时输出鉴定报告 | 自动或手动触发 |
 | ⑤ | 相似案例：向量+标签融合匹配，Top 5 推荐 | 自动加载 |
-| ⑤ | 纠正反馈：对分析结果纠错，自动同步案例库 | 手动操作 |
+| ⑤ | 判定反馈：对判定结果反馈「正确/有误」 | 手动操作 |
+| ⑤ | 纠正反馈：纠正鉴定结论并填写备注，进入待审核队列 | 手动操作 |
 
 ### 3.2 管理后台
 
@@ -98,6 +101,14 @@
 - JSON 批量导入 / 导出
 - 自定义标注字段（Tag 标签、结论按钮、文本域、输入框）
 - 图片批量入库 + 快速标注
+- 案例新增「问题备注」字段
+
+#### 人工审核工作台（核心功能）
+- H5 纠正提交的案例进入待审核队列，不直接入库
+- 待审核 / 已通过 / 已驳回 三态管理
+- 审核人姓名 + 驳回原因记录
+- 通过后自动创建案例并进入 RAG 检索索引
+- 确保案例库数据质量，避免低质量纠正污染检索
 
 #### 快速标注（核心功能）
 - 拖拽批量导入图片
@@ -227,7 +238,7 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 | GET/POST | `/api/knowledge/model-config` | 主模型配置 |
 | GET/POST | `/api/knowledge/annotation-config` | 标注模型配置 |
 | POST | `/api/knowledge/search-vector` | 纯向量检索 |
-| POST | `/api/knowledge/correction` | 提交纠错（含同步案例库） |
+| POST | `/api/knowledge/correction` | 提交纠错（进入待审核队列） |
 | POST | `/api/knowledge/annotate-single` | 单张图片 AI 标注 |
 | POST | `/api/knowledge/annotate-batch` | 批量图片 AI 标注 |
 | GET | `/api/knowledge/cases/result-stats` | 案例结果统计 |
@@ -256,7 +267,14 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 | GET | `/api/knowledge/images` | 案例图片 |
 | POST | `/api/knowledge/cases/from-images` | 图片批量入库 |
 | GET/POST | `/api/knowledge/training` | 训练数据管理 |
-| POST | `/api/knowledge/correction` | 纠错反馈 |
+| POST | `/api/knowledge/correction` | 纠错反馈（写入待审核队列） |
+| POST | `/api/knowledge/feedback` | 提交判定正确率反馈 |
+| GET | `/api/knowledge/feedback/stats` | 判定正确率统计 |
+| POST | `/api/knowledge/feedback/report` | 判定报错（翻转正确→不正确） |
+| GET | `/api/knowledge/review/pending` | 待审核案例列表 |
+| GET | `/api/knowledge/review/stats` | 审核统计 |
+| POST | `/api/knowledge/review/approve` | 审核通过（入库 + 索引） |
+| POST | `/api/knowledge/review/reject` | 审核驳回 |
 | POST | `/api/knowledge/analyze-llm` | LLM 分析（非流式） |
 | POST | `/api/knowledge/analyze-llm-stream` | LLM 流式分析 (SSE) |
 | POST | `/api/knowledge/annotate-single` | 单张 AI 标注 |
@@ -378,8 +396,42 @@ Content-Type: application/json
 | warrantyTip | TEXT | 保修提示 |
 | corrections | JSON | 纠正记录 |
 | needsReview | INTEGER | 是否需要复核 |
+| remark | TEXT | 问题备注 |
+| review_status | TEXT | 审核状态（approved/pending/rejected） |
 | created_at | TEXT | 创建时间 |
 | updated_at | TEXT | 更新时间 |
+
+#### pending_cases 表（待审核案例队列）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER (PK) | 自增 ID |
+| title | TEXT | 标题 |
+| deviceModel | TEXT | 设备型号 |
+| statusObs | TEXT | 状态观测 |
+| crackLocation | TEXT | 屏损位置 |
+| crackShape | TEXT | 屏损形态 |
+| crackPrinciple | TEXT | 屏损原理 |
+| crackStage | TEXT | 屏损环节 |
+| result | TEXT | 鉴定结论 |
+| remark | TEXT | 问题备注 |
+| imageBase64 | TEXT | 图片 Base64 |
+| source | TEXT | 数据来源 |
+| status | TEXT | 审核状态（pending/approved/rejected） |
+| reviewed_by | TEXT | 审核人 |
+| review_remark | TEXT | 审核备注 |
+| created_at | TEXT | 创建时间 |
+| reviewed_at | TEXT | 审核时间 |
+
+#### feedback 表（判定正确率反馈）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER (PK) | 自增 ID |
+| case_id | TEXT | 关联案例 ID |
+| conclusion | TEXT | 鉴定结论 |
+| feedback | TEXT | 反馈结果（correct/incorrect） |
+| remark | TEXT | 备注 |
+| source | TEXT | 来源（h5 等） |
+| created_at | TEXT | 创建时间 |
 
 #### training 表
 | 字段 | 类型 | 说明 |
@@ -395,6 +447,7 @@ Content-Type: application/json
 | caseId | TEXT | 关联案例 ID |
 | source | TEXT | 数据来源 |
 | imageBase64 | TEXT | 图片 Base64 |
+| remark | TEXT | 问题备注 |
 | created_at | TEXT | 创建时间 |
 
 #### evaluations 表
@@ -427,6 +480,7 @@ Content-Type: application/json
 | `installStatus` | 安装状态 | tag-grid | | 已安装/未安装 |
 | `packageDamage` | 包装状态 | tag-grid | | 无损坏/轻微损坏/严重损坏 |
 | `crackPrinciple` | 屏损原理 | textarea | | 自由文本（分析为何损坏的成因推断） |
+| `remark` | 问题备注 | textarea | | 自由文本（问题补充说明） |
 
 字段可在「管理后台 → 模型配置 → ⚙ 标注字段配置」中自由增删改。
 

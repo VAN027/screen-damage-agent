@@ -31,6 +31,7 @@ const DEFAULT_CONFIG = {
     { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
     { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
     { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
+    { id: 'remark', label: '问题备注', type: 'textarea', required: false },
   ],
 }
 

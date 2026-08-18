@@ -12,19 +12,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .header h1 { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #cc0010 0%, #e60012 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.3px; }
 .header .sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
 .header .sub-version { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #fef2f2; color: #e60012; font-size: 10px; font-weight: 600; -webkit-text-fill-color: #e60012; }
-.steps { display: flex; padding: 14px 20px; gap: 8px; border-bottom: 1px solid #f0f0f0; align-items: center; }
-.step-dot { flex: 1; height: 4px; border-radius: 2px; background: #e2e8f0; transition: all 0.4s ease; position: relative; }
-.step-dot.done { background: linear-gradient(90deg, #cc0010, #e60012); }
-.step-dot.active { background: linear-gradient(90deg, #cc0010, #e60012); box-shadow: 0 0 6px rgba(230,0,18,0.3); }
-.step-dot::after { content: attr(data-label); position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #94a3b8; white-space: nowrap; font-weight: 500; letter-spacing: 0.3px; }
-.step-dot.active::after { color: #cc0010; font-weight: 600; }
-.step-dot.done::after { color: #cc0010; }
 .page { flex: 1; padding: 24px 20px; display: none; flex-direction: column; overflow-y: auto; }
 .page.active { display: flex; }
 .page-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; color: #1e293b; }
-.page-title-row { display: flex; align-items: center; gap: 8px; }
-.page-back-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d1d5db; background: #fff; font-size: 14px; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
-.page-back-btn:hover { background: #f1f5f9; color: #cc0010; border-color: #e60012; }
 .page-desc { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6; }
 .symptoms { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .symptom-card { border: 2px solid #e2e8f0; border-radius: 14px; padding: 20px 14px; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); text-align: center; position: relative; }
@@ -56,7 +46,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .camera-consent .consent-perm-item .perm-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
 .camera-consent .consent-btns { display: flex; gap: 10px; width: 100%; }
 .camera-consent .consent-btn { flex: 1; padding: 12px; font-size: 14px; }
-.photo-preview { width: 100%; max-height: 250px; border-radius: 12px; overflow: hidden; position: relative; background: #f5f5f5; cursor: pointer; }
+.photo-preview { width: 100%; position: relative; }
 .photo-preview canvas { width: 100%; display: block; }
 .photo-preview .re-take { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .btn-row { display: flex; justify-content: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
@@ -124,8 +114,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .similar-card .sim-warranty { font-size: 12px; color: #991b1b; line-height: 1.5; margin-top: 6px; padding: 6px 10px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #e60012; }
 .analysis-panel { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px; padding: 18px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
 .analysis-panel .analysis-title { font-size: 14px; font-weight: 700; color: #065f46; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-.ai-panel { background: #fff5f5; border: 1px solid #fecaca; border-radius: 14px; padding: 18px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; }
-.ai-panel .analysis-title { font-size: 14px; font-weight: 700; color: #991b1b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.ai-panel { background: #fff; border: 1px solid #eef0f4; border-radius: 16px; padding: 20px; margin: 16px 0; display: none; animation: fadeInUp 0.4s ease; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+.ai-panel .analysis-title { font-size: 15px; font-weight: 700; color: #1e293b; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.ai-panel .analysis-title::before { content: ''; width: 4px; height: 16px; background: linear-gradient(180deg,#cc0010,#e60012); border-radius: 2px; }
 .analysis-row { display: flex; gap: 12px; margin-bottom: 10px; }
 .analysis-detail { font-size: 13px; line-height: 1.9; color: #333; padding: 0 4px; }
 .analysis-detail strong { color: #1a1a2e; }
@@ -146,7 +137,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .correction-actions { display: flex; gap: 8px; margin-top: 12px; }
 .correction-actions .btn-confirm { flex: 1; padding: 10px 14px; background: #059669; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .correction-actions .btn-confirm:disabled { background: #9ca3af; cursor: not-allowed; }
+.correction-actions .btn-confirm.success,
+.correction-actions .btn-confirm.success:disabled { background: #059669; }
+.correction-actions .btn-confirm.error { background: #dc2626; }
 .correction-actions .btn-cancel { padding: 10px 14px; background: #fff; color: #888; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.judge-feedback { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.judge-feedback-label { font-size: 12px; color: #888; }
+.judge-btn { padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid; }
+.judge-correct { background: #f0fdf4; color: #059669; border-color: #86efac; }
+.judge-incorrect { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.judge-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.judge-correct.active { background: #059669; color: #fff; border-color: #059669; }
+.judge-incorrect.active { background: #dc2626; color: #fff; border-color: #dc2626; }
 .correction-feedback { display: none; margin-top: 10px; padding: 8px 12px; border-radius: 6px; font-size: 12px; }
 .correction-feedback.success { background: #d1fae5; color: #065f46; display: block; }
 .correction-feedback.error { background: #fef2f2; color: #dc2626; display: block; }
@@ -157,13 +159,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .correct-btn { display:block; width:100%; padding:12px 20px; border:none; border-radius:10px; font-size:15px; font-weight:600; background:linear-gradient(135deg,#fffbeb,#fef3c7); cursor:pointer; color:#b45309; margin-top:12px; text-align:center; transition:all .2s; box-shadow:0 2px 8px rgba(245,158,11,.25); }
 .correct-btn:hover { background:linear-gradient(135deg,#fef3c7,#fde68a); color:#92400e; transform:translateY(-1px); box-shadow:0 4px 14px rgba(217,119,6,.3); }
 
-.llm-btn { display: block; width: 100%; margin-top: 8px; padding: 12px; border: 2px dashed #fca5a5; border-radius: 12px; background: #fff5f5; color: #b91c1c; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); }
-.llm-btn:hover { background: #fee2e2; border-color: #ef4444; }
-.llm-btn.loading { opacity: 0.6; pointer-events: none; }
+.llm-btn { display: block; width: 100%; margin-top: 10px; padding: 13px; border: none; border-radius: 12px; background: linear-gradient(135deg,#cc0010,#e60012); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 4px 12px rgba(230,0,18,0.22); }
+.llm-btn:hover { box-shadow: 0 6px 16px rgba(230,0,18,0.32); transform: translateY(-1px); }
+.llm-btn.loading { opacity: 0.7; pointer-events: none; }
 .llm-progress { margin-top: 10px; display: none; }
 .llm-progress-bar { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
 .llm-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #cc0010, #e60012); border-radius: 3px; transition: width 0.4s ease; }
 .llm-progress-text { font-size: 12px; color: #94a3b8; text-align: center; margin-top: 6px; }
+.llm-stream-box { display: flex; gap: 10px; align-items: flex-start; max-height: 260px; overflow-y: auto; margin-bottom: 12px; }
+.llm-stream-avatar { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#cc0010,#e60012); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(230,0,18,0.25); }
+.llm-stream-bubble { flex: 1; padding: 12px 14px; background: #f1f5f9; border-radius: 4px 14px 14px 14px; font-size: 13px; line-height: 1.8; color: #334155; white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
 .llm-result-label { font-size: 13px; font-weight: 700; color: #991b1b; margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
 .llm-result-label span { font-weight: 400; font-size: 11px; color: #94a3b8; }
 .llm-result-text { font-size: 13px; line-height: 1.9; color: #334155; padding: 0 4px; white-space: pre-wrap; word-break: break-word; }
@@ -178,16 +183,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .analysis-source { font-size: 11px; color: #888; margin-top: 6px; }
 
 /* Photo grid */
-.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px,1fr)); gap: 8px; margin-top: 10px; }
-.photo-grid-item { position: relative; aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 10px; overflow: hidden; cursor: pointer; background: #f9fafb; transition: all 0.2s; }
-.photo-grid-item:hover { border-color: #fca5a5; }
-.photo-grid-item.main { border-color: #e60012; box-shadow: 0 0 0 2px rgba(230,0,18,0.15); }
-.photo-grid-item img, .photo-grid-item canvas { width: 100%; height: 100%; object-fit: cover; }
-.photo-grid-item .grid-badge { position: absolute; top: 2px; left: 4px; background: linear-gradient(135deg, #cc0010, #e60012); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
-.photo-grid-item .grid-del { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 10px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; opacity: 0.7; transition: all 0.2s; }
-.photo-grid-item .grid-del:hover { opacity: 1; background: rgba(220,38,38,0.85); transform: scale(1.1); }
-.photo-grid-add { aspect-ratio: 1; border: 2px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; font-size: 28px; font-weight: 300; transition: all 0.2s; }
-.photo-grid-add:hover { border-color: #e60012; color: #e60012; background: #fff5f5; }
+.photo-main { position: relative; width: 100%; aspect-ratio: 1; max-height: 320px; border-radius: 12px; overflow: hidden; background: #f1f5f9; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
+.photo-main canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+.photo-main .grid-badge { position: absolute; top: 10px; left: 10px; background: linear-gradient(135deg,#cc0010,#e60012); color: #fff; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; box-shadow: 0 2px 6px rgba(230,0,18,0.3); }
+.photo-main .grid-del { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 14px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s; }
+.photo-main .grid-del:hover { background: rgba(220,38,38,0.9); transform: scale(1.1); }
+.photo-thumbs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.photo-thumb { position: relative; flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; overflow: hidden; border: 2px solid #e2e8f0; cursor: pointer; background: #f9fafb; transition: all 0.2s; }
+.photo-thumb.active { border-color: #e60012; box-shadow: 0 0 0 2px rgba(230,0,18,0.15); }
+.photo-thumb canvas { width: 100%; height: 100%; object-fit: cover; }
+.photo-thumb .thumb-main-badge { position: absolute; top: 2px; left: 2px; background: linear-gradient(135deg,#cc0010,#e60012); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+.photo-thumb .thumb-del { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 8px; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; opacity: 0.85; }
+.photo-thumb-add { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; border: 2px dashed #cbd5e1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; color: #94a3b8; transition: all 0.2s; }
+.photo-thumb-add:hover { border-color: #e60012; color: #e60012; background: #fff5f5; }
+.photo-thumb-add .add-plus { font-size: 22px; line-height: 1; font-weight: 300; }
+.photo-thumb-add .add-text { font-size: 11px; }
 .photo-count { font-size: 12px; color: #64748b; margin-top: 4px; text-align: center; }
 
 .img-lightbox-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 9999; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -232,14 +242,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
     <h1>屏损故障鉴定</h1>
     <div class="sub">TCL 智能判定助手<span class="sub-version">v5.2</span></div>
   </div>
-  <div class="steps" id="steps">
-    <div class="step-dot active" data-step="1" data-label="拍照取证"></div>
-    <div class="step-dot" data-step="2" data-label="鉴定结果"></div>
-  </div>
-
-  <!-- 第1步：拍照取证 -->
+  <!-- 单一流程页：拍照取证 + 鉴定结果 -->
   <div class="page active" id="page1">
-    <div class="page-title">① 现场拍照取证</div>
+    <div class="page-title">现场拍照取证</div>
     <div class="page-desc">请对准屏幕损伤位置拍摄，系统将自动添加时间戳水印</div>
     <div class="camera-view" id="cameraView">
       <div class="camera-consent" id="cameraConsent">
@@ -262,7 +267,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
       <button class="guide-toggle" id="guideToggle" onclick="toggleGuide()" title="微距辅助线" style="display:none">⊕</button>
     </div>
     <div class="photo-preview" id="photoPreview" style="display:none">
-      <div class="photo-grid" id="photoGrid"></div>
+      <div class="photo-main" id="photoMain"></div>
+      <div class="photo-thumbs" id="photoThumbs"></div>
       <div class="photo-count" id="photoCount"></div>
       <div class="btn-row" id="btnInfoRow" style="margin-top:6px;display:none">
         <button class="btn btn-outline btn-sm" id="btnOpenInfo" onclick="openInfoSheet()" style="width:92%;margin:0 auto">安装与故障信息</button>
@@ -283,7 +289,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
       <div id="analysisResult" style="display:none">
         <div class="analysis-detail" id="analysisDetail"></div>
         <div class="analysis-source" id="analysisSource"></div>
-        <button class="correct-btn" onclick="showCorrection()">分析不准？点此纠正 →</button>
       </div>
     </div>
     <div class="ai-panel" id="aiAnalysisPanel">
@@ -294,19 +299,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
           <div class="llm-progress-bar"><div class="llm-progress-fill" id="llmProgressFill"></div></div>
           <div class="llm-progress-text" id="llmProgressText">准备分析...</div>
         </div>
-        <div class="llm-stream-box" id="llmStreamBox" style="display:none;max-height:260px;overflow-y:auto;padding:12px;background:#f8fafc;border-radius:8px;font-size:13px;line-height:1.8;color:#333;white-space:pre-wrap;word-break:break-word;margin-bottom:10px;"></div>
+        <div class="llm-stream-box" id="llmStreamBox" style="display:none;">
+          <div class="llm-stream-avatar">AI</div>
+          <div class="llm-stream-bubble" id="llmStreamBubble"></div>
+        </div>
         <div class="llm-result-label">鉴定分析结果 <span id="llmModelTag"></span></div>
         <div class="llm-result-text" id="llmResultText"></div>
         <div class="llm-result-meta" id="llmResultMeta"></div>
-        <button class="correct-btn llm-correct-btn" onclick="showCorrection()" style="display:none;">分析不准？点此纠正 →</button>
+        <div class="judge-feedback" id="judgeFeedback" style="display:none;">
+          <span class="judge-feedback-label">本次判定是否准确？</span>
+          <button class="judge-btn judge-correct" id="judgeCorrectBtn" onclick="confirmJudgementCorrect()">✓ 判定正确</button>
+          <button class="judge-btn judge-incorrect" id="judgeIncorrectBtn" onclick="reportJudgementIncorrect()">✗ 判定有误</button>
+        </div>
       </div>
     </div>
     <div class="correction-panel" id="correctionPanel">
-      <div class="corr-title">纠正分析结果（将作为训练数据提升后续准确率，提交后同步至案例库）</div>
+      <div class="corr-title">问题反馈</div>
       <div id="corrFieldsContainer"></div>
       <div class="correction-actions">
         <button class="btn-cancel" onclick="hideCorrection()">取消</button>
-        <button class="btn-confirm" id="corrConfirmBtn" onclick="submitCorrection()">确认提交并同步至案例库</button>
+        <button class="btn-confirm" id="corrConfirmBtn" onclick="submitCorrection()">确认提交</button>
       </div>
       <div class="correction-feedback" id="corrFeedback"></div>
     </div>
@@ -319,9 +331,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
         <button class="btn-retake-link" id="btnRetake" onclick="retake()" style="display:none">重拍全部</button>
       </div>
     </div>
-    <div id="submitArea" style="margin-top:auto;padding-top:12px;display:none;">
-      <button class="btn btn-primary" onclick="submitCase()" id="btnSubmit" disabled>提交判定 →</button>
-      <div id="submitHint" style="text-align:center;font-size:12px;color:#d97706;margin-top:6px;display:none;">请先点击上方「安装与故障信息」填写后提交</div>
+    <!-- 判定结果（合并到本页，位于屏损鉴定分析下方） -->
+    <div id="resultSection" style="display:none;margin-top:24px;padding-top:20px;border-top:1px solid #e2e8f0;">
+      <div id="resultContent"></div>
+      <div id="similarContent"></div>
     </div>
   </div>
 
@@ -363,21 +376,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
     </div>
   </div>
 
-  <!-- 第2步：判定结果 -->
-  <div class="page" id="page2">
-    <div class="page-title-row">
-      <button class="page-back-btn" onclick="goBack()" title="返回拍照取证">←</button>
-      <div class="page-title">判定结果</div>
-    </div>
-    <div class="page-desc">系统已完成自动判定，结果如下：</div>
-    <div id="resultContent">
-      <div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>
-    </div>
-    <div id="similarContent"></div>
-    <div style="margin-top:auto;padding-top:20px">
-      <button class="btn btn-outline" onclick="resetAll()">鉴定新案例</button>
-    </div>
-  </div>
 </div>
 
 <!-- 图片原图预览弹窗 -->
@@ -410,6 +408,9 @@ let state = {
   currentResult: null,
   analysis: null,
   infoConfirmed: false,
+  topSimilarCaseId: '',
+  feedbackId: null, // 当前判定的反馈记录 id（默认记正确，报错时翻转）
+  mainIndex: 0, // 当前主图索引
 }
 let stream = null
 let lightboxAngle = 0
@@ -465,7 +466,6 @@ function showCameraConsent() {
   document.getElementById('guideOverlay').classList.remove('on')
   document.getElementById('guideToggle').style.display = 'none'
   document.getElementById('actionButtons').style.display = 'none'
-  document.getElementById('submitArea').style.display = 'none'
 
   // 隐藏 fallback（如果之前显示过）
   const fb = document.getElementById('cameraFallback')
@@ -480,7 +480,6 @@ function onConsentGranted() {
   cameraConsented = true
   document.getElementById('cameraConsent').style.display = 'none'
   document.getElementById('actionButtons').style.display = ''
-  document.getElementById('submitArea').style.display = ''
   startCameraAndLocation()
 }
 
@@ -521,7 +520,6 @@ function onConsentDeny() {
   document.getElementById('cameraConsent').style.display = 'none'
   document.getElementById('cameraView').classList.remove('dark')
   document.getElementById('actionButtons').style.display = ''
-  document.getElementById('submitArea').style.display = ''
   // 拒绝权限后给出提示，引导用户使用相册上传
   const v = document.getElementById('video')
   v.style.display = 'none'
@@ -676,37 +674,70 @@ function compressImage(src) {
 }
 
 function renderPhotoGrid() {
-  const grid = document.getElementById('photoGrid'), cnt = document.getElementById('photoCount')
-  grid.innerHTML = ''
-  state.photos.forEach((p, i) => {
-    const div = document.createElement('div')
-    div.className = 'photo-grid-item' + (i === 0 ? ' main' : '')
-    div.onclick = () => openLightbox(p.url)
-    const canvas = document.createElement('canvas')
-    canvas.width = 200; canvas.height = 200
-    const ctx = canvas.getContext('2d')
+  const main = document.getElementById('photoMain')
+  const thumbs = document.getElementById('photoThumbs')
+  const cnt = document.getElementById('photoCount')
+  main.innerHTML = ''
+  thumbs.innerHTML = ''
+
+  if (state.mainIndex >= state.photos.length) state.mainIndex = Math.max(0, state.photos.length - 1)
+
+  // 主图大图
+  if (state.photos.length > 0) {
+    const p = state.photos[state.mainIndex]
+    const mainCanvas = document.createElement('canvas')
+    mainCanvas.width = 400; mainCanvas.height = 400
+    const ctx = mainCanvas.getContext('2d')
     const img = new Image()
     img.onload = () => {
-      const s = Math.min(200/img.width, 200/img.height)
+      const s = Math.min(400/img.width, 400/img.height)
       const w = img.width*s, h = img.height*s
-      ctx.drawImage(img, (200-w)/2, (200-h)/2, w, h)
+      ctx.drawImage(img, (400-w)/2, (400-h)/2, w, h)
     }
     img.src = p.url
-    div.appendChild(canvas)
-    if (i === 0) {
-      const badge = document.createElement('span'); badge.className = 'grid-badge'; badge.textContent = '主图'; div.appendChild(badge)
-    }
+    mainCanvas.onclick = () => openLightbox(p.url)
+    main.appendChild(mainCanvas)
+
+    const badge = document.createElement('span'); badge.className = 'grid-badge'; badge.textContent = '主图'; main.appendChild(badge)
     const del = document.createElement('button'); del.className = 'grid-del'; del.textContent = '×'
-    del.onclick = e => { e.stopPropagation(); removePhoto(i) }
-    div.appendChild(del)
-    grid.appendChild(div)
+    del.onclick = e => { e.stopPropagation(); removePhoto(state.mainIndex) }
+    main.appendChild(del)
+  }
+
+  // 缩略图行
+  state.photos.forEach((p, i) => {
+    const thumb = document.createElement('div')
+    thumb.className = 'photo-thumb' + (i === state.mainIndex ? ' active' : '')
+    thumb.onclick = () => { state.mainIndex = i; renderPhotoGrid() }
+    const c = document.createElement('canvas')
+    c.width = 120; c.height = 120
+    const ctx2 = c.getContext('2d')
+    const ti = new Image()
+    ti.onload = () => {
+      const s = Math.min(120/ti.width, 120/ti.height)
+      const w = ti.width*s, h = ti.height*s
+      ctx2.drawImage(ti, (120-w)/2, (120-h)/2, w, h)
+    }
+    ti.src = p.url
+    thumb.appendChild(c)
+    if (i === 0) {
+      const b = document.createElement('span'); b.className = 'thumb-main-badge'; b.textContent = '主'; thumb.appendChild(b)
+    }
+    const td = document.createElement('button'); td.className = 'thumb-del'; td.textContent = '×'
+    td.onclick = e => { e.stopPropagation(); removePhoto(i) }
+    thumb.appendChild(td)
+    thumbs.appendChild(thumb)
   })
+
+  // 添加卡片
   if (state.photos.length < MAX_PHOTOS) {
     const add = document.createElement('div')
-    add.className = 'photo-grid-add'; add.textContent = '+'
+    add.className = 'photo-thumb-add'
+    add.innerHTML = '<span class="add-plus">+</span><span class="add-text">添加</span>'
     add.onclick = () => document.getElementById('fileInput').click()
-    grid.appendChild(add)
+    thumbs.appendChild(add)
   }
+
   cnt.textContent = `已选 ${state.photos.length} 张 · 上限 ${MAX_PHOTOS} 张`
   document.getElementById('btnRetake').style.display = state.photos.length > 0 ? '' : 'none'
 }
@@ -738,6 +769,9 @@ function addPhotoFromCanvas(canvas) {
 
 function removePhoto(index) {
   state.photos.splice(index, 1)
+  // 调整主图索引：删除主图之前的照片则左移；删除主图本身则落到下一张
+  if (index < state.mainIndex) state.mainIndex--
+  if (state.mainIndex >= state.photos.length) state.mainIndex = Math.max(0, state.photos.length - 1)
   renderPhotoGrid()
   if (state.photos.length === 0) {
     document.getElementById('photoPreview').style.display = 'none'
@@ -1000,7 +1034,15 @@ document.addEventListener('paste', (e) => {
   }
 })
 
+// 跟踪当前进行中的 LLM 分析请求，用于重新触发时取消旧请求
+let llmAbortController = null
+
 function resetLLMResult() {
+  // 取消正在进行的 LLM 分析
+  if (llmAbortController) {
+    llmAbortController.abort()
+    llmAbortController = null
+  }
   const r = document.getElementById('llmResult')
   r.style.display = 'none'
   document.getElementById('llmResultText').innerHTML = ''
@@ -1011,8 +1053,9 @@ function resetLLMResult() {
   btn.style.display = ''
   btn.classList.remove('loading')
   btn.textContent = '启动屏损鉴定分析'
-  btn.style.color = '#b91c1c'
-  btn.style.borderColor = '#fca5a5'
+  btn.style.background = ''
+  btn.style.color = ''
+  btn.style.borderColor = ''
   // 重置手动分析按钮
   const manualBtn = document.getElementById('manualAnalyzeBtn')
   manualBtn.disabled = false
@@ -1020,6 +1063,16 @@ function resetLLMResult() {
   manualBtn.style.opacity = '1'
   manualBtn.style.background = ''
   document.getElementById('analysisErrorBox').style.display = 'none'
+  // 隐藏并重置判定反馈按钮
+  const judgeFeedback = document.getElementById('judgeFeedback')
+  if (judgeFeedback) {
+    judgeFeedback.style.display = 'none'
+    const jc = document.getElementById('judgeCorrectBtn')
+    const ji = document.getElementById('judgeIncorrectBtn')
+    if (jc) { jc.disabled = false; jc.textContent = '✓ 判定正确'; jc.classList.remove('active') }
+    if (ji) { ji.disabled = false; ji.textContent = '✗ 判定有误'; ji.classList.remove('active') }
+  }
+  state.feedbackId = null
 }
 function togglePill(el) {
   el.classList.toggle('selected')
@@ -1068,24 +1121,11 @@ function syncFormState() {
 
 // 统一管理提交按钮：只有拍了照片 + 已确认信息 才能提交
 function updateSubmitState() {
-  const hasPhotos = state.photos.length > 0
-  const canSubmit = hasPhotos && state.infoConfirmed
-  document.getElementById('btnSubmit').disabled = !canSubmit
-  document.getElementById('submitHint').style.display = (hasPhotos && !state.infoConfirmed) ? '' : 'none'
+  // 已移除「提交判定」按钮，判定结果由 LLM 分析完成后自动触发
 }
-function setStep(n) {
-  state.step = n
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
-  document.getElementById('page' + n).classList.add('active')
-  document.querySelectorAll('.step-dot').forEach((d,i) => {
-    d.classList.remove('done','active')
-    if (i < n-1) d.classList.add('done')
-    if (i === n-1) d.classList.add('active')
-  })
-  document.getElementById('page'+n).scrollTop = 0
+function scrollToTop() {
+  document.getElementById('page1').scrollTop = 0
 }
-function goToResult() { setStep(2) }
-function goBack() { setStep(1) }
 function openInfoSheet() {
   document.getElementById('infoSheetOverlay').classList.add('open')
 }
@@ -1113,9 +1153,15 @@ function maybeRunInitialAnalysis() {
     document.getElementById('analysisActions').style.display = 'none'
     return
   }
-  // photos + info confirmed → show analysis button and run analysis
+  // photos + info confirmed → 仅显示「鉴定分析」按钮，由用户点击后手动触发分析
   document.getElementById('analysisHint').style.display = 'none'
   document.getElementById('analysisActions').style.display = ''
+  // 确保「鉴定分析」按钮处于可点击的初始状态（重新填写信息后能再次点击）
+  const manualBtn = document.getElementById('manualAnalyzeBtn')
+  manualBtn.disabled = false
+  manualBtn.textContent = '鉴定分析'
+  manualBtn.style.opacity = '1'
+  manualBtn.style.background = ''
   const mode = panelConfig.analysisMode || 'hybrid'
   const ragPanel = document.getElementById('analysisPanel')
   const aiPanel = document.getElementById('aiAnalysisPanel')
@@ -1124,37 +1170,19 @@ function maybeRunInitialAnalysis() {
     ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
     aiPanel.style.display = 'none'
   } else if (mode === 'llm') {
-      // 仅LLM识别：只显示 LLM 分析面板
-      ragPanel.style.display = 'none'
-      aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
-      console.log('[LLM] maybeRunInitialAnalysis: llm模式, showAiPanel:', panelConfig.showAiPanel, 'photo0.url前50字符:', first.url?.substring(0,50))
-    } else {
+    // 仅LLM识别：只显示 LLM 分析面板
+    ragPanel.style.display = 'none'
+    aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
+  } else {
     ragPanel.style.display = panelConfig.showRagPanel ? '' : 'none'
     aiPanel.style.display = panelConfig.showAiPanel ? '' : 'none'
   }
-  // 纯 LLM 模式直接触发，不需要加载图片进 canvas
-  if (mode === 'llm') {
-    if (panelConfig.showAiPanel) runLLMAnalysis()
-    return
-  }
-
-  // RAG / hybrid 模式：加载图片进 canvas 做边缘检测
-  const first = state.photos[0]
-  const img = new Image()
-  img.onload = () => {
-    const c = document.createElement('canvas')
-    c.width = img.width; c.height = img.height
-    c.getContext('2d').drawImage(img, 0, 0)
-    runAnalysis(c)
-    // 混合模式：RAG 分析启动后同步自动启动 AI LLM 分析
-    if (mode === 'hybrid' && panelConfig.showAiPanel) runLLMAnalysis()
-  }
-  img.src = first.url
 }
 function resetAll() {
-  state = { step:1, photos:[], installStatus:'not_installed', authPersonnel:'yes', packageDamage:'none', faultLinks:[], currentResult:null, analysis:null, infoConfirmed:false }
+  state = { step:1, photos:[], installStatus:'not_installed', authPersonnel:'yes', packageDamage:'none', faultLinks:[], currentResult:null, analysis:null, infoConfirmed:false, topSimilarCaseId:'', feedbackId:null, mainIndex:0 }
   restoreCameraUI()
   document.getElementById('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
+  document.getElementById('resultSection').style.display = 'none'
   document.getElementById('installStatus').value = 'not_installed'
   document.getElementById('authPersonnel').value = 'yes'; document.getElementById('packageDamage').value = 'none'
   document.getElementById('cameraView').style.display = 'block'; document.getElementById('photoPreview').style.display = 'none'
@@ -1169,13 +1197,15 @@ function resetAll() {
   document.getElementById('analysisActions').style.display = 'none'
   resetLLMResult()
   document.getElementById('aiAnalysisPanel').style.display = 'none'
-  setStep(1)
+  scrollToTop()
   showCameraConsent()
 }
 async function submitCase() {
-  setStep(2)
   const rc = document.getElementById('resultContent')
+  const rs = document.getElementById('resultSection')
+  rs.style.display = ''
   rc.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
+  rs.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   const body = {
     installStatus: state.installStatus,
@@ -1213,6 +1243,8 @@ async function submitCase() {
       state.currentResult = data.data.decision
       renderResult(data.data)
       fetchSimilarCases(data.data.decision)
+      // 判定完成：自动记录为「正确」（隐式正样本）
+      recordJudgementComplete()
       return // 成功，直接返回
     } catch (e) {
       clearTimeout(timer)
@@ -1236,6 +1268,9 @@ async function submitCase() {
     <button class="btn btn-outline" style="margin-top:16px" onclick="submitCase()">重试</button>
   </div>`
 }
+// 判定路径回溯中不展示的「故障环节」判定节点（这些由 LLM 自动分析得出，非用户表单输入）
+const PATH_SKIP_NODES = new Set(['decision_product_factor', 'decision_logistics_factor', 'decision_install_use'])
+
 function renderResult(data) {
   const d = data.decision
   // 从 field-defs 动态生成映射
@@ -1296,7 +1331,7 @@ function renderResult(data) {
     })() : ''}
     <div class="path-list">
       <h4>判定路径回溯</h4>
-      ${(d.decisionPath||[]).map((p,i) => `
+      ${(d.decisionPath||[]).filter(p => !PATH_SKIP_NODES.has(p.nodeId)).map((p,i) => `
         <div class="path-item">
           <div class="step-num">${i+1}</div>
           <div>${escHtml(p.question)}</div>
@@ -1931,7 +1966,14 @@ async function runLLMAnalysis() {
 
   if (!state.photos[0]) return
 
+  // 取消上一次未完成的请求，避免并发导致状态错乱
+  if (llmAbortController) { llmAbortController.abort(); llmAbortController = null }
+  const controller = new AbortController()
+  llmAbortController = controller
+
   // 重置状态
+  btn.style.display = ''
+  btn.classList.remove('loading')
   btn.classList.add('loading')
   btn.textContent = ' 分析中...'
   label.style.display = 'none'
@@ -1939,12 +1981,10 @@ async function runLLMAnalysis() {
   metaDiv.innerHTML = ''
   tag.textContent = ''
 
-  // 同步更新手动分析按钮为加载状态
+  // 隐藏「鉴定分析」按钮，避免与面板内的「分析中」状态重复显示
   const manualBtn = document.getElementById('manualAnalyzeBtn')
   manualBtn.disabled = true
-  manualBtn.textContent = '⏳ 分析中...'
-  manualBtn.style.opacity = '0.7'
-  manualBtn.style.background = ''
+  manualBtn.style.display = 'none'
   document.getElementById('analysisErrorBox').style.display = 'none'
 
   // 显示进度条
@@ -1956,8 +1996,9 @@ async function runLLMAnalysis() {
   // 流式文本显示
   let streamFullText = ''
   const streamBox = document.getElementById('llmStreamBox')
+  const streamBubble = document.getElementById('llmStreamBubble')
   streamBox.style.display = 'none'
-  streamBox.textContent = ''
+  streamBubble.textContent = ''
 
   try {
     const context = {
@@ -1970,6 +2011,7 @@ async function runLLMAnalysis() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ images: state.photos.map(p => p.url), context, mode: panelConfig.analysisMode === 'llm' ? 'llm' : 'hybrid' }),
+      signal: controller.signal,
     })
 
     if (!resp.ok) {
@@ -2004,8 +2046,8 @@ async function runLLMAnalysis() {
         // 流式 token：实时展示大模型输出内容
         if (event.stage === 'token' && event.token) {
           streamFullText = event.token
-          streamBox.style.display = 'block'
-          streamBox.textContent = '正在生成分析内容...\n\n' + streamFullText
+          streamBox.style.display = 'flex'
+          streamBubble.textContent = streamFullText
           streamBox.scrollTop = streamBox.scrollHeight
         }
 
@@ -2032,8 +2074,8 @@ async function runLLMAnalysis() {
           }
           // LLM 结果仅在 LLM 面板展示，不覆盖 RAG 分析结果面板
           label.style.display = ''
-          tag.textContent = `(基于 ${r.model}，耗时 ${(r.elapsed/1000).toFixed(1)}s)`
-          textDiv.innerHTML = renderMarkdown(r.description) || renderMarkdown(report.report)
+          tag.textContent = `(耗时 ${(r.elapsed/1000).toFixed(1)}s)`
+          textDiv.innerHTML = renderMarkdown(r.description || '')
           metaDiv.innerHTML = `位置: ${r.location} | 形状: ${r.shape} | 环节: ${r.stage || '未知'} | 严重程度: ${r.severity}`
           // 故障原理和鉴定结论单独展示
           if (r.principle) metaDiv.innerHTML += `<br/>故障原理: ${r.principle}`
@@ -2044,26 +2086,34 @@ async function runLLMAnalysis() {
           btn.style.display = 'none'
           // 隐藏手动分析按钮
           document.getElementById('analysisActions').style.display = 'none'
-          // 显示纠错按钮
-          const llmCorrBtn = resultDiv.querySelector('.llm-correct-btn')
-          if (llmCorrBtn) llmCorrBtn.style.display = ''
+          // 显示判定正确率反馈按钮
+          const judgeFeedback = document.getElementById('judgeFeedback')
+          if (judgeFeedback) judgeFeedback.style.display = ''
+          // 清理本次请求的控制器（仅当仍是当前请求时）
+          if (llmAbortController === controller) llmAbortController = null
+          // LLM 分析完成后自动触发判定结果（决策引擎 + 相似案例）
+          submitCase()
           return
         }
       }
     }
   } catch (e) {
+    // 请求被新请求中止时静默退出，避免误报失败并覆盖新请求的 UI 状态
+    if (e.name === 'AbortError') {
+      // 仅当仍持有本次请求的控制器时才清理，避免误删新请求的控制器
+      if (llmAbortController === controller) llmAbortController = null
+      return
+    }
     console.error('[LLM] runLLMAnalysis 失败:', e.message, e)
     progressDiv.style.display = 'none'
     streamBox.style.display = 'none'
     label.style.display = ''
     btn.classList.remove('loading')
     btn.textContent = '分析失败，点击重试'
-    btn.style.color = '#dc2626'
-    btn.style.borderColor = '#dc2626'
+    btn.style.background = '#dc2626'
     setTimeout(() => {
       btn.textContent = '启动屏损鉴定分析'
-      btn.style.color = '#991b1b'
-      btn.style.borderColor = '#e60012'
+      btn.style.background = ''
     }, 3000)
     textDiv.textContent = '错误: ' + e.message
     metaDiv.textContent = ''
@@ -2081,6 +2131,7 @@ async function runLLMAnalysis() {
     // 恢复手动分析按钮为重试状态
     const manualBtn = document.getElementById('manualAnalyzeBtn')
     manualBtn.disabled = false
+    manualBtn.style.display = ''
     manualBtn.textContent = '鉴定分析（重试）'
     manualBtn.style.opacity = '1'
     manualBtn.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
@@ -2091,7 +2142,7 @@ async function runLLMAnalysis() {
   }
 }
 
-let corrSelected = { statusObs: '', loc: '', shape: '', principle: '', stage: '', conclusion: '' }
+let corrSelected = { conclusion: '', remark: '' }
 let _fieldDefs = null
 
 // 从 API 加载字段定义并渲染纠正面板
@@ -2111,46 +2162,27 @@ function renderCorrectionFields() {
   const container = document.getElementById('corrFieldsContainer')
   if (!_fieldDefs) return
 
-  const defs = _fieldDefs
-  const fieldOrder = ['statusObs', 'location', 'shape', 'principle', 'stage', 'conclusion']
+  const conclusionDef = _fieldDefs.conclusion
   let html = ''
 
-  for (const fid of fieldOrder) {
-    const f = defs[fid]
-    if (!f) continue
-    const required = f.required ? ' <span class="field-required">*</span>' : ''
-    const pillId = `corrPills_${fid}`
-
-    if (f.type === 'textarea') {
-      html += `<div class="correction-field">
-        <div class="field-label">${f.label}</div>
-        <textarea id="corrField_${fid}" class="corr-textarea" placeholder="${f.placeholder || ''}" rows="2"></textarea>
-      </div>`
-    } else {
-      const options = f.options || []
-      html += `<div class="correction-field">
-        <div class="field-label">${f.label}${required}</div>
-        <div class="correction-pills" id="${pillId}">`
-
-      for (const opt of options) {
-        const val = typeof opt === 'string' ? opt : opt.value
-        let label = typeof opt === 'string' ? opt : opt.label
-        // 使用 pillLabels 缩略显示（如果配置了）
-        if (f.pillLabels && f.pillLabels[val]) label = f.pillLabels[val]
-        html += `<div class="correction-pill" data-val="${escHtml(val)}" data-field="${fid}">${escHtml(label)}</div>`
-      }
-
-      // 故障位置和故障形态增加自定义填写
-      if (fid === 'location' || fid === 'shape') {
-        html += `<div class="correction-pill corr-pill-custom" data-val="__custom__" data-field="${fid}">自定义</div>`
-        html += `</div>`
-        html += `<input type="text" id="corrField_${fid}_custom" class="corr-custom-input" placeholder="自行输入..." style="display:none;margin-top:6px;width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" />`
-      } else {
-        html += `</div>`
-      }
+  // 仅保留「鉴定结论」选择
+  if (conclusionDef) {
+    html += `<div class="correction-field">
+      <div class="field-label">${conclusionDef.label}</div>
+      <div class="correction-pills" id="corrPills_conclusion">`
+    for (const opt of (conclusionDef.options || [])) {
+      const val = typeof opt === 'string' ? opt : opt.value
+      const label = typeof opt === 'string' ? opt : opt.label
+      html += `<div class="correction-pill" data-val="${escHtml(val)}" data-field="conclusion">${escHtml(label)}</div>`
     }
-    html += `</div>`
+    html += `</div></div>`
   }
+
+  // 仅保留「问题备注」文本框
+  html += `<div class="correction-field">
+    <div class="field-label">问题备注</div>
+    <textarea id="corrField_remark" class="corr-textarea" placeholder="请填写问题备注（必填）" rows="3"></textarea>
+  </div>`
 
   container.innerHTML = html
 }
@@ -2171,7 +2203,7 @@ function showCorrection() {
     return
   }
   // 重置选择
-  corrSelected = { statusObs: '', loc: '', shape: '', principle: '', stage: '', conclusion: '' }
+  corrSelected = { conclusion: '', remark: '' }
   document.getElementById('corrFeedback').className = 'correction-feedback'
   document.getElementById('corrFeedback').textContent = ''
   document.getElementById('corrConfirmBtn').disabled = true
@@ -2185,7 +2217,7 @@ function hideCorrection() {
   document.getElementById('correctionPanel').style.display = 'none'
 }
 
-// 统一绑定所有纠正面板 pill + textarea 事件
+// 统一绑定纠正面板 pill + textarea 事件
 document.getElementById('correctionPanel').addEventListener('click', function(e) {
   const pill = e.target.closest('.correction-pill')
   if (!pill) return
@@ -2196,67 +2228,103 @@ document.getElementById('correctionPanel').addEventListener('click', function(e)
   const val = pill.dataset.val
   const field = pill.dataset.field
 
-  // 处理自定义输入框的显示/隐藏
-  if (val === '__custom__') {
-    const customInput = document.getElementById(`corrField_${field}_custom`)
-    if (customInput) customInput.style.display = ''
-  } else {
-    const customInput = document.getElementById(`corrField_${field}_custom`)
-    if (customInput) { customInput.style.display = 'none'; customInput.value = '' }
-  }
-
-  if (field === 'location') corrSelected.loc = val
-  else if (field === 'shape') corrSelected.shape = val
-  else if (field === 'stage') corrSelected.stage = val
-  else if (field === 'conclusion') corrSelected.conclusion = val
+  if (field === 'conclusion') corrSelected.conclusion = val
   updateCorrConfirm()
 })
 
 // 文本域变化时更新 corrSelected（委托监听）
 document.getElementById('corrFieldsContainer').addEventListener('input', function(e) {
-  const fid = e.target.id.replace('corrField_', '')
-  if (e.target.tagName === 'TEXTAREA') {
-    if (fid === 'statusObs') corrSelected.statusObs = e.target.value
-    else if (fid === 'principle') corrSelected.principle = e.target.value
+  if (e.target.id === 'corrField_remark') {
+    corrSelected.remark = e.target.value
   }
-  // 自定义输入框变化时更新
-  if (fid === 'location_custom') corrSelected.locCustom = e.target.value
-  if (fid === 'shape_custom') corrSelected.shapeCustom = e.target.value
   updateCorrConfirm()
 })
 
 function updateCorrConfirm() {
-  const hasLoc = corrSelected.loc === '__custom__' ? !!corrSelected.locCustom : !!corrSelected.loc
-  const hasShape = corrSelected.shape === '__custom__' ? !!corrSelected.shapeCustom : !!corrSelected.shape
-  document.getElementById('corrConfirmBtn').disabled = !(hasLoc && hasShape && corrSelected.stage && corrSelected.conclusion)
+  const remarkOk = (corrSelected.remark || '').trim().length > 0
+  document.getElementById('corrConfirmBtn').disabled = !corrSelected.conclusion || !remarkOk
+}
+
+// 用户显式确认判定正确（判定完成已默认记正确，此处仅做 UI 确认，不重复计数）
+function confirmJudgementCorrect() {
+  const btnCorrect = document.getElementById('judgeCorrectBtn')
+  const btnIncorrect = document.getElementById('judgeIncorrectBtn')
+  btnCorrect.textContent = '✓ 已确认'
+  btnCorrect.classList.add('active')
+  btnCorrect.disabled = true
+  btnIncorrect.disabled = true
+}
+
+// 判定完成时自动记录为「正确」（隐式正样本），返回记录 id 供后续报错翻转
+async function recordJudgementComplete() {
+  const conclusion = (state.llmResult && state.llmResult.conclusion) || (state.analysis && state.analysis.conclusion) || ''
+  try {
+    const res = await fetch('/api/knowledge/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseId: state.topSimilarCaseId || '', conclusion, feedback: 'correct' }),
+    })
+    const data = await res.json()
+    if (!res.ok || !data?.success) return
+    if (data?.data?.id) state.feedbackId = data.data.id
+  } catch (e) {
+    console.error('[feedback] 记录判定完成失败:', e)
+  }
+}
+
+// 用户主动报错：把当前判定从「正确」翻转为「不正确」，并打开纠正面板
+async function reportJudgementIncorrect() {
+  const btn = document.getElementById('judgeIncorrectBtn')
+  btn.disabled = true
+  btn.textContent = '✗ 已记录'
+  btn.classList.add('active')
+  try {
+    if (state.feedbackId) {
+      await fetch('/api/knowledge/feedback/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: state.feedbackId, remark: '' }),
+      })
+    }
+    // 自动打开纠正面板，引导用户纠正
+    showCorrection()
+  } catch (e) {
+    btn.disabled = false
+    btn.textContent = '✗ 判定有误'
+    btn.classList.remove('active')
+    showToast('反馈提交失败: ' + (e.message || '网络错误'))
+    console.error('[feedback] 报错失败:', e)
+  }
 }
 
 async function submitCorrection() {
-  // 解析自定义值
-  const loc = corrSelected.loc === '__custom__' ? (corrSelected.locCustom || '') : corrSelected.loc
-  const shape = corrSelected.shape === '__custom__' ? (corrSelected.shapeCustom || '') : corrSelected.shape
-
-  if (!loc || !shape || !corrSelected.stage || !corrSelected.conclusion) return
+  if (!corrSelected.conclusion) { showToast('请选择鉴定结论'); return }
+  if (!(corrSelected.remark || '').trim()) { showToast('请填写问题备注'); return }
 
   const btn = document.getElementById('corrConfirmBtn')
+  btn.className = 'btn-confirm'
   btn.disabled = true
   btn.textContent = '提交中...'
 
-  // 存储纠正前分析结果（用于回传 original）
-  if (!state.originalAnalysis) {
-    state.originalAnalysis = state.analysis ? { ...state.analysis } : {}
-    if (!state.originalLLM) state.originalLLM = state.llmResult ? { ...state.llmResult } : {}
-  }
+  // 存储纠正前 LLM 分析结果（用于回传 original 对比）
+  if (!state.originalLLM && state.llmResult) state.originalLLM = { ...state.llmResult }
 
-  // 更新分析结果
+  // 位置/形态/环节/原理沿用原 LLM 分析结果，仅纠正「鉴定结论」和「问题备注」
+  const llm = state.llmResult || {}
+  const loc = llm.location || ''
+  const shape = llm.shape || ''
+  const stage = llm.stage || ''
+  const principle = llm.principle || ''
+
+  // 更新本地分析结果（用于页面展示）
   state.analysis = {
-    statusObs: corrSelected.statusObs || '',
+    statusObs: llm.statusObs || '',
     location: loc,
     locationConfidence: 100,
     shape: shape,
     shapeConfidence: 100,
-    principle: corrSelected.principle || '',
-    stage: corrSelected.stage,
+    principle: principle,
+    stage: stage,
     conclusion: corrSelected.conclusion,
     corrected: true,
   }
@@ -2264,24 +2332,23 @@ async function submitCorrection() {
   document.getElementById('analysisDetail').innerHTML = report.report
   const srcEl = document.getElementById('analysisSource')
   srcEl.innerHTML = '人工校正 <span class="corrected-badge">已纠正</span>'
-  document.getElementById('correctionPanel').style.display = 'none'
 
   // 回传后端 — 纠正数据 + 同步到案例库
-  const fb = document.getElementById('corrFeedback')
   try {
     const payload = {
-      correctedStatusObs: corrSelected.statusObs || '',
+      correctedStatusObs: llm.statusObs || '',
       correctedLocation: loc,
       correctedShape: shape,
-      correctedPrinciple: corrSelected.principle || '',
-      correctedStage: corrSelected.stage,
+      correctedPrinciple: principle,
+      correctedStage: stage,
       correctedConclusion: corrSelected.conclusion,
-      originalStatusObs: (state.originalLLM && state.originalLLM) ? (state.originalLLM.statusObs || '') : '',
-      originalLocation: (state.originalAnalysis && state.originalAnalysis) ? (state.originalAnalysis.location || '') : '',
-      originalShape: (state.originalAnalysis && state.originalAnalysis) ? (state.originalAnalysis.shape || '') : '',
-      originalPrinciple: (state.originalLLM && state.originalLLM) ? (state.originalLLM.principle || '') : '',
-      originalStage: (state.originalLLM && state.originalLLM) ? (state.originalLLM.stage || '') : '',
-      originalConclusion: (state.originalLLM && state.originalLLM) ? (state.originalLLM.conclusion || '') : '',
+      remark: corrSelected.remark || '',
+      originalStatusObs: (state.originalLLM && state.originalLLM.statusObs) || '',
+      originalLocation: (state.originalLLM && state.originalLLM.location) || '',
+      originalShape: (state.originalLLM && state.originalLLM.shape) || '',
+      originalPrinciple: (state.originalLLM && state.originalLLM.principle) || '',
+      originalStage: (state.originalLLM && state.originalLLM.stage) || '',
+      originalConclusion: (state.originalLLM && state.originalLLM.conclusion) || '',
       caseId: state.topSimilarCaseId || '',
     }
     if (state.photos[0] && state.photos[0].url) {
@@ -2293,19 +2360,29 @@ async function submitCorrection() {
       body: JSON.stringify(payload),
     })
     const data = await res.json()
+    // 成功反馈：按钮变绿 + 明确成功文案
+    btn.className = 'btn-confirm success'
+    btn.textContent = '✓ 提交成功'
+    btn.disabled = true
     if (data?.data?.totalTraining) {
       showToast(`训练数据已入库，当前共 ${data.data.totalTraining} 条反馈`)
     }
     if (data?.data?.caseCreated) {
       showToast(`已自动创建案例并同步至案例库`)
     } else if (data?.data?.caseUpdated) {
-      showToast(`已同步至案例库`)
+      showToast(`已提交`)
     }
+    // 延迟隐藏纠正面板，让用户看到成功反馈
+    setTimeout(() => {
+      document.getElementById('correctionPanel').style.display = 'none'
+    }, 1200)
   } catch (e) {
-    showToast('提交纠正失败: ' + (e.message || '网络错误'))
+    // 失败反馈：按钮变红 + 可重试
+    btn.className = 'btn-confirm error'
+    btn.textContent = '✗ 提交失败，点击重试'
+    btn.disabled = false
+    showToast('提交失败: ' + (e.message || '网络错误'))
     console.error('[correction] 提交纠正失败:', e)
-  } finally {
-    btn.textContent = '确认提交并同步至案例库'
   }
 }
 

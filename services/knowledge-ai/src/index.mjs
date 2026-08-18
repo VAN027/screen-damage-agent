@@ -1,10 +1,10 @@
 import { createServer, json } from './server-utils.mjs'
-import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable, saveCorrection, getResultStats, analyzeWithRAG, aggregateRAGFields } from './search-engine.mjs'
+import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable, saveCorrection, getResultStats, analyzeWithRAG, aggregateRAGFields, listPendingCases, approvePendingCase, rejectPendingCase, getPendingStats } from './search-engine.mjs'
 import { analyzeWithLLM, analyzeWithLLMStream, loadModelConfig, saveModelConfig, loadAnnotationConfig, saveAnnotationConfig, annotateSingle, annotateBatch } from './llm-analyzer.mjs'
 import { uploadDocument, listDocuments, getDocument, deleteDocument, getKBStats, searchKB } from './knowledge-base.mjs'
 import { normalizeEvalField } from './field-normalize.mjs'
 import { readFile, stat } from 'node:fs/promises'
-import { loadFieldDefsSync, loadFieldDefs } from './db.mjs'
+import { loadFieldDefsSync, loadFieldDefs, saveFeedback, getFeedbackStats, reportFeedback } from './db.mjs'
 import { execFile } from 'node:child_process'
 
 // 加载集中式字段定义
@@ -697,6 +697,96 @@ const routes = [
         json(res, 201, { success: true, data: result })
       } catch (err) {
         json(res, 500, { success: false, error: { code: 'SAVE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/feedback',
+    handler: async (_req, res, { body }) => {
+      if (!body.feedback || !['correct', 'incorrect'].includes(body.feedback)) {
+        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: 'feedback 必须为 correct 或 incorrect' } })
+      }
+      try {
+        const stats = saveFeedback(body)
+        json(res, 201, { success: true, data: stats })
+      } catch (err) {
+        json(res, 500, { success: false, error: { code: 'SAVE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/feedback/stats',
+    handler: async (_req, res) => {
+      try {
+        json(res, 200, { success: true, data: getFeedbackStats() })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'STATS_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/feedback/report',
+    handler: async (_req, res, { body }) => {
+      try {
+        const result = reportFeedback(body.id, body.remark)
+        json(res, 200, { success: true, data: result })
+      } catch (err) {
+        json(res, 500, { success: false, error: { code: 'REPORT_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/review/pending',
+    handler: async (_req, res, { query }) => {
+      try {
+        const status = query.status || 'pending'
+        const list = await listPendingCases(status)
+        json(res, 200, { success: true, data: { list, total: list.length } })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'REVIEW_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/review/stats',
+    handler: async (_req, res) => {
+      try {
+        json(res, 200, { success: true, data: await getPendingStats() })
+      } catch (e) {
+        json(res, 500, { success: false, error: { code: 'REVIEW_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/review/approve',
+    handler: async (_req, res, { body }) => {
+      const { id, reviewedBy, reviewRemark } = body || {}
+      if (!id) return json(res, 400, { success: false, error: { code: 'MISSING_ID', message: '缺少待审核案例 id' } })
+      try {
+        const result = await approvePendingCase(id, reviewedBy, reviewRemark)
+        json(res, 200, { success: true, data: result })
+      } catch (e) {
+        json(res, 400, { success: false, error: { code: 'REVIEW_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/review/reject',
+    handler: async (_req, res, { body }) => {
+      const { id, reviewedBy, reviewRemark } = body || {}
+      if (!id) return json(res, 400, { success: false, error: { code: 'MISSING_ID', message: '缺少待审核案例 id' } })
+      try {
+        const result = await rejectPendingCase(id, reviewedBy, reviewRemark)
+        json(res, 200, { success: true, data: result })
+      } catch (e) {
+        json(res, 400, { success: false, error: { code: 'REVIEW_ERROR', message: e.message } })
       }
     },
   },
@@ -1455,6 +1545,7 @@ const routes = [
             knowledgeBase: { ...kbStats, fileSize: kbSize, filePath: KB_FILE },
             images: { count: imageCount, dir: IMAGES_DIR },
             vector: { clipAvailable: clipOk, ...(vectorStats || {}) },
+            feedback: getFeedbackStats(),
           },
         })
       } catch (e) {

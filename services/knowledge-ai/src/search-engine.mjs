@@ -429,6 +429,8 @@ export async function createCase(data) {
     warrantyTip: data.warrantyTip || '',
     corrections: [],
     needsReview: false,
+    review_status: data.reviewStatus || 'approved',
+    remark: data.remark || '',
   }
 
   // SQLite 单条 INSERT：天然原子，无需额外锁
@@ -619,7 +621,7 @@ export async function searchSimilarVector(imageBase64, topK = 5, excludeCaseId =
     if (!result.results || result.results.length === 0) return []
 
     await ensureStmts()
-    const cases = stmts.allCases.all().map(deserializeCase)
+    const cases = stmts.approvedCases.all().map(deserializeCase)
     const caseMap = new Map(cases.map(c => [c.id, c]))
 
     const merged = result.results.map(r => {
@@ -773,7 +775,7 @@ export async function deleteCaseVector(caseId) {
 
 export async function rebuildVectorIndex() {
   await ensureStmts()
-  const cases = stmts.allCases.all().map(deserializeCase)
+  const cases = stmts.approvedCases.all().map(deserializeCase)
   const BATCH_SIZE = 20 // 分批处理，避免 OOM
 
   const results = []
@@ -846,7 +848,7 @@ export async function saveCorrection(entry) {
     caseId, originalLocation, originalShape,
     correctedLocation, correctedShape,
     correctedStatusObs, correctedPrinciple, correctedStage, correctedConclusion,
-    imageBase64,
+    imageBase64, remark,
   } = entry || {}
 
   // 1. 写入训练数据（用于 KNN 本地模型训练）
@@ -858,6 +860,7 @@ export async function saveCorrection(entry) {
     caseId: caseId || '',
     source: 'manual_correction',
     createdAt: new Date().toISOString(),
+    remark: remark || '',
   }
   if (imageBase64) trainingEntry.imageBase64 = imageBase64
 
@@ -876,6 +879,7 @@ export async function saveCorrection(entry) {
         originalShape: originalShape || '',
         correctedLocation: correctedLocation || '',
         correctedShape: correctedShape || '',
+        remark: remark || '',
         createdAt: new Date().toISOString(),
       })
       if (c.corrections.length >= 3 && !c.needsReview) {
@@ -886,28 +890,80 @@ export async function saveCorrection(entry) {
     }
   }
 
-  // 3. 如果有图片且有纠错标注结果，创建新案例同步到案例库
-  let caseCreated = false
+  // 3. 有图片且有纠错标注结果 → 写入待审核队列（不再直接入库，需人工审核通过后才进 cases）
+  let pendingCreated = false
   if (imageBase64 && imageBase64.startsWith('data:image/') && correctedLocation && correctedShape) {
     try {
       const locationLabel = correctedLocation || '未知位置'
       const shapeLabel = correctedShape || '未知形态'
       const title = `人工校正 - ${locationLabel} - ${shapeLabel}`
 
-      await createCase({
+      stmts.insertPending.run({
         title,
-        imageData: imageBase64,
+        deviceModel: '',
+        statusObs: correctedStatusObs || '',
         crackLocation: correctedLocation,
         crackShape: correctedShape,
+        crackPrinciple: correctedPrinciple || '',
         crackStage: correctedStage || '',
         result: correctedConclusion || '',
-        possibleCause: correctedPrinciple || '',
+        remark: remark || '',
+        imageBase64,
+        source: 'manual_correction',
       })
-      caseCreated = true
+      pendingCreated = true
     } catch (e) {
-      console.error('[saveCorrection] 案例创建失败:', e.message)
+      console.error('[saveCorrection] 待审核案例写入失败:', e.message)
     }
   }
 
-  return { success: true, totalTraining, caseUpdated, caseCreated: caseCreated || undefined }
+  return { success: true, totalTraining, caseUpdated, pendingCreated: pendingCreated || undefined }
+}
+
+// ===== 人工审核工作台 =====
+
+export async function listPendingCases(status = 'pending') {
+  await ensureStmts()
+  return stmts.pendingAll.all().filter(r => !status || r.status === status)
+}
+
+export async function getPendingStats() {
+  await ensureStmts()
+  return {
+    pending: stmts.pendingCount.get('pending').total,
+    approved: stmts.pendingCount.get('approved').total,
+    rejected: stmts.pendingCount.get('rejected').total,
+  }
+}
+
+export async function approvePendingCase(id, reviewedBy = '', reviewRemark = '') {
+  await ensureStmts()
+  const p = stmts.pendingById.get(id)
+  if (!p) throw new Error('待审核案例不存在')
+  if (p.status === 'approved') throw new Error('该案例已通过审核')
+
+  // 从待审核队列创建正式案例（reviewStatus=approved，进入 RAG 索引）
+  const c = await createCase({
+    title: p.title,
+    imageData: p.imageBase64,
+    crackLocation: p.crackLocation,
+    crackShape: p.crackShape,
+    crackStage: p.crackStage,
+    result: p.result,
+    possibleCause: p.crackPrinciple || '',
+    remark: p.remark || '',
+    reviewStatus: 'approved',
+  })
+
+  stmts.pendingUpdateStatus.run('approved', reviewedBy || '', reviewRemark || '', id)
+  return { caseId: c.id, title: c.title }
+}
+
+export async function rejectPendingCase(id, reviewedBy = '', reviewRemark = '') {
+  await ensureStmts()
+  const p = stmts.pendingById.get(id)
+  if (!p) throw new Error('待审核案例不存在')
+  if (p.status === 'approved') throw new Error('该案例已通过审核，不能驳回')
+  stmts.pendingUpdateStatus.run('rejected', reviewedBy || '', reviewRemark || '', id)
+  return { id, status: 'rejected' }
 }

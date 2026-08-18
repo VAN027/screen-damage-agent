@@ -68,6 +68,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .editor-panel input:focus, .editor-panel textarea:focus, .editor-panel select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
 .editor-panel textarea { height: 400px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.5; }
 .editor-panel textarea.summary { height: 80px; font-family: inherit; font-size: 13px; }
+textarea#caseField_crackPrinciple,
+textarea#caseField_remark { height: 50px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
 .form-row label { margin-top: 12px; }
 .form-row input, .form-row select { width: 100%; }
@@ -311,6 +313,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="tab-nav">
   <button class="tab-btn active" data-tab="rules">规则集管理</button>
   <button class="tab-btn" data-tab="cases">案例库管理</button>
+  <button class="tab-btn" data-tab="review">审核工作台</button>
   <button class="tab-btn" data-tab="model">模型配置</button>
   <button class="tab-btn" data-tab="evaluate">鉴定评估</button>
   <button class="tab-btn" data-tab="sql">SQL 查询</button>
@@ -489,6 +492,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="nav-btn" onclick="annotationPrev()" id="annoPrevBtn">◀ 上一张</button>
     <span style="flex:1;text-align:center;color:#8892b0;font-size:13px;" id="annoStatus">未标记</span>
     <button class="nav-btn" onclick="annotationNext()" id="annoNextBtn">下一张 ▶</button>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-review" style="flex-direction:column;overflow:auto;padding:16px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:16px;">人工审核工作台</h2>
+    <span style="font-size:12px;color:#888;">H5 纠正提交的待审核案例，通过后才进入案例库并参与 RAG 检索</span>
+    <span style="margin-left:auto;font-size:12px;color:#555;">审核人</span>
+    <input type="text" id="reviewerName" placeholder="输入审核人姓名" style="width:140px;padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;" />
+    <button class="btn btn-sm btn-outline" onclick="loadReviewPage()">刷新</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <button class="btn btn-sm btn-primary" data-review-status="pending" onclick="setReviewStatus('pending')">待审核</button>
+    <button class="btn btn-sm btn-outline" data-review-status="approved" onclick="setReviewStatus('approved')">已通过</button>
+    <button class="btn btn-sm btn-outline" data-review-status="rejected" onclick="setReviewStatus('rejected')">已驳回</button>
+    <span id="reviewStats" style="font-size:12px;color:#888;align-self:center;"></span>
+  </div>
+  <div id="reviewList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;">
+    <div style="text-align:center;color:#aaa;padding:40px;grid-column:1/-1;font-size:13px;">加载中...</div>
   </div>
 </div>
 
@@ -1008,6 +1030,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // 离开鉴定评估标签时停止轮询
     if (btn.dataset.tab !== 'evaluate') _evalStopPoll()
     if (btn.dataset.tab === 'cases') loadCaseList()
+    if (btn.dataset.tab === 'review') loadReviewPage()
     if (btn.dataset.tab === 'model') loadModelConfigPage()
     if (btn.dataset.tab === 'evaluate') loadEvalPage()
     if (btn.dataset.tab === 'sql') loadSqlSchema()
@@ -1252,6 +1275,7 @@ const DEFAULT_ANNO_FIELDS = [
   { id: 'installStatus', label: '安装状态', type: 'tag-grid', required: false, options: [{value:'installed',label:'已安装'},{value:'not_installed',label:'未安装'}] },
   { id: 'packageDamage', label: '包装状态', type: 'tag-grid', required: false, options: [{value:'none',label:'无损坏'},{value:'minor',label:'轻微损坏'},{value:'severe',label:'严重损坏'}] },
   { id: 'crackPrinciple', label: '屏损原理', type: 'textarea', required: false },
+  { id: 'remark', label: '问题备注', type: 'textarea', required: false },
 ]
 var currentAnnoFields = [...DEFAULT_ANNO_FIELDS]
 
@@ -1954,7 +1978,7 @@ function renderSelectFieldHtml(f, caseData) {
 function renderFullFieldHtml(f, caseData) {
   const fieldVal = caseData ? getCaseFieldValueForRender(caseData, f.id) : ''
   if (f.type === 'textarea') {
-    return `<label>${esc(f.label)}${f.required ? ' *' : ''}</label><textarea id="caseField_${f.id}" placeholder="输入..." rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;">${esc(fieldVal)}</textarea>`
+    return `<label>${esc(f.label)}${f.required ? ' *' : ''}</label><textarea id="caseField_${f.id}" placeholder="输入..." rows="1" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit;">${esc(fieldVal)}</textarea>`
   }
   if (f.type === 'input') {
     return `<label>${esc(f.label)}${f.required ? ' *' : ''}</label><input type="text" id="caseField_${f.id}" value="${esc(fieldVal)}" placeholder="输入..." style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;" />`
@@ -4568,9 +4592,115 @@ async function loadDashboard() {
       dashCard('服务状态', `
         ${dashRow('knowledge-ai 运行时长', fmtUptime(d.uptime || 0))}
       `),
+      dashCard('判定正确率', `
+        ${dashRow('判定正确', d.feedback?.correct ?? 0)}
+        ${dashRow('判定不正确', d.feedback?.incorrect ?? 0)}
+        ${dashRow('正确率', (d.feedback?.accuracy ?? 0) + '%')}
+      `),
     ].join('')
   } catch (e) {
     box.innerHTML = `<div style="text-align:center;color:#ef4444;padding:40px;font-size:13px;grid-column:1/-1;">加载失败: ${esc(e.message)}</div>`
+  }
+}
+
+// ---- 人工审核工作台 ----
+let _reviewStatus = 'pending'
+
+function setReviewStatus(s) {
+  _reviewStatus = s
+  document.querySelectorAll('[data-review-status]').forEach(b => {
+    b.className = 'btn btn-sm ' + (b.dataset.reviewStatus === s ? 'btn-primary' : 'btn-outline')
+  })
+  loadReviewPage()
+}
+
+async function loadReviewPage() {
+  const box = document.getElementById('reviewList')
+  if (!box) return
+  box.innerHTML = '<div style="text-align:center;color:#aaa;padding:40px;grid-column:1/-1;font-size:13px;">加载中...</div>'
+  try {
+    const r = await fetch('/api/knowledge/review/pending?status=' + encodeURIComponent(_reviewStatus))
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '加载失败')
+    const list = j.data?.list || []
+    box.innerHTML = list.length === 0
+      ? '<div style="text-align:center;color:#aaa;padding:40px;grid-column:1/-1;font-size:13px;">暂无数据</div>'
+      : list.map(renderReviewCard).join('')
+    loadReviewStats()
+  } catch (e) {
+    box.innerHTML = `<div style="text-align:center;color:#ef4444;padding:40px;font-size:13px;grid-column:1/-1;">加载失败: ${esc(e.message)}</div>`
+  }
+}
+
+function renderReviewCard(c) {
+  const img = c.imageBase64
+    ? `<img src="${c.imageBase64}" style="width:100%;height:180px;object-fit:contain;background:#000;border-radius:6px;" />`
+    : '<div style="width:100%;height:180px;display:flex;align-items:center;justify-content:center;color:#aaa;background:#f5f5f5;border-radius:6px;">无图片</div>'
+  const field = (k, v) => `<div style="font-size:12px;margin:3px 0;"><span style="color:#888;">${k}：</span>${esc(v || '—')}</div>`
+  const actions = c.status === 'pending'
+    ? `<div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-sm btn-success" onclick="reviewApprove(${c.id})" style="flex:1;">通过</button>
+        <button class="btn btn-sm btn-danger" onclick="reviewReject(${c.id})" style="flex:1;">驳回</button>
+      </div>`
+    : `<div style="margin-top:10px;font-size:12px;color:${c.status === 'approved' ? '#059669' : '#dc2626'};">${c.status === 'approved' ? '已通过' : '已驳回'}${c.reviewed_by ? ' · ' + esc(c.reviewed_by) : ''}${c.reviewed_at ? ' · ' + esc(c.reviewed_at) : ''}</div>`
+  return `<div style="border:1px solid var(--border);border-radius:8px;background:var(--bg-card);padding:12px;">
+    ${img}
+    <div style="font-weight:600;font-size:13px;margin:8px 0 4px;">${esc(c.title || '未命名')}</div>
+    ${field('位置', c.crackLocation)}
+    ${field('形态', c.crackShape)}
+    ${field('环节', c.crackStage)}
+    ${field('结论', c.result)}
+    ${field('原理', c.crackPrinciple)}
+    ${field('状态观察', c.statusObs)}
+    ${field('备注', c.remark)}
+    <div style="font-size:11px;color:#aaa;margin-top:6px;">${esc(c.created_at || '')}</div>
+    ${actions}
+  </div>`
+}
+
+async function loadReviewStats() {
+  try {
+    const r = await fetch('/api/knowledge/review/stats')
+    const j = await r.json()
+    if (j.success) {
+      const s = j.data || {}
+      document.getElementById('reviewStats').textContent = `待审核 ${s.pending ?? 0} · 已通过 ${s.approved ?? 0} · 已驳回 ${s.rejected ?? 0}`
+    }
+  } catch {}
+}
+
+async function reviewApprove(id) {
+  if (!confirm('确认通过该案例并入库（进入 RAG 检索）？')) return
+  const reviewedBy = document.getElementById('reviewerName').value.trim()
+  try {
+    const r = await fetch('/api/knowledge/review/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, reviewedBy }),
+    })
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '操作失败')
+    toast('已通过并入库：' + (j.data?.title || ''), 'success')
+    loadReviewPage()
+  } catch (e) {
+    toast('通过失败：' + e.message, 'error')
+  }
+}
+
+async function reviewReject(id) {
+  const reviewRemark = prompt('驳回原因（可选）')
+  if (reviewRemark === null) return
+  const reviewedBy = document.getElementById('reviewerName').value.trim()
+  try {
+    const r = await fetch('/api/knowledge/review/reject', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, reviewedBy, reviewRemark: reviewRemark.trim() }),
+    })
+    const j = await r.json()
+    if (!j.success) throw new Error(j.error?.message || '操作失败')
+    toast('已驳回', 'success')
+    loadReviewPage()
+  } catch (e) {
+    toast('驳回失败：' + e.message, 'error')
   }
 }
 </script>
