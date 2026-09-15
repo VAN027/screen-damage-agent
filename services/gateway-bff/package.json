@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "dev": "node --watch src/index.mjs",
+    "build": "node --check src/index.mjs && node --check src/server-utils.mjs",
+    "start": "node src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "fastify": "^5.3.2",

@@ -3,11 +3,17 @@
   "version": "2.0.0",
   "type": "module",
   "description": "屏损智能体 — 知识库与向量检索服务",
+  "scripts": {
+    "dev": "node --watch src/index.mjs",
+    "build": "node --check src/index.mjs && node --check src/assessment-records.mjs && node --check src/clip-client.mjs && node --check src/db.mjs && node --check src/field-normalize.mjs && node --check src/knowledge-base.mjs && node --check src/llm-analyzer.mjs && node --check src/orientation-normalizer.mjs && node --check src/search-engine.mjs && node --check src/server-utils.mjs",
+    "start": "node src/index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
     "better-sqlite3": "^11.7.0",
     "exceljs": "^4.4.0",
-    "hnswlib-node": "^3.0.0",
     "sharp": "^0.35.3"
   }
 }

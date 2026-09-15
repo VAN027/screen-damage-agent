@@ -3,9 +3,15 @@ node_modules/
 __pycache__/
 *.pyc
 
-# 环境变量 & 配置文件（含 API Key）
+# 环境变量、私钥与配置文件（含 API Key）
 .env
+.env.*
+!.env.example
 *.env
+*.pem
+*.key
+*.p12
+*.pfx
 services/knowledge-ai/data/model-config.json
 services/knowledge-ai/data/annotation-config.json
 
@@ -26,6 +32,13 @@ services/knowledge-ai/data/*.db
 services/knowledge-ai/data/*.db-shm
 services/knowledge-ai/data/*.db-wal
 services/knowledge-ai/data/backup/
+services/knowledge-ai/data/images/
+services/knowledge-ai/data/feedback-images/
+services/knowledge-ai/data/review-images/
+services/knowledge-ai/data/orientation-benchmark/
+services/knowledge-ai/data/cases.json
+services/knowledge-ai/data/training.json
+services/knowledge-ai/data/knowledge-base.json
 
 # IDE & 系统
 .vscode/
@@ -43,4 +56,6 @@ npm-debug.log*
 会议纪要.txt
 使用文档.pdf
 屏损智能体设计框架.docx
+TCL灵犀平台3.0用户手册_V1.1.pdf
+Workshop动手训练营培训 v20250811.pdf
 services/decision-admin/data/*.json

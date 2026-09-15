@@ -1,8 +1,8 @@
 {
   "provider": "openai",
-  "model": "your-model-name",
-  "apiKey": "your-api-key",
-  "endpoint": "https://your-api-endpoint/v1/chat/completions",
+  "model": "gpt-4o",
+  "apiKey": "",
+  "endpoint": "https://api.openai.com/v1/chat/completions",
   "temperature": 0.1,
   "maxTokens": 2000,
   "enabled": false,

@@ -18,8 +18,37 @@ Thumbs.db
 .git/
 .gitignore
 
-# Python（暂不部署）
-services/knowledge-ai/python/
+# 本机环境和密钥文件绝不发送到 Docker 构建上下文
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python 缓存和本地虚拟环境
+services/knowledge-ai/python/__pycache__/
+services/knowledge-ai/python/.venv/
+services/knowledge-ai/python/venv/
+services/knowledge-ai/.paddlex/
+
+# 运行时数据不进入构建上下文；镜像只复制无密钥模板
+services/knowledge-ai/data/images/
+services/knowledge-ai/data/feedback-images/
+services/knowledge-ai/data/review-images/
+services/knowledge-ai/data/backup/
+services/knowledge-ai/data/kb-docs/
+services/knowledge-ai/data/orientation-benchmark/
+services/knowledge-ai/data/*.db
+services/knowledge-ai/data/*.db-shm
+services/knowledge-ai/data/*.db-wal
+services/knowledge-ai/data/cases.json
+services/knowledge-ai/data/training.json
+services/knowledge-ai/data/knowledge-base.json
+services/knowledge-ai/data/vector-index.json
+services/knowledge-ai/data/model-config.json
+services/knowledge-ai/data/annotation-config.json
 
 # 说明文件
 README.md

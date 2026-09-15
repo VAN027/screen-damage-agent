@@ -1,26 +1,177 @@
-import { writeFile, mkdir, access, readFile } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { writeFile, mkdir, access, readFile, unlink, chmod, readdir } from 'node:fs/promises'
+import { join, dirname, basename, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
-import { execFile } from 'node:child_process'
 import sharp from 'sharp'
-import { searchByImage, indexCase as clipIndexCase, deleteIndex as clipDeleteIndex, rebuildIndex as clipRebuildIndex, clipHealth } from './clip-client.mjs'
-import { initDb, getDb, serializeCase, deserializeCase, serializeTraining, deserializeTraining, migrateFromJson } from './db.mjs'
+import {
+  searchByImage,
+  indexCase as clipIndexCase,
+  indexBatch as clipIndexBatch,
+  deleteIndex as clipDeleteIndex,
+  deleteIndexes as clipDeleteIndexes,
+  rebuildIndex as clipRebuildIndex,
+  clipHealth,
+} from './clip-client.mjs'
+import { normalizeTVImageBuffer } from './orientation-normalizer.mjs'
+import {
+  initDb,
+  getDb,
+  serializeCase,
+  deserializeCase,
+  serializeTraining,
+  deserializeTraining,
+  migrateFromJson,
+  archivePendingCaseImage,
+  readPendingCaseImageDataUrl,
+} from './db.mjs'
 import { normalizeEvalField } from './field-normalize.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = join(__dirname, '..', 'data')
+const DATA_DIR = resolve(process.env.KNOWLEDGE_DATA_DIR || join(__dirname, '..', 'data'))
 const IMAGES_DIR = join(DATA_DIR, 'images')
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_DATA_URL_CHARS = 8 * 1024 * 1024
+const MAX_CORRECTION_IMAGE_DATA_URL_CHARS = 3 * 1024 * 1024
+const MAX_PENDING_CASES = 2000
+const MAX_PENDING_IMAGE_CHARS = 512 * 1024 * 1024
+const SAFE_IMAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:jpe?g|png|gif|webp|bmp|avif)$/i
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'])
+const CORRECTION_ENUMS = {
+  location: new Set(['天侧', '地侧', '左侧', '右侧', '四角区域', '中央区域', '全屏区域', '局部不规则区域']),
+  shape: new Set(['单条线状屏裂', '多条线状屏裂', '点放射状屏裂', '发散性线状屏裂', '环状/圈状屏裂', '网状(大面积无规则)屏裂', '漏液', '熔屏']),
+  stage: new Set(['产品因素', '物流运输搬运', '拆机验机安装', '使用保管不当']),
+  conclusion: new Set(['product_quality_issue', 'not_product_quality', 'no_damage']),
+}
 
 let stmts = null
 let dbReady = false
+let dbInitPromise = null
+
+function correctionError(message, code = 'INVALID_CORRECTION', statusCode = 400) {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  error.code = code
+  error.expose = true
+  return error
+}
+
+function imageSignatureMatches(mime, data) {
+  if (mime === 'jpeg' || mime === 'jpg') return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  if (mime === 'png') return data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  if (mime === 'webp') return data.length >= 12 && data.subarray(0, 4).toString('ascii') === 'RIFF' && data.subarray(8, 12).toString('ascii') === 'WEBP'
+  if (mime === 'gif') return data.length >= 6 && ['GIF87a', 'GIF89a'].includes(data.subarray(0, 6).toString('ascii'))
+  if (mime === 'bmp') return data.length >= 2 && data.subarray(0, 2).toString('ascii') === 'BM'
+  if (mime === 'avif') return data.length >= 12 && data.subarray(4, 8).toString('ascii') === 'ftyp' && ['avif', 'avis'].includes(data.subarray(8, 12).toString('ascii'))
+  return false
+}
+
+/** 严格校验图片 data URL 的语法、大小与文件签名，拒绝 SVG/属性注入及伪造 MIME。 */
+export function isValidImageDataUrl(value, maxChars = MAX_IMAGE_DATA_URL_CHARS) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > maxChars) return false
+  const match = value.match(/^data:image\/(jpeg|jpg|png|webp|gif|bmp|avif);base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/i)
+  if (!match || !match[2]) return false
+  try {
+    const decoded = Buffer.from(match[2], 'base64')
+    return decoded.length > 0 && decoded.length <= MAX_IMAGE_BYTES && imageSignatureMatches(match[1].toLowerCase(), decoded)
+  } catch {
+    return false
+  }
+}
+
+function boundedCorrectionText(value, field, maxLength, { required = false } = {}) {
+  if (value === undefined || value === null) value = ''
+  if (typeof value !== 'string') throw correctionError(`${field} 必须是字符串`)
+  const normalized = value.trim()
+  if (required && !normalized) throw correctionError(`缺少必填字段 ${field}`)
+  if (normalized.length > maxLength) throw correctionError(`${field} 超过 ${maxLength} 个字符上限`)
+  return normalized
+}
+
+function canonicalCorrectionField(field, value, { required = false } = {}) {
+  const raw = boundedCorrectionText(value, field, 100, { required })
+  if (!raw) return ''
+  const normalized = normalizeEvalField(field, raw)
+  if (!CORRECTION_ENUMS[field]?.has(normalized)) throw correctionError(`${field} 不是允许的选项`)
+  return normalized
+}
+
+/** 在持久化层再次清洗，避免未来新增调用方绕过 HTTP 路由校验。 */
+export function validateCorrectionEntry(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw correctionError('纠错数据必须是对象')
+  const feedbackId = Number(entry.feedbackId)
+  if (!Number.isSafeInteger(feedbackId) || feedbackId <= 0) {
+    throw correctionError('缺少有效的反馈记录 id', 'INVALID_CORRECTION_CAPABILITY', 403)
+  }
+  if (typeof entry.capabilityToken !== 'string') {
+    throw correctionError('缺少有效的纠错凭证', 'INVALID_CORRECTION_CAPABILITY', 403)
+  }
+  const capabilityToken = entry.capabilityToken.trim()
+  if (capabilityToken.length < 32 || capabilityToken.length > 128) {
+    throw correctionError('缺少有效的纠错凭证', 'INVALID_CORRECTION_CAPABILITY', 403)
+  }
+  const sanitized = {
+    feedbackId,
+    capabilityToken,
+    caseId: boundedCorrectionText(entry.caseId, 'caseId', 128),
+    originalStatusObs: boundedCorrectionText(entry.originalStatusObs, 'originalStatusObs', 500),
+    originalLocation: boundedCorrectionText(entry.originalLocation, 'originalLocation', 100),
+    originalShape: boundedCorrectionText(entry.originalShape, 'originalShape', 100),
+    originalPrinciple: boundedCorrectionText(entry.originalPrinciple, 'originalPrinciple', 2000),
+    originalStage: boundedCorrectionText(entry.originalStage, 'originalStage', 100),
+    originalConclusion: boundedCorrectionText(entry.originalConclusion, 'originalConclusion', 100),
+    correctedStatusObs: boundedCorrectionText(entry.correctedStatusObs, 'correctedStatusObs', 500),
+    correctedLocation: canonicalCorrectionField('location', entry.correctedLocation, { required: true }),
+    correctedShape: canonicalCorrectionField('shape', entry.correctedShape, { required: true }),
+    correctedPrinciple: boundedCorrectionText(entry.correctedPrinciple, 'correctedPrinciple', 2000),
+    correctedStage: canonicalCorrectionField('stage', entry.correctedStage),
+    correctedConclusion: canonicalCorrectionField('conclusion', entry.correctedConclusion, { required: true }),
+    remark: boundedCorrectionText(entry.remark, 'remark', 2000, { required: true }),
+    imageBase64: boundedCorrectionText(entry.imageBase64, 'imageBase64', MAX_CORRECTION_IMAGE_DATA_URL_CHARS, { required: true }),
+  }
+  if (!isValidImageDataUrl(sanitized.imageBase64, MAX_CORRECTION_IMAGE_DATA_URL_CHARS)) {
+    throw correctionError('imageBase64 不是受支持的图片或超过大小限制')
+  }
+  return sanitized
+}
 
 async function ensureStmts() {
   if (dbReady) return
-  stmts = await initDb()
-  await migrateFromJson(stmts)
-  dbReady = true
+  if (!dbInitPromise) {
+    dbInitPromise = (async () => {
+      const initialized = await initDb()
+      await migrateFromJson(initialized)
+      stmts = initialized
+      await ensureDir(IMAGES_DIR)
+      await chmod(IMAGES_DIR, 0o700)
+      for (const name of await readdir(IMAGES_DIR)) {
+        if (SAFE_IMAGE_NAME.test(name)) await chmod(join(IMAGES_DIR, name), 0o600)
+      }
+      dbReady = true
+
+      // 审批的 SQLite 收口是一个事务。若进程在事务前（例如图片落盘后）退出，
+      // 启动时必须重走完整审批，不能只因正式案例存在就跳过训练和原案例 corrections。
+      for (const pending of initialized.pendingAll.all().filter(row => row.status === 'approving')) {
+        try {
+          await approvePendingCase(pending.id, pending.reviewed_by || '', pending.review_remark || '')
+        } catch (error) {
+          const caseId = pending.approved_case_id || `case-review-${pending.id}`
+          if (!initialized.caseById.get(caseId)) {
+            initialized.pendingResetApproval.run(pending.id, pending.approved_case_id || '')
+          }
+          console.warn(`[review] 待审案例 ${pending.id} 的审批恢复失败: ${error.message}`)
+        }
+      }
+    })().catch(error => {
+      dbInitPromise = null
+      throw error
+    })
+  }
+  await dbInitPromise
+}
+
+/** 启动就绪屏障：完成数据库迁移、审核恢复和图片目录权限收敛后才监听端口。 */
+export async function initializeSearchEngine() {
+  await ensureStmts()
 }
 
 async function ensureDir(dir) {
@@ -46,147 +197,6 @@ async function autoOrientImage(buf) {
   return buf
 }
 
-// 灰度边缘密度：统计像素行/列的梯度强度
-function _rowEdgeDensity(pixels, w, h) {
-  const scores = new Array(h).fill(0)
-  for (let y = 0; y < h; y++) {
-    const rowOff = y * w
-    let sum = 0
-    for (let x = 1; x < w; x++) sum += Math.abs(pixels[rowOff + x] - pixels[rowOff + x - 1])
-    scores[y] = sum / w
-  }
-  return scores
-}
-
-function _colEdgeDensity(pixels, w, h) {
-  const scores = new Array(w).fill(0)
-  for (let x = 0; x < w; x++) {
-    let sum = 0
-    for (let y = 1; y < h; y++) sum += Math.abs(pixels[y * w + x] - pixels[(y - 1) * w + x])
-    scores[x] = sum / h
-  }
-  return scores
-}
-
-// 找连续显著区域（带回缩 margin 排除边框杂讯）
-function _peakRegion(scores, thresholdRatio = 0.35) {
-  const max = Math.max(...scores)
-  const th = max * thresholdRatio
-  let start = 0, end = scores.length - 1
-  for (; start < scores.length && scores[start] < th; start++) {}
-  for (; end >= 0 && scores[end] < th; end--) {}
-  if (start >= end) return { start: 0, end: scores.length - 1 }
-  const margin = Math.floor((end - start) * 0.04)
-  return { start: start + margin, end: end - margin }
-}
-
-// 智能 TV 屏幕方向检测：基于边框边缘密度 + 16:9 比例 + 顶部/底部边缘密度比较
-async function autoOrientTV(buf) {
-  let best = buf
-  try {
-    const rawW = 600
-    const { data, info } = await sharp(buf).resize(rawW).grayscale().raw().toBuffer({ resolveWithObject: true })
-    const w = info.width, h = info.height
-    const pixels = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-
-    // 1. 用列边缘密度定位 TV 左右边界 → 估算横竖
-    const colScores = _colEdgeDensity(pixels, w, h)
-    const cols = _peakRegion(colScores)
-    const tvW = cols.end - cols.start
-    const rowScores = _rowEdgeDensity(pixels, w, h)
-    const rows = _peakRegion(rowScores)
-    const tvH = rows.end - rows.start
-
-    // 2. 如果 TV 区域明显是竖版（高 > 宽 × 1.1），说明照片被旋转了 90°
-    if (tvH > tvW * 1.1) {
-      best = await sharp(buf).rotate(90).toBuffer()
-      // 对旋转后重做灰度分析
-      const { data: d2, info: i2 } = await sharp(best).resize(rawW).grayscale().raw().toBuffer({ resolveWithObject: true })
-      const p2 = new Uint8Array(d2.buffer, d2.byteOffset, d2.byteLength)
-      return _autoOrient180(best, p2, i2.width, i2.height)
-    }
-
-    return _autoOrient180(best, pixels, w, h)
-  } catch (_) { return buf }
-}
-
-// ==== 基于 OpenCV 轮廓检测的 TV 方向纠正（新方案） ====
-
-const PYTHON_VENV = join(__dirname, '..', 'python', 'venv', 'bin', 'python3')
-const DETECT_SCRIPT = join(__dirname, '..', 'tools', 'detect-tv-orientation.py')
-
-/**
- * 调用 Python 脚本，用 OpenCV 轮廓 + minAreaRect 检测 TV 屏幕方向
- * @param {Buffer} buf - 图片 buffer
- * @returns {Promise<{angle: number}>} 需要旋转的角度 (0/90/180/270)
- */
-function _runContourDetect(buf) {
-  return new Promise((resolve) => {
-    const child = execFile(PYTHON_VENV, [DETECT_SCRIPT, '--json', '-'], {
-      timeout: 10000,
-      maxBuffer: 1024 * 1024,
-    }, (err, stdout, stderr) => {
-      if (err) {
-        // 脚本失败时静默返回 0（不旋转）
-        resolve({ angle: 0, error: err.message })
-        return
-      }
-      try {
-        const result = JSON.parse(stdout.trim())
-        resolve(result)
-      } catch {
-        resolve({ angle: 0, error: 'parse error' })
-      }
-    })
-
-    // 把图片 buffer 通过 stdin 传给 Python
-    child.stdin.write(buf)
-    child.stdin.end()
-  })
-}
-
-/**
- * 基于 OpenCV 轮廓检测的 TV 方向纠正
- * 先找 TV 屏幕的矩形边框，直接判断横竖和倒立
- */
-async function autoOrientTV_contour(buf) {
-  try {
-    const result = await _runContourDetect(buf)
-    if (result.error) return buf  // 检测失败，不动原图
-
-    const angle = result.angle || 0
-    if (angle === 0) return buf
-
-    return await sharp(buf).rotate(angle).toBuffer()
-  } catch (_) {
-    return buf
-  }
-}
-
-// 旋转 90° 后对正 180° 方向：比较 TV 底部 vs 顶部的边缘密度
-async function _autoOrient180(buf, pixels, w, h) {
-  try {
-    const rScores = _rowEdgeDensity(pixels, w, h)
-    const rows = _peakRegion(rScores)
-    const tvH = rows.end - rows.start
-    if (tvH < 10) return buf  // TV 区域太小，放弃检测
-
-    const bandH = Math.max(Math.floor(tvH * 0.12), 4)
-    const topStart = rows.start, topEnd = rows.start + bandH
-    const botEnd = rows.end, botStart = rows.end - bandH
-
-    let topSum = 0, botSum = 0
-    for (let y = topStart; y < topEnd; y++) topSum += rScores[y]
-    for (let y = botStart; y < botEnd; y++) botSum += rScores[y]
-
-    // 底部边缘密度更高（底座/支架/logo），如果顶部 > 底部 → 倒立
-    if (topSum > botSum * 1.1) {
-      return await sharp(buf).rotate(180).toBuffer()
-    }
-  } catch (_) {}
-  return buf
-}
-
 export async function saveImage(id, base64DataUrl) {
   const filenames = await saveImages(id, [base64DataUrl])
   return filenames[0] || ''
@@ -202,23 +212,68 @@ export async function saveImages(caseId, dataUrls) {
     const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/)
     if (!match) continue
     const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
+    if (!ALLOWED_IMAGE_EXTENSIONS.has(ext.toLowerCase())) continue
     let data = Buffer.from(match[2], 'base64')
     if (data.length > MAX_IMAGE_BYTES) continue
 
-    // 两步方向纠正：EXIF 旋转 + 轮廓检测 TV 方向
-    data = await autoOrientImage(data)
-    data = await autoOrientTV_contour(data)
+    // 复用常驻方向服务；案例导入没有交互界面，只在证据达到自动阈值时改写。
+    try {
+      const normalized = await normalizeTVImageBuffer(data, { allowModel: false, useOcr: true })
+      if (normalized.orientation.requiresConfirmation) {
+        console.warn(`[orientation] 案例 ${caseId} 第 ${i + 1} 张图片方向未自动改写: ${normalized.orientation.reason}`)
+        data = await autoOrientImage(data)
+      } else {
+        data = normalized.buffer
+      }
+    } catch (error) {
+      // 兼容历史导入中的非标准图片；方向失败被记录，但不改变原有落盘语义。
+      console.warn(`[orientation] 案例 ${caseId} 第 ${i + 1} 张图片预处理失败: ${error.message}`)
+      data = await autoOrientImage(data)
+    }
     const suffix = i > 0 ? `_${i}` : ''
     const filename = `${caseId}${suffix}.${ext}`
-    const filepath = join(IMAGES_DIR, filename)
-    await writeFile(filepath, data)
+    const filepath = getImagePath(filename)
+    await writeFile(filepath, data, { mode: 0o600 })
+    await chmod(filepath, 0o600)
     filenames.push(filename)
   }
   return filenames
 }
 
 export function getImagePath(filename) {
-  return join(IMAGES_DIR, filename)
+  if (typeof filename !== 'string' || !SAFE_IMAGE_NAME.test(filename) || basename(filename) !== filename) {
+    throw new Error('无效的图片文件名')
+  }
+  const imageRoot = resolve(IMAGES_DIR) + sep
+  const filepath = resolve(IMAGES_DIR, filename)
+  if (!filepath.startsWith(imageRoot)) throw new Error('图片路径越界')
+  return filepath
+}
+
+const IMAGE_MIME = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif',
+}
+
+async function readImageDataUrl(filename) {
+  const filepath = getImagePath(filename)
+  const data = await readFile(filepath)
+  const ext = filename.split('.').pop().toLowerCase()
+  return `data:${IMAGE_MIME[ext] || 'image/jpeg'};base64,${data.toString('base64')}`
+}
+
+async function removeImageFiles(filenames) {
+  const removed = []
+  const errors = []
+  for (const filename of new Set((filenames || []).filter(Boolean))) {
+    try {
+      await unlink(getImagePath(filename))
+      removed.push(filename)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') errors.push({ filename, error: error.message })
+    }
+  }
+  return { removed: removed.length, files: removed, errors }
 }
 
 // ========== 训练数据 ==========
@@ -232,13 +287,22 @@ export async function addTraining(entry) {
   await ensureStmts()
   stmts.insertTraining.run(serializeTraining({
     features: entry.features,
+    statusObs: entry.statusObs,
     location: entry.location,
     shape: entry.shape,
+    principle: entry.principle,
+    stage: entry.stage,
+    conclusion: entry.conclusion,
     caseId: entry.caseId || '',
+    originalStatusObs: entry.originalStatusObs || '',
     originalLocation: entry.originalLocation || '',
     originalShape: entry.originalShape || '',
+    originalPrinciple: entry.originalPrinciple || '',
+    originalStage: entry.originalStage || '',
+    originalConclusion: entry.originalConclusion || '',
     source: entry.source || 'manual',
     imageBase64: entry.imageBase64 || '',
+    remark: entry.remark || '',
   }))
   return stmts.countTraining.get().total
 }
@@ -262,13 +326,29 @@ const FEATURE_WEIGHTS = {
 }
 
 function arrayOverlap(a, b) {
-  if (!a || !b) return 0
-  const set = new Set(a)
-  return b.filter(x => set.has(x)).length / Math.max(a.length, b.length, 1)
+  const left = comparableValues(a)
+  const right = comparableValues(b)
+  if (left.length === 0 || right.length === 0) return 0
+  const leftSet = new Set(left)
+  const rightSet = new Set(right)
+  let matches = 0
+  for (const value of leftSet) if (rightSet.has(value)) matches++
+  return matches / Math.max(leftSet.size, rightSet.size, 1)
 }
 
-function exactMatch(a, b) {
-  return (!a || !b) ? 0 : (a === b ? 1 : 0)
+function comparableValues(value) {
+  const values = Array.isArray(value) ? value.flat(Infinity) : [value]
+  return values
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean)
+}
+
+// 案例反序列化后 crackShape 是数组，而查询可能是字符串或数组；
+// 只要任一标准化值相同即视为匹配。
+export function exactMatch(a, b) {
+  const left = new Set(comparableValues(a))
+  if (left.size === 0) return 0
+  return comparableValues(b).some(value => left.has(value)) ? 1 : 0
 }
 
 const VALID_SYMPTOMS = ['linear_streak', 'dot_star', 'patch_leak', 'rainbow_melt', 'polarizer_scratch']
@@ -321,7 +401,7 @@ export async function validateCase(c, idx) {
 
 export async function searchSimilar(query, topK = 3) {
   await ensureStmts()
-  const cases = stmts.allCases.all().map(deserializeCase)
+  const cases = stmts.approvedCases.all().map(deserializeCase)
   const scored = cases
     .filter(c => c.id !== (query.excludeId || ''))
     .map(c => {
@@ -352,17 +432,21 @@ export async function getStats() {
   for (const c of cases) {
     byResult[c.resultLabel] = (byResult[c.resultLabel] || 0) + 1
   }
-  return { total: cases.length, byResult, lastUpdated: '2026-06-02' }
+  const lastUpdated = cases.reduce((latest, c) => {
+    const value = c.updated_at || c.created_at || ''
+    return value > latest ? value : latest
+  }, '')
+  return { total: cases.length, byResult, lastUpdated: lastUpdated || null }
 }
 
 export async function getResultStats(crackShape, crackStage) {
   await ensureStmts()
-  const cases = stmts.allCases.all().map(deserializeCase)
+  const cases = stmts.approvedCases.all().map(deserializeCase)
   const counts = {}
   let total = 0
   for (const c of cases) {
-    if (crackShape && c.crackShape !== crackShape) continue
-    if (crackStage && c.crackStage !== crackStage) continue
+    if (comparableValues(crackShape).length > 0 && !exactMatch(crackShape, c.crackShape)) continue
+    if (comparableValues(crackStage).length > 0 && !exactMatch(crackStage, c.crackStage)) continue
     if (!c.result) continue
     total++
     counts[c.result] = (counts[c.result] || 0) + 1
@@ -401,9 +485,9 @@ export async function loadCases() {
 
 // ========== 案例 CRUD — SQLite 事务保证原子性 ==========
 
-export async function createCase(data) {
+export async function createCase(data, options = {}) {
   await ensureStmts()
-  const id = 'case-' + crypto.randomUUID().slice(0, 8)
+  const id = options.id || ('case-' + crypto.randomUUID().slice(0, 8))
 
   const imageDataList = data.imageDataList || (data.imageData ? [data.imageData] : data.images || [])
   const imageNames = await saveImages(id, imageDataList)
@@ -433,23 +517,21 @@ export async function createCase(data) {
     remark: data.remark || '',
   }
 
-  // SQLite 单条 INSERT：天然原子，无需额外锁
-  stmts.insertCase.run(serializeCase(newCase))
-
-  // 如果有图片，索引第一张到向量库
-  if (imageDataList.length > 0 && imageDataList[0]) {
-    const imageBase64 = imageDataList[0]
-    if (imageBase64 && imageBase64.startsWith('data:image/')) {
-      indexCaseVector(id, imageBase64, {
-        symptoms: newCase.symptoms,
-        resultLabel: newCase.resultLabel,
-        crackLocation: newCase.crackLocation,
-        crackShape: newCase.crackShape,
-      }).catch(() => {})
-    }
+  // SQLite 写入失败时补偿清理已保存的图片，避免产生孤儿文件。
+  try {
+    stmts.insertCase.run(serializeCase(newCase))
+  } catch (error) {
+    await removeImageFiles(imageNames)
+    throw error
   }
 
-  return newCase
+  // 创建接口不因可选向量服务不可用而回滚 SQLite，但同步结果必须返回给调用方。
+  const vectorSync = await syncCaseVector(newCase, { deleteMissing: false })
+  if (!vectorSync.ok) {
+    console.warn(`[vector] 案例 ${id} 创建后同步失败: ${(vectorSync.errors || []).join('; ')}`)
+  }
+
+  return { ...newCase, sync: { vector: vectorSync } }
 }
 
 export async function batchImportFromImages(images, defaults) {
@@ -481,11 +563,16 @@ export async function batchImportFromImages(images, defaults) {
     return { total: images.length, imported: 0, failed: errors.length, errors, cases: [] }
   }
   const prepared = []
-  for (const item of valid) {
-    const id = 'case-' + crypto.randomUUID().slice(0, 8)
-    const imageDataList = item.imageData ? [item.imageData] : []
-    const imageNames = await saveImages(id, imageDataList)
-    prepared.push({ id, imageNames, data: item })
+  try {
+    for (const item of valid) {
+      const id = 'case-' + crypto.randomUUID().slice(0, 8)
+      const imageDataList = item.imageData ? [item.imageData] : []
+      const imageNames = await saveImages(id, imageDataList)
+      prepared.push({ id, imageNames, data: item })
+    }
+  } catch (error) {
+    await removeImageFiles(prepared.flatMap(p => p.imageNames))
+    throw error
   }
 
   // SQLite 事务写入
@@ -525,23 +612,35 @@ export async function batchImportFromImages(images, defaults) {
   try {
     imported = insertMany(prepared)
   } catch (e) {
+    await removeImageFiles(prepared.flatMap(p => p.imageNames))
     throw new Error(`批量导入事务失败: ${e.message}`)
   }
 
-  // 异步索引向量（不影响事务结果）
-  for (const p of prepared) {
-    const imageBase64 = p.data.imageData
-    if (imageBase64) {
-      indexCaseVector(p.id, imageBase64, {
-        symptoms: p.data.symptoms || [],
-        resultLabel: RESULT_LABELS[p.data.result] || '',
-        crackLocation: p.data.crackLocation || '',
-        crackShape: p.data.crackShape || '',
-      }).catch(() => {})
+  // 等待向量批量写入并把部分失败显式返回，避免进程退出时丢失后台 Promise。
+  const vectorItems = prepared.filter(p => p.data.imageData).map(p => ({
+    case_id: p.id,
+    image_base64: p.data.imageData,
+    symptoms: (p.data.symptoms || []).join(','),
+    result_label: RESULT_LABELS[p.data.result] || '',
+    crack_location: p.data.crackLocation || '',
+    crack_shape: Array.isArray(p.data.crackShape) ? p.data.crackShape.join(',') : (p.data.crackShape || ''),
+  }))
+  const vectorSync = { ok: true, requested: vectorItems.length, indexed: 0, failed: 0, errors: [] }
+  for (let offset = 0; offset < vectorItems.length; offset += 4) {
+    const chunk = vectorItems.slice(offset, offset + 4)
+    try {
+      const result = await clipIndexBatch(chunk)
+      vectorSync.indexed += Number(result.indexed) || 0
+      vectorSync.failed += Number(result.failed) || 0
+      vectorSync.errors.push(...(result.errors || []))
+    } catch (error) {
+      vectorSync.failed += chunk.length
+      vectorSync.errors.push(error.message)
     }
   }
+  vectorSync.ok = vectorSync.failed === 0 && vectorSync.errors.length === 0
 
-  return { total: images.length, imported: imported.length, failed: errors.length, errors, cases: imported }
+  return { total: images.length, imported: imported.length, failed: errors.length, errors, cases: imported, sync: { vector: vectorSync } }
 }
 
 export async function updateCase(id, data) {
@@ -550,19 +649,32 @@ export async function updateCase(id, data) {
   const existing = stmts.caseById.get(id)
   if (!existing) throw new Error(`案例 ${id} 不存在`)
 
-  const imageDataList = data.imageDataList || []
+  const previous = deserializeCase(existing)
+  const previousImages = getCaseImages(previous)
+  const imageDataList = data.imageDataList || (data.imageData ? [data.imageData] : [])
   const merged = { ...deserializeCase(existing), ...data }
+  merged.id = id
+  if (data.reviewStatus !== undefined) merged.review_status = data.reviewStatus
 
   if (imageDataList.length > 0) {
     const newNames = await saveImages(id, imageDataList)
     if (newNames.length > 0) merged.images = newNames
   }
   delete merged.imageDataList
+  delete merged.imageData
 
   // SQLite UPDATE：单条原子操作
-  stmts.updateCase.run(serializeCase(merged))
+  const updated = stmts.updateCase.run(serializeCase(merged))
+  if (updated.changes !== 1) throw new Error(`案例 ${id} 更新失败`)
 
-  return merged
+  const currentImages = new Set(getCaseImages(merged))
+  const staleImages = previousImages.filter(filename => !currentImages.has(filename))
+  const [imageCleanup, vectorSync] = await Promise.all([
+    removeImageFiles(staleImages),
+    syncCaseVector(merged),
+  ])
+
+  return { ...merged, sync: { vector: vectorSync, images: imageCleanup } }
 }
 
 export async function deleteCase(id) {
@@ -570,23 +682,61 @@ export async function deleteCase(id) {
   const existing = stmts.caseById.get(id)
   if (!existing) return false
 
-  stmts.deleteCase.run(id)
+  const c = deserializeCase(existing)
+  const deleted = stmts.deleteCase.run(id)
+  if (deleted.changes !== 1) return false
 
-  // 从向量库删除
-  deleteCaseVector(id).catch(() => {})
+  const [vectorSync, imageCleanup] = await Promise.all([
+    deleteVectorWithStatus(id),
+    removeImageFiles(getCaseImages(c)),
+  ])
 
-  return true
+  return { deleted: true, id, vectorSync, imageCleanup }
 }
 
 export async function batchDeleteCases(ids) {
   await ensureStmts()
-  const total = stmts.countCases.get().total
-
+  const uniqueIds = [...new Set((ids || []).filter(id => typeof id === 'string' && id))]
+  if (uniqueIds.length === 0) {
+    return { deleted: 0, total: stmts.countCases.get().total, notFound: 0, vectorSync: null, imageCleanup: { removed: 0, files: [], errors: [] } }
+  }
+  const existingCases = uniqueIds
+    .map(id => stmts.caseById.get(id))
+    .filter(Boolean)
+    .map(deserializeCase)
+  const existingIds = existingCases.map(c => c.id)
   const db = getDb()
-  const placeholders = ids.map(() => '?').join(',')
-  const result = db.prepare(`DELETE FROM cases WHERE id IN (${placeholders})`).run(...ids)
+  const deleteMany = db.transaction((caseIds) => {
+    let changes = 0
+    for (let offset = 0; offset < caseIds.length; offset += 500) {
+      changes += stmts.deleteCasesByIds(caseIds.slice(offset, offset + 500)).changes
+    }
+    return changes
+  })
+  const deleted = deleteMany(existingIds)
 
-  return { deleted: result.changes, total }
+  let vectorSync = { ok: true, action: 'delete', requested: 0, deleted: 0, failed: 0, errors: [] }
+  if (existingIds.length > 0) {
+    try {
+      const result = await clipDeleteIndexes(existingIds)
+      vectorSync = {
+        ok: !(result.errors?.length),
+        action: 'delete',
+        ...result,
+      }
+    } catch (error) {
+      vectorSync = { ok: false, action: 'delete', requested: existingIds.length, deleted: 0, failed: existingIds.length, errors: [error.message] }
+    }
+  }
+  const imageCleanup = await removeImageFiles(existingCases.flatMap(getCaseImages))
+
+  return {
+    deleted,
+    total: stmts.countCases.get().total,
+    notFound: uniqueIds.length - existingIds.length,
+    vectorSync,
+    imageCleanup,
+  }
 }
 
 export async function batchImport(items) {
@@ -617,7 +767,8 @@ export async function isClipAvailable() {
 
 export async function searchSimilarVector(imageBase64, topK = 5, excludeCaseId = '', queryLabels = null) {
   try {
-    const result = await searchByImage(imageBase64, topK + 5, excludeCaseId)
+    const safeTopK = Math.min(20, Math.max(1, Number.parseInt(topK, 10) || 5))
+    const result = await searchByImage(imageBase64, safeTopK + 5, excludeCaseId)
     if (!result.results || result.results.length === 0) return []
 
     await ensureStmts()
@@ -669,10 +820,11 @@ export async function searchSimilarVector(imageBase64, topK = 5, excludeCaseId =
     }).filter(Boolean)
       .filter(m => m.similarity >= 50)
       .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, topK)
+      .slice(0, safeTopK)
 
     return merged
-  } catch {
+  } catch (error) {
+    console.warn(`[vector] 相似案例检索失败: ${error.message}`)
     return []
   }
 }
@@ -759,38 +911,119 @@ export async function indexCaseVector(caseId, imageBase64, meta = {}) {
   try {
     await clipIndexCase(caseId, imageBase64, meta)
     return true
-  } catch {
+  } catch (error) {
+    console.warn(`[vector] 案例 ${caseId} 索引失败: ${error.message}`)
     return false
   }
 }
 
-export async function deleteCaseVector(caseId) {
+async function deleteVectorWithStatus(caseId) {
   try {
-    await clipDeleteIndex(caseId)
-    return true
-  } catch {
-    return false
+    const result = await clipDeleteIndex(caseId)
+    const errors = result.errors || []
+    return {
+      ok: errors.length === 0,
+      action: 'delete',
+      requested: result.requested ?? 1,
+      deleted: result.deleted ?? 0,
+      failed: result.failed ?? 0,
+      errors,
+    }
+  } catch (error) {
+    return { ok: false, action: 'delete', requested: 1, deleted: 0, failed: 1, errors: [error.message] }
   }
+}
+
+async function syncCaseVector(c, { deleteMissing = true } = {}) {
+  if (c.review_status && c.review_status !== 'approved') {
+    return deleteVectorWithStatus(c.id)
+  }
+
+  const imageName = getCaseImages(c)[0]
+  if (!imageName) {
+    return deleteMissing
+      ? deleteVectorWithStatus(c.id)
+      : { ok: true, action: 'skip', reason: 'no-image', errors: [] }
+  }
+
+  try {
+    const imageBase64 = await readImageDataUrl(imageName)
+    const result = await clipIndexCase(c.id, imageBase64, {
+      symptoms: c.symptoms || [],
+      resultLabel: c.resultLabel || '',
+      crackLocation: c.crackLocation || '',
+      crackShape: c.crackShape || '',
+    })
+    return { ok: true, action: 'upsert', indexed: result.indexed ?? 1, errors: [] }
+  } catch (error) {
+    return { ok: false, action: 'upsert', indexed: 0, errors: [error.message], error: error.message }
+  }
+}
+
+export async function deleteCaseVector(caseId) {
+  const result = await deleteVectorWithStatus(caseId)
+  return result.ok
 }
 
 export async function rebuildVectorIndex() {
   await ensureStmts()
   const cases = stmts.approvedCases.all().map(deserializeCase)
-  const BATCH_SIZE = 20 // 分批处理，避免 OOM
-
-  const results = []
+  const BATCH_SIZE = 4 // 单图最大约 14MB Base64，确保批请求保持在 Python 64MB 上限内
+  const candidates = cases.filter(c => getCaseImages(c).length > 0)
+  const errors = []
+  let indexed = 0
+  let failed = 0
+  let totalVectors = null
+  let resetComplete = false
   let batch = []
 
-  for (const c of cases) {
-    const imgs = getCaseImages(c)
-    if (imgs.length === 0) continue
-    const imageName = imgs[0]
+  const flushBatch = async () => {
+    if (batch.length === 0) return true
+    const pending = batch
+    batch = []
     try {
-      const filepath = getImagePath(imageName)
-      const data = await readFile(filepath)
-      const ext = imageName.split('.').pop().toLowerCase()
-      const mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }
-      const base64 = `data:${mime[ext] || 'image/jpeg'};base64,${data.toString('base64')}`
+      // 仅首批调用 rebuild（清空）；后续批次使用追加/更新接口。
+      const result = resetComplete
+        ? await clipIndexBatch(pending)
+        : await clipRebuildIndex(pending)
+      resetComplete = true
+      indexed += Number(result.indexed) || 0
+      failed += Number(result.failed) || 0
+      totalVectors = Number.isFinite(Number(result.total_vectors))
+        ? Number(result.total_vectors)
+        : indexed
+      for (const error of result.errors || []) {
+        errors.push(typeof error === 'string' ? error : JSON.stringify(error))
+      }
+      return true
+    } catch (error) {
+      failed += pending.length
+      errors.push(error.message)
+      // 首批未能清空时，绝不能继续向旧索引追加，避免新旧数据混杂。
+      return resetComplete
+    }
+  }
+
+  // 即使当前没有可索引图片，也要发一次空重建以清除陈旧向量。
+  if (candidates.length === 0) {
+    try {
+      const result = await clipRebuildIndex([])
+      return {
+        indexed: Number(result.indexed) || 0,
+        failed: Number(result.failed) || 0,
+        total_vectors: Number(result.total_vectors) || 0,
+        cleared: true,
+        errors: result.errors?.length ? result.errors : undefined,
+      }
+    } catch (error) {
+      return { indexed: 0, failed: 0, total_vectors: null, cleared: false, errors: [error.message] }
+    }
+  }
+
+  for (const c of candidates) {
+    const imageName = getCaseImages(c)[0]
+    try {
+      const base64 = await readImageDataUrl(imageName)
       batch.push({
         case_id: c.id,
         image_base64: base64,
@@ -800,170 +1033,446 @@ export async function rebuildVectorIndex() {
         crack_shape: Array.isArray(c.crackShape) ? c.crackShape.join(',') : (c.crackShape || ''),
       })
 
-      // 达到批次上限时发送
       if (batch.length >= BATCH_SIZE) {
-        try {
-          const result = await clipRebuildIndex(batch)
-          results.push(result)
-        } catch (e) {
-          results.push({ indexed: 0, failed: batch.length, errors: [e.message] })
+        const canContinue = await flushBatch()
+        if (!canContinue) {
+          failed += Math.max(0, candidates.length - indexed - failed)
+          return { indexed, failed, total_vectors: totalVectors, cleared: false, errors }
         }
-        batch = [] // 释放内存
       }
-    } catch {
-      // 图片读取失败，跳过
+    } catch (error) {
+      failed++
+      errors.push(`${c.id}: 图片读取失败 (${error.message})`)
     }
   }
 
-  // 处理剩余不足一批的
   if (batch.length > 0) {
+    const canContinue = await flushBatch()
+    if (!canContinue) failed += Math.max(0, candidates.length - indexed - failed)
+  } else if (!resetComplete) {
+    // 所有候选图片均读取失败时仍需清空旧索引，否则会留下全部脏向量。
     try {
-      const result = await clipRebuildIndex(batch)
-      results.push(result)
-    } catch (e) {
-      results.push({ indexed: 0, failed: batch.length, errors: [e.message] })
+      const result = await clipRebuildIndex([])
+      resetComplete = true
+      totalVectors = Number(result.total_vectors) || 0
+      failed += Number(result.failed) || 0
+      for (const error of result.errors || []) {
+        errors.push(typeof error === 'string' ? error : JSON.stringify(error))
+      }
+    } catch (error) {
+      errors.push(error.message)
     }
-    batch = [] // 释放内存
   }
 
-  if (results.length === 0) {
-    return { indexed: 0, failed: 0, errors: ['没有可索引的案例图片'], total_vectors: 0 }
-  }
-
-  // 汇总结果
-  const total = results.reduce((acc, r) => ({
-    indexed: acc.indexed + (r.indexed || 0),
-    failed: acc.failed + (r.failed || 0),
-  }), { indexed: 0, failed: 0 })
-  const allErrors = results.flatMap(r => r.errors || [])
-
-  return { ...total, total_vectors: total.indexed, errors: allErrors.length > 0 ? allErrors : undefined }
+  return { indexed, failed, total_vectors: totalVectors, cleared: resetComplete, errors: errors.length > 0 ? errors : undefined }
 }
 
 // ===== 纠正反馈闭环 =====
 
+function correctionPayloadForStorage(sanitized) {
+  const {
+    feedbackId: _feedbackId,
+    capabilityToken: _capabilityToken,
+    caseId: _caseId,
+    imageBase64: _imageBase64,
+    ...payload
+  } = sanitized
+  return payload
+}
+
+function safeHashEquals(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false
+  const leftBuffer = Buffer.from(left, 'utf8')
+  const rightBuffer = Buffer.from(right, 'utf8')
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function parsePendingCorrection(pending) {
+  let payload = {}
+  if (pending.correction_payload) {
+    try {
+      payload = JSON.parse(pending.correction_payload)
+    } catch {
+      throw correctionError('待审核纠错载荷损坏', 'INVALID_PENDING_CORRECTION')
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw correctionError('待审核纠错载荷损坏', 'INVALID_PENDING_CORRECTION')
+    }
+  }
+
+  // 兼容升级前已进入队列的记录；新记录以 correction_payload 为准。
+  return validateCorrectionEntry({
+    feedbackId: Number(pending.feedback_id) > 0 ? Number(pending.feedback_id) : 1,
+    capabilityToken: 'legacy-pending-record-no-user-token',
+    caseId: pending.source_case_id || '',
+    originalStatusObs: payload.originalStatusObs || '',
+    originalLocation: payload.originalLocation || '',
+    originalShape: payload.originalShape || '',
+    originalPrinciple: payload.originalPrinciple || '',
+    originalStage: payload.originalStage || '',
+    originalConclusion: payload.originalConclusion || '',
+    correctedStatusObs: payload.correctedStatusObs ?? pending.statusObs,
+    correctedLocation: payload.correctedLocation ?? pending.crackLocation,
+    correctedShape: payload.correctedShape ?? pending.crackShape,
+    correctedPrinciple: payload.correctedPrinciple ?? pending.crackPrinciple,
+    correctedStage: payload.correctedStage ?? pending.crackStage,
+    correctedConclusion: payload.correctedConclusion ?? pending.result,
+    remark: payload.remark ?? pending.remark,
+    imageBase64: pending.imageBase64,
+  })
+}
+
 export async function saveCorrection(entry) {
   await ensureStmts()
+  const sanitized = validateCorrectionEntry(entry)
   const {
-    caseId, originalLocation, originalShape,
-    correctedLocation, correctedShape,
+    feedbackId, capabilityToken,
+    caseId, correctedLocation, correctedShape,
     correctedStatusObs, correctedPrinciple, correctedStage, correctedConclusion,
     imageBase64, remark,
-  } = entry || {}
+  } = sanitized
 
-  // 1. 写入训练数据（用于 KNN 本地模型训练）
-  const trainingEntry = {
-    location: correctedLocation || '',
-    shape: correctedShape || '',
-    originalLocation: originalLocation || '',
-    originalShape: originalShape || '',
-    caseId: caseId || '',
-    source: 'manual_correction',
-    createdAt: new Date().toISOString(),
+  const pendingEntry = {
+    feedback_id: feedbackId,
+    source_case_id: caseId,
+    title: `人工校正 - ${correctedLocation} - ${correctedShape}`,
+    deviceModel: '',
+    statusObs: correctedStatusObs || '',
+    crackLocation: correctedLocation,
+    crackShape: correctedShape,
+    crackPrinciple: correctedPrinciple || '',
+    crackStage: correctedStage || '',
+    result: correctedConclusion || '',
     remark: remark || '',
+    imageBase64,
+    correction_payload: JSON.stringify(correctionPayloadForStorage(sanitized)),
+    source: 'manual_correction',
   }
-  if (imageBase64) trainingEntry.imageBase64 = imageBase64
 
-  stmts.insertTraining.run(serializeTraining(trainingEntry))
-  const totalTraining = stmts.countTraining.get().total
-
-  // 2. 如果关联了具体案例，更新案例的 corrections 数组
-  let caseUpdated = false
-  if (caseId) {
-    const existing = stmts.caseById.get(caseId)
-    if (existing) {
-      const c = deserializeCase(existing)
-      if (!Array.isArray(c.corrections)) c.corrections = []
-      c.corrections.push({
-        originalLocation: originalLocation || '',
-        originalShape: originalShape || '',
-        correctedLocation: correctedLocation || '',
-        correctedShape: correctedShape || '',
-        remark: remark || '',
-        createdAt: new Date().toISOString(),
-      })
-      if (c.corrections.length >= 3 && !c.needsReview) {
-        c.needsReview = true
-      }
-      stmts.updateCase.run(serializeCase(c))
-      caseUpdated = true
+  const db = getDb()
+  const capabilityHash = crypto.createHash('sha256').update(capabilityToken).digest('hex')
+  const insertPendingCorrection = db.transaction(() => {
+    const feedback = stmts.feedbackForCorrection.get(feedbackId)
+    if (!feedback || !safeHashEquals(feedback.capability_hash, capabilityHash) || feedback.case_id !== caseId) {
+      throw correctionError('反馈记录、纠错凭证或案例不匹配', 'INVALID_CORRECTION_CAPABILITY', 403)
     }
-  }
-
-  // 3. 有图片且有纠错标注结果 → 写入待审核队列（不再直接入库，需人工审核通过后才进 cases）
-  let pendingCreated = false
-  if (imageBase64 && imageBase64.startsWith('data:image/') && correctedLocation && correctedShape) {
-    try {
-      const locationLabel = correctedLocation || '未知位置'
-      const shapeLabel = correctedShape || '未知形态'
-      const title = `人工校正 - ${locationLabel} - ${shapeLabel}`
-
-      stmts.insertPending.run({
-        title,
-        deviceModel: '',
-        statusObs: correctedStatusObs || '',
-        crackLocation: correctedLocation,
-        crackShape: correctedShape,
-        crackPrinciple: correctedPrinciple || '',
-        crackStage: correctedStage || '',
-        result: correctedConclusion || '',
-        remark: remark || '',
-        imageBase64,
-        source: 'manual_correction',
-      })
-      pendingCreated = true
-    } catch (e) {
-      console.error('[saveCorrection] 待审核案例写入失败:', e.message)
+    if (!['unconfirmed', 'reported_incorrect'].includes(feedback.status)) {
+      throw correctionError('该反馈状态不允许提交纠错', 'CORRECTION_NOT_ALLOWED', 409)
     }
+    if (feedback.correction_pending_id !== null) {
+      throw correctionError('纠错凭证已被使用，请勿重复提交', 'CORRECTION_CAPABILITY_USED', 409)
+    }
+
+    const usage = db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(LENGTH(imageBase64)), 0) AS imageChars
+      FROM pending_cases WHERE status IN ('pending', 'approving')`).get()
+    if (usage.total >= MAX_PENDING_CASES || usage.imageChars + imageBase64.length > MAX_PENDING_IMAGE_CHARS) {
+      throw correctionError('待审核队列已达容量上限，请联系管理员处理后重试', 'REVIEW_QUEUE_FULL', 429)
+    }
+
+    // 用户点击最终提交时，反馈状态、备注和待审核纠错必须在同一事务内写入。
+    // 仍兼容旧前端已经先标记 reported_incorrect、尚未提交纠错的会话。
+    const prepared = stmts.prepareFeedbackForCorrection.run({
+      feedback_id: feedbackId,
+      case_id: caseId,
+      capability_hash: capabilityHash,
+      remark,
+    })
+    if (prepared.changes !== 1) {
+      throw correctionError('反馈记录已被处理，请勿重复提交', 'CORRECTION_CAPABILITY_USED', 409)
+    }
+
+    const inserted = stmts.insertPending.run(pendingEntry)
+    const pendingId = Number(inserted.lastInsertRowid)
+    const consumed = stmts.consumeFeedbackForCorrection.run({
+      pending_id: pendingId,
+      feedback_id: feedbackId,
+      case_id: caseId,
+      capability_hash: capabilityHash,
+    })
+    if (consumed.changes !== 1) {
+      throw correctionError('纠错凭证已被使用，请勿重复提交', 'CORRECTION_CAPABILITY_USED', 409)
+    }
+    return pendingId
+  })
+
+  let pendingId
+  try {
+    pendingId = insertPendingCorrection()
+  } catch (error) {
+    if (error?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      throw correctionError('纠错凭证已被使用，请勿重复提交', 'CORRECTION_CAPABILITY_USED', 409)
+    }
+    throw error
   }
 
-  return { success: true, totalTraining, caseUpdated, pendingCreated: pendingCreated || undefined }
+  return { success: true, pendingId, pendingCreated: true }
 }
 
 // ===== 人工审核工作台 =====
 
-export async function listPendingCases(status = 'pending') {
+export async function listPendingCases(status = 'pending', { limit = 24, offset = 0 } = {}) {
   await ensureStmts()
-  return stmts.pendingAll.all().filter(r => !status || r.status === status)
+  const allowedStatuses = new Set(['pending', 'approving', 'approved', 'rejected'])
+  if (status && !allowedStatuses.has(status)) throw correctionError('审核状态不合法')
+  const safeLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 24, 1), 100)
+  const safeOffset = Math.max(Number.parseInt(offset, 10) || 0, 0)
+  const db = getDb()
+  const where = status ? 'WHERE status = ?' : ''
+  const params = status ? [status] : []
+  const list = db.prepare(`SELECT
+      id, feedback_id, source_case_id, title, deviceModel, statusObs, crackLocation, crackShape, crackPrinciple,
+      crackStage, result, remark, source, status, reviewed_by, review_remark,
+      reviewed_at, approved_case_id, created_at, image_archived_at, image_expires_at, image_deleted_at,
+      CASE WHEN LENGTH(imageBase64) > 0 OR LENGTH(image_path) > 0 THEN 1 ELSE 0 END AS hasImage
+    FROM pending_cases ${where}
+    ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`).all(...params, safeLimit, safeOffset)
+  const total = db.prepare(`SELECT COUNT(*) AS total FROM pending_cases ${where}`).get(...params).total
+  return { list, total, limit: safeLimit, offset: safeOffset }
+}
+
+export async function getPendingCaseImage(id) {
+  await ensureStmts()
+  const safeId = Number.parseInt(id, 10)
+  if (!Number.isSafeInteger(safeId) || safeId <= 0) throw correctionError('待审核案例 id 不合法')
+  const imageDataUrl = await readPendingCaseImageDataUrl(safeId)
+  if (imageDataUrl === null) return null
+  if (!imageDataUrl || !isValidImageDataUrl(imageDataUrl, MAX_CORRECTION_IMAGE_DATA_URL_CHARS)) {
+    throw correctionError('待审核案例图片无效')
+  }
+  return imageDataUrl
 }
 
 export async function getPendingStats() {
   await ensureStmts()
   return {
     pending: stmts.pendingCount.get('pending').total,
+    approving: stmts.pendingCount.get('approving').total,
     approved: stmts.pendingCount.get('approved').total,
     rejected: stmts.pendingCount.get('rejected').total,
   }
 }
 
+async function approvedPendingResult(pending) {
+  const caseId = pending.approved_case_id || ''
+  const formalRow = caseId ? stmts.caseById.get(caseId) : null
+  if (!formalRow) throw new Error('审核状态为已通过，但正式案例不存在')
+  const formal = deserializeCase(formalRow)
+  // SQLite 提交和外部向量服务无法组成同一事务；幂等审批必须重试同步，
+  // 以修复进程在 DB 提交后、向量请求完成前退出的窗口。
+  const vectorSync = await syncCaseVector(formal, { deleteMissing: false })
+  const imageArchive = await archiveReviewedPendingImage(pending.id)
+  return {
+    caseId: formal.id,
+    title: formal.title,
+    status: 'approved',
+    idempotent: true,
+    totalTraining: stmts.countTraining.get().total,
+    sync: { vector: vectorSync },
+    imageArchive,
+  }
+}
+
+async function archiveReviewedPendingImage(id) {
+  try {
+    return await archivePendingCaseImage(id)
+  } catch (error) {
+    // 审核状态已可靠提交，归档失败时保留 Base64，并在下次启动或幂等审核时重试。
+    console.warn(`[review] 纠错审核记录 ${id} 图片归档失败，已保留 Base64: ${error.message}`)
+    return { id: Number(id), archived: false, retryable: true, error: error.message }
+  }
+}
+
 export async function approvePendingCase(id, reviewedBy = '', reviewRemark = '') {
   await ensureStmts()
-  const p = stmts.pendingById.get(id)
+  const safeReviewedBy = boundedCorrectionText(reviewedBy, 'reviewedBy', 200)
+  const safeReviewRemark = boundedCorrectionText(reviewRemark, 'reviewRemark', 2000)
+  let p = stmts.pendingById.get(id)
   if (!p) throw new Error('待审核案例不存在')
-  if (p.status === 'approved') throw new Error('该案例已通过审核')
+  if (p.status === 'approved') {
+    return approvedPendingResult(p)
+  }
+  if (p.status === 'rejected') throw new Error('该案例已驳回，不能直接通过审核')
 
-  // 从待审核队列创建正式案例（reviewStatus=approved，进入 RAG 索引）
-  const c = await createCase({
-    title: p.title,
-    imageData: p.imageBase64,
-    crackLocation: p.crackLocation,
-    crackShape: p.crackShape,
-    crackStage: p.crackStage,
-    result: p.result,
-    possibleCause: p.crackPrinciple || '',
-    remark: p.remark || '',
-    reviewStatus: 'approved',
+  let caseId = p.approved_case_id || `case-review-${p.id}-${crypto.randomUUID().slice(0, 8)}`
+  let claimed = false
+  if (p.status === 'pending') {
+    const claim = stmts.pendingClaimApproval.run(caseId, safeReviewedBy, safeReviewRemark, id)
+    claimed = claim.changes === 1
+    p = stmts.pendingById.get(id)
+    caseId = p?.approved_case_id || caseId
+  }
+  if (!p || !['approving', 'approved'].includes(p.status)) {
+    throw new Error('待审核案例状态已变化，请刷新后重试')
+  }
+  if (p.status === 'approved') {
+    return approvedPendingResult(p)
+  }
+
+  const existingFormalRow = stmts.caseById.get(caseId)
+  let imageNames = existingFormalRow ? getCaseImages(deserializeCase(existingFormalRow)) : []
+  try {
+    // 先完整验证待审载荷，再执行图片文件写入。SQLite 收口失败时会补偿删除新文件。
+    parsePendingCorrection(p)
+    if (!existingFormalRow) {
+      imageNames = await saveImages(caseId, [p.imageBase64])
+      if (imageNames.length !== 1) throw correctionError('待审核案例图片保存失败', 'INVALID_PENDING_IMAGE')
+    }
+  } catch (error) {
+    if (claimed && !stmts.caseById.get(caseId)) stmts.pendingResetApproval.run(id, caseId)
+    if (!existingFormalRow && imageNames.length > 0) await removeImageFiles(imageNames)
+    throw error
+  }
+
+  const db = getDb()
+  const closeApproval = db.transaction(() => {
+    const current = stmts.pendingById.get(id)
+    if (!current) throw new Error('待审核案例不存在')
+    if (current.status === 'approved') {
+      const formal = stmts.caseById.get(current.approved_case_id || caseId)
+      return { formal: formal ? deserializeCase(formal) : null, idempotent: true, caseUpdated: false }
+    }
+    if (current.status !== 'approving' || current.approved_case_id !== caseId) {
+      throw new Error('待审核案例状态已变化，请刷新后重试')
+    }
+
+    const correction = parsePendingCorrection(current)
+    const createdAt = new Date().toISOString()
+    let formalRow = stmts.caseById.get(caseId)
+    let formal
+    if (formalRow) {
+      formal = deserializeCase(formalRow)
+    } else {
+      formal = {
+        id: caseId,
+        title: current.title || `人工校正 - ${correction.correctedLocation} - ${correction.correctedShape}`,
+        deviceModel: current.deviceModel || '',
+        symptoms: [],
+        crackShape: correction.correctedShape,
+        crackLocation: correction.correctedLocation,
+        physicalFeature: '',
+        liquidState: '',
+        installStatus: '',
+        packageDamage: '',
+        crackStage: correction.correctedStage || '',
+        crackPrinciple: correction.correctedPrinciple || '',
+        result: correction.correctedConclusion,
+        resultLabel: RESULT_LABELS[correction.correctedConclusion] || '',
+        summary: `人工审核纠错：${correction.remark}`,
+        tags: ['人工审核', '纠错案例'],
+        images: imageNames,
+        possibleCause: correction.correctedPrinciple || '',
+        warrantyTip: '',
+        corrections: [],
+        needsReview: false,
+        review_status: 'approved',
+        remark: correction.remark,
+      }
+      stmts.insertCase.run(serializeCase(formal))
+    }
+
+    if (!stmts.trainingByPendingId.get(current.id)) {
+      stmts.insertTraining.run(serializeTraining({
+        statusObs: correction.correctedStatusObs,
+        location: correction.correctedLocation,
+        shape: correction.correctedShape,
+        principle: correction.correctedPrinciple,
+        stage: correction.correctedStage,
+        conclusion: correction.correctedConclusion,
+        originalStatusObs: correction.originalStatusObs,
+        originalLocation: correction.originalLocation,
+        originalShape: correction.originalShape,
+        originalPrinciple: correction.originalPrinciple,
+        originalStage: correction.originalStage,
+        originalConclusion: correction.originalConclusion,
+        caseId: current.source_case_id || '',
+        source: 'manual_correction',
+        remark: correction.remark,
+        source_pending_id: current.id,
+      }))
+    }
+
+    let caseUpdated = false
+    if (current.source_case_id && current.source_case_id !== caseId) {
+      const sourceRow = stmts.caseById.get(current.source_case_id)
+      if (sourceRow) {
+        const sourceCase = deserializeCase(sourceRow)
+        if (!Array.isArray(sourceCase.corrections)) sourceCase.corrections = []
+        if (!sourceCase.corrections.some(item => Number(item?.pendingId) === Number(current.id))) {
+          sourceCase.corrections.push({
+            pendingId: Number(current.id),
+            feedbackId: Number(current.feedback_id) || undefined,
+            originalStatusObs: correction.originalStatusObs,
+            originalLocation: correction.originalLocation,
+            originalShape: correction.originalShape,
+            originalPrinciple: correction.originalPrinciple,
+            originalStage: correction.originalStage,
+            originalConclusion: correction.originalConclusion,
+            correctedStatusObs: correction.correctedStatusObs,
+            correctedLocation: correction.correctedLocation,
+            correctedShape: correction.correctedShape,
+            correctedPrinciple: correction.correctedPrinciple,
+            correctedStage: correction.correctedStage,
+            correctedConclusion: correction.correctedConclusion,
+            remark: correction.remark,
+            reviewedBy: safeReviewedBy,
+            reviewRemark: safeReviewRemark,
+            createdAt,
+          })
+          if (sourceCase.corrections.length > 50) sourceCase.corrections = sourceCase.corrections.slice(-50)
+          if (sourceCase.corrections.length >= 3) sourceCase.needsReview = true
+          stmts.updateCase.run(serializeCase(sourceCase))
+          caseUpdated = true
+        }
+      }
+    }
+
+    const finalized = stmts.pendingFinalizeApproval.run(safeReviewedBy, safeReviewRemark, id, caseId)
+    if (finalized.changes !== 1) throw new Error('审核状态收口失败，请重试')
+    return { formal, idempotent: false, caseUpdated }
   })
 
-  stmts.pendingUpdateStatus.run('approved', reviewedBy || '', reviewRemark || '', id)
-  return { caseId: c.id, title: c.title }
+  let closed
+  try {
+    closed = closeApproval()
+  } catch (error) {
+    const current = stmts.pendingById.get(id)
+    const formalExists = !!stmts.caseById.get(caseId)
+    if (claimed && current?.status === 'approving' && !formalExists) {
+      stmts.pendingResetApproval.run(id, caseId)
+    }
+    if (!existingFormalRow && !formalExists && imageNames.length > 0) await removeImageFiles(imageNames)
+    throw error
+  }
+
+  if (!closed.formal) throw new Error('审核已完成但正式案例不存在')
+  const vectorSync = await syncCaseVector(closed.formal, { deleteMissing: false })
+  const imageArchive = await archiveReviewedPendingImage(id)
+  return {
+    caseId: closed.formal.id,
+    title: closed.formal.title,
+    status: 'approved',
+    idempotent: closed.idempotent,
+    caseUpdated: closed.caseUpdated || undefined,
+    totalTraining: stmts.countTraining.get().total,
+    sync: { vector: vectorSync },
+    imageArchive,
+  }
 }
 
 export async function rejectPendingCase(id, reviewedBy = '', reviewRemark = '') {
   await ensureStmts()
+  const safeReviewedBy = boundedCorrectionText(reviewedBy, 'reviewedBy', 200)
+  const safeReviewRemark = boundedCorrectionText(reviewRemark, 'reviewRemark', 2000)
   const p = stmts.pendingById.get(id)
   if (!p) throw new Error('待审核案例不存在')
-  if (p.status === 'approved') throw new Error('该案例已通过审核，不能驳回')
-  stmts.pendingUpdateStatus.run('rejected', reviewedBy || '', reviewRemark || '', id)
-  return { id, status: 'rejected' }
+  if (p.status === 'approved' || p.status === 'approving') throw new Error('该案例已通过或正在通过审核，不能驳回')
+  if (p.status === 'rejected') {
+    return { id, status: 'rejected', idempotent: true, imageArchive: await archiveReviewedPendingImage(id) }
+  }
+  if (p.approved_case_id && stmts.caseById.get(p.approved_case_id)) {
+    throw new Error('正式案例已创建，必须先完成审批收口，不能驳回')
+  }
+  const result = stmts.pendingReject.run(safeReviewedBy, safeReviewRemark, id)
+  if (result.changes !== 1) throw new Error('待审核案例状态已变化，请刷新后重试')
+  return { id, status: 'rejected', idempotent: false, imageArchive: await archiveReviewedPendingImage(id) }
 }

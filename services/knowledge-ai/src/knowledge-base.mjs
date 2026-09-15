@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, access, unlink } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, access, unlink, rename } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
@@ -12,8 +12,19 @@ const KB_DOCS_DIR = join(DATA_DIR, 'kb-docs')
 // 文档分块大小（字符数）
 const CHUNK_SIZE = 800
 const CHUNK_OVERLAP = 100
+const MAX_TEXT_CHARS = 5 * 1024 * 1024
+const MAX_DOCX_BYTES = 20 * 1024 * 1024
+const MAX_ZIP_ENTRY_BYTES = 25 * 1024 * 1024
+const MAX_MEDIA_BYTES = 10 * 1024 * 1024
 
 let kbDB = null
+let mutationTail = Promise.resolve()
+
+function serializeMutation(operation) {
+  const run = mutationTail.then(operation, operation)
+  mutationTail = run.catch(() => {})
+  return run
+}
 
 async function ensureDir(dir) {
   try { await access(dir) } catch { await mkdir(dir, { recursive: true }) }
@@ -26,21 +37,39 @@ async function loadKB() {
   try {
     const raw = await readFile(KB_FILE, 'utf-8')
     kbDB = JSON.parse(raw)
-  } catch {
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw new Error(`知识库索引读取失败: ${error.message}`)
     kbDB = { documents: [], chunks: [] }
   }
   return kbDB
 }
 
 async function saveKB(db) {
-  kbDB = db
   await ensureDir(DATA_DIR)
-  await writeFile(KB_FILE, JSON.stringify(db, null, 2), 'utf-8')
+  const tempPath = `${KB_FILE}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    await writeFile(tempPath, JSON.stringify(db, null, 2), { encoding: 'utf-8', mode: 0o600 })
+    await rename(tempPath, KB_FILE)
+    kbDB = db
+  } catch (error) {
+    try { await unlink(tempPath) } catch {}
+    throw error
+  }
+}
+
+function inflateLimited(data, maxOutputLength) {
+  return new Promise((resolve, reject) => {
+    inflateRaw(data, { maxOutputLength }, (error, result) => error ? reject(error) : resolve(result))
+  })
 }
 
 // 将文本按字符分块（含重叠），表格行不拆分
-function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
+export function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
   if (!text || text.trim().length === 0) return []
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) throw new Error('chunkSize 必须为正数')
+  const safeOverlap = Number.isFinite(overlap)
+    ? Math.min(Math.max(0, Math.floor(overlap)), Math.max(0, Math.floor(chunkSize) - 1))
+    : 0
   const clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
 
   // 标记表格行索引，供断点判断使用
@@ -80,9 +109,16 @@ function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
         }
       }
     }
-    chunks.push(clean.substring(start, end).trim())
-    start = end - overlap
-    if (start >= clean.length) break
+    const chunk = clean.substring(start, end).trim()
+    if (chunk) chunks.push(chunk)
+
+    // 已消费到文档末尾时必须直接结束；否则 end-overlap 会把 start
+    // 拉回到末尾之前，反复生成同一个尾块直至命中安全上限。
+    if (end >= clean.length) break
+
+    const nextStart = end - safeOverlap
+    // 即使传入异常参数，也保证游标严格向前推进。
+    start = nextStart > start ? nextStart : end
     if (chunks.length > 500) break // 安全上限
   }
   return chunks
@@ -152,13 +188,11 @@ async function extractZipEntry(zipBuf, entryPath) {
     const dataOffset = offset + 30 + nameLen + extraLen
     const compressedData = zipBuf.subarray(dataOffset, dataOffset + compressedSize)
 
+    if (name === entryPath && uncompressedSize > MAX_ZIP_ENTRY_BYTES) {
+      throw new Error(`ZIP 条目 ${entryPath} 解压后超过大小限制`)
+    }
     if (name === entryPath && compression === 8) {
-      return new Promise((resolve, reject) => {
-        inflateRaw(compressedData, (err, result) => {
-          if (err) reject(err)
-          else resolve(result)
-        })
-      })
+      return inflateLimited(compressedData, MAX_ZIP_ENTRY_BYTES)
     }
 
     offset = dataOffset + compressedSize
@@ -180,15 +214,17 @@ function listZipMediaFiles(zipBuf) {
 
     const compression = view.getUint16(offset + 8, true)
     const compressedSize = view.getUint32(offset + 18, true)
+    const uncompressedSize = view.getUint32(offset + 22, true)
     const nameLen = view.getUint16(offset + 26, true)
     const extraLen = view.getUint16(offset + 28, true)
     const nameBuf = zipBuf.subarray(offset + 30, offset + 30 + nameLen)
     const name = new TextDecoder().decode(nameBuf)
 
-    if (name.startsWith('word/media/') && /\.(png|jpe?g|gif|bmp|webp)$/i.test(name)) {
+    if (name.startsWith('word/media/') && /\.(png|jpe?g|gif|bmp|webp)$/i.test(name)
+        && compressedSize <= MAX_MEDIA_BYTES && uncompressedSize <= MAX_MEDIA_BYTES && files.length < 50) {
       const dataOffset = offset + 30 + nameLen + extraLen
       const data = zipBuf.subarray(dataOffset, dataOffset + compressedSize)
-      files.push({ name, compression, data })
+      files.push({ name, compression, data, uncompressedSize })
     }
 
     const dataOffset = offset + 30 + nameLen + extraLen
@@ -262,11 +298,11 @@ function extractTextFromDocxXml(xml) {
 
 // 将 base64 还原为 Uint8Array
 function base64ToBytes(base64) {
-  const binaryStr = atob(base64)
-  const bytes = new Uint8Array(binaryStr.length)
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i)
+  if (typeof base64 !== 'string' || base64.length > Math.ceil(MAX_DOCX_BYTES * 4 / 3) + 16) {
+    throw new Error('DOCX 文件超过大小限制')
   }
+  const bytes = Buffer.from(base64, 'base64')
+  if (bytes.length === 0 || bytes.length > MAX_DOCX_BYTES) throw new Error('DOCX 文件无效或超过大小限制')
   return bytes
 }
 
@@ -288,9 +324,10 @@ function getMimeType(filename) {
 // 用 LLM 描述图片（复用模型配置）
 async function describeImageWithLLM(imageBytes, mimeType) {
   try {
-    const { loadModelConfig } = await import('./llm-analyzer.mjs')
+    const { loadModelConfig, validateModelEndpoint } = await import('./llm-analyzer.mjs')
     const config = await loadModelConfig()
     if (!config.enabled || !config.apiKey) return null
+    validateModelEndpoint(config.endpoint, config.provider)
 
     const base64 = Buffer.from(imageBytes).toString('base64')
     const dataUri = `data:${mimeType};base64,${base64}`
@@ -299,7 +336,9 @@ async function describeImageWithLLM(imageBytes, mimeType) {
     if (config.provider === 'anthropic') {
       return await describeWithAnthropic(config, dataUri, mimeType)
     }
-    // openai / ollama 统一走 OpenAI 兼容格式
+    if (config.provider === 'ollama') {
+      return await describeWithOllama(config, dataUri)
+    }
     return await describeWithOpenAI(config, dataUri)
   } catch (e) {
     console.warn('[knowledge-base] 图片描述失败:', e.message)
@@ -316,6 +355,13 @@ function normalizeEndpoint(endpoint) {
   // 已带 API 版本段（/v1、/v3 等）时直接拼 /chat/completions
   if (/\/v\d+$/.test(trimmed)) return trimmed + '/chat/completions'
   return trimmed + '/v1/chat/completions'
+}
+
+function normalizeAnthropicEndpoint(endpoint) {
+  const trimmed = (endpoint || '').replace(/\/+$/, '')
+  if (trimmed.endsWith('/v1/messages') || trimmed.endsWith('/messages')) return trimmed
+  if (trimmed.endsWith('/v1')) return trimmed + '/messages'
+  return trimmed + '/v1/messages'
 }
 
 async function describeWithOpenAI(config, dataUri) {
@@ -335,6 +381,8 @@ async function describeWithOpenAI(config, dataUri) {
       temperature: 0.2,
       max_tokens: 256,
     }),
+    signal: AbortSignal.timeout(120000),
+    redirect: 'error',
   })
   if (!resp.ok) throw new Error(`API ${resp.status}`)
   const data = await resp.json()
@@ -343,7 +391,7 @@ async function describeWithOpenAI(config, dataUri) {
 
 async function describeWithAnthropic(config, dataUri, mimeType) {
   const base64Data = dataUri.replace(/^data:image\/\w+;base64,/, '')
-  const endpoint = normalizeEndpoint(config.endpoint)
+  const endpoint = normalizeAnthropicEndpoint(config.endpoint)
   const resp = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' },
@@ -359,10 +407,34 @@ async function describeWithAnthropic(config, dataUri, mimeType) {
         ],
       }],
     }),
+    signal: AbortSignal.timeout(120000),
+    redirect: 'error',
   })
   if (!resp.ok) throw new Error(`API ${resp.status}`)
   const data = await resp.json()
   return (data.content?.[0]?.text || '').trim()
+}
+
+async function describeWithOllama(config, dataUri) {
+  const response = await fetch(config.endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.model,
+      stream: false,
+      messages: [{
+        role: 'user',
+        content: '请用中文简要描述这张图片的屏幕状态、故障位置与形状。100字以内。',
+        images: [dataUri.replace(/^data:image\/\w+;base64,/, '')],
+      }],
+      options: { temperature: 0.2, num_predict: 256 },
+    }),
+    signal: AbortSignal.timeout(120000),
+    redirect: 'error',
+  })
+  if (!response.ok) throw new Error(`API ${response.status}`)
+  const data = await response.json()
+  return (data.message?.content || '').trim()
 }
 
 // 提取 DOCX 中的图片并用 LLM 描述（并发控制）
@@ -379,11 +451,7 @@ async function extractAndDescribeImages(bytes) {
       batch.map(async mf => {
         let data = mf.data
         if (mf.compression === 8) {
-          data = await new Promise((resolve, reject) => {
-            inflateRaw(mf.data, (err, result) => {
-              if (err) reject(err); else resolve(result)
-            })
-          })
+          data = await inflateLimited(mf.data, MAX_MEDIA_BYTES)
         }
         const mimeType = getMimeType(mf.name)
         const desc = await describeImageWithLLM(data, mimeType)
@@ -437,7 +505,16 @@ function parseDocumentContent(raw, filename) {
 }
 
 // 上传文档
-export async function uploadDocument(filename, rawContent) {
+export function uploadDocument(filename, rawContent) {
+  return serializeMutation(() => uploadDocumentImpl(filename, rawContent))
+}
+
+async function uploadDocumentImpl(filename, rawContent) {
+  if (typeof filename !== 'string' || filename.length === 0 || filename.length > 255 || !/\.(?:txt|md|json|docx)$/i.test(filename)) {
+    throw new Error('文档名称无效，仅支持 txt、md、json、docx')
+  }
+  if (typeof rawContent !== 'string' || rawContent.length === 0) throw new Error('文档内容为空')
+  if (!/\.docx$/i.test(filename) && rawContent.length > MAX_TEXT_CHARS) throw new Error('文本文档超过 5MB 限制')
   const db = await loadKB()
   const id = 'kb-' + crypto.randomUUID().slice(0, 8)
   let { content, type, needsBase64Parse } = parseDocumentContent(rawContent, filename)
@@ -461,7 +538,7 @@ export async function uploadDocument(filename, rawContent) {
   // 保存原始文档
   const docFilename = `${id}.txt`
   const docPath = join(KB_DOCS_DIR, docFilename)
-  await writeFile(docPath, content, 'utf-8')
+  await writeFile(docPath, content, { encoding: 'utf-8', mode: 0o600 })
 
   // 分块
   const rawChunks = chunkText(content)
@@ -490,7 +567,14 @@ export async function uploadDocument(filename, rawContent) {
 
   db.documents.push(doc)
   db.chunks.push(...chunks)
-  await saveKB(db)
+  try {
+    await saveKB(db)
+  } catch (error) {
+    db.documents = db.documents.filter(item => item.id !== id)
+    db.chunks = db.chunks.filter(item => item.docId !== id)
+    try { await unlink(docPath) } catch {}
+    throw error
+  }
   return doc
 }
 
@@ -513,18 +597,29 @@ export async function getDocument(id) {
 }
 
 // 删除文档
-export async function deleteDocument(id) {
+export function deleteDocument(id) {
+  return serializeMutation(() => deleteDocumentImpl(id))
+}
+
+async function deleteDocumentImpl(id) {
   const db = await loadKB()
   const idx = db.documents.findIndex(d => d.id === id)
   if (idx === -1) return false
 
-  // 删除原始文件
+  const previousDocuments = db.documents
+  const previousChunks = db.chunks
+  db.documents = db.documents.filter(d => d.id !== id)
+  db.chunks = db.chunks.filter(c => c.docId !== id)
+  try {
+    await saveKB(db)
+  } catch (error) {
+    db.documents = previousDocuments
+    db.chunks = previousChunks
+    throw error
+  }
+  // 元数据成功提交后再清理正文；失败只会留下可安全回收的孤儿文件。
   const docPath = join(KB_DOCS_DIR, `${id}.txt`)
   try { await unlink(docPath) } catch {}
-
-  db.documents.splice(idx, 1)
-  db.chunks = db.chunks.filter(c => c.docId !== id)
-  await saveKB(db)
   return true
 }
 

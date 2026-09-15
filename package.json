@@ -2,9 +2,26 @@
   "name": "screen-damage-agent",
   "private": true,
   "scripts": {
-    "dev": "npx concurrently -n bff,engine -c blue,green \"npm run dev --prefix services/gateway-bff\" \"npm run dev --prefix services/decision-engine\"",
+    "dev": "concurrently -k -n features,knowledge,admin,engine,bff -c magenta,cyan,yellow,green,blue \"npm run dev:features\" \"npm run dev:knowledge\" \"npm run dev:admin\" \"npm run dev:engine\" \"npm run dev:bff\"",
+    "dev:features": "python3 services/knowledge-ai/python/main.py",
+    "dev:knowledge": "node --watch services/knowledge-ai/src/index.mjs",
+    "dev:admin": "node --watch services/decision-admin/src/index.mjs",
     "dev:bff": "npm run dev --prefix services/gateway-bff",
-    "dev:engine": "npm run dev --prefix services/decision-engine"
+    "dev:engine": "npm run dev --prefix services/decision-engine",
+    "build": "npm run build:bff && npm run build:engine && npm run build:knowledge && npm run build:mcp && npm run build:admin && npm run build:features",
+    "build:bff": "npm run build --prefix services/gateway-bff",
+    "build:engine": "npm run build --prefix services/decision-engine",
+    "build:knowledge": "npm run build --prefix services/knowledge-ai",
+    "build:mcp": "npm run build --prefix services/read-only-mcp",
+    "build:admin": "node --check services/decision-admin/src/index.mjs && node --check services/decision-admin/src/rules-store.mjs && node --check services/decision-admin/src/server-utils.mjs",
+    "build:features": "python3 -m py_compile services/knowledge-ai/python/main.py services/knowledge-ai/python/orientation.py",
+    "start": "concurrently -k -n features,knowledge,admin,engine,bff -c magenta,cyan,yellow,green,blue \"npm run start:features\" \"npm run start:knowledge\" \"npm run start:admin\" \"npm run start:engine\" \"npm run start:bff\"",
+    "start:features": "python3 services/knowledge-ai/python/main.py",
+    "start:knowledge": "npm run start --prefix services/knowledge-ai",
+    "start:mcp": "npm run start --prefix services/read-only-mcp",
+    "start:admin": "node services/decision-admin/src/index.mjs",
+    "start:bff": "npm run start --prefix services/gateway-bff",
+    "start:engine": "npm run start --prefix services/decision-engine"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

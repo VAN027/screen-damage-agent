@@ -1,13 +1,21 @@
-FROM node:20-alpine
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
 
 WORKDIR /app
 
-COPY services/decision-admin/src/ ./services/decision-admin/src/
-COPY services/decision-admin/static/ ./services/decision-admin/static/
+COPY --chown=node:node services/shared/ ./services/shared/
+COPY --chown=node:node services/decision-admin/src/ ./services/decision-admin/src/
+COPY --chown=node:node services/decision-admin/static/ ./services/decision-admin/static/
 
-ENV ADMIN_PORT=8082
+RUN mkdir -p /app/services/decision-admin/data \
+    && chown node:node /app/services/decision-admin/data
+
+ENV NODE_ENV=production \
+    ADMIN_PORT=8082 \
+    KNOWLEDGE_AI_URL=http://knowledge-ai:8083 \
+    DECISION_ENGINE_URL=http://decision-engine:8081
 
 EXPOSE 8082
 
-# data 目录通过 volume 挂载，不在镜像内存储
+USER node
+
 CMD ["node", "services/decision-admin/src/index.mjs"]

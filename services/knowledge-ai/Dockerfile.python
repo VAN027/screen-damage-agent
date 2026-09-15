@@ -1,24 +1,45 @@
-# Python 图像特征提取微服务 (DINOv2 + Milvus)
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:90744cff8f32887f075c47d747a173ff333e9e98801667af93c357fa9f5e28ff
 
 WORKDIR /app
 
-# 安装系统依赖
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/models/huggingface \
+    HF_HUB_CACHE=/models/huggingface/hub \
+    TORCH_HOME=/models/torch \
+    XDG_CACHE_HOME=/models/cache \
+    PADDLE_PDX_CACHE_HOME=/models/paddlex \
+    PADDLE_PDX_MODEL_SOURCE=BOS \
+    PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT=0 \
+    DINO_MODEL_NAME=facebook/dinov2-small \
+    DINO_LOCAL_FILES_ONLY=false \
+    VECTOR_DATA_DIR=/data
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+    ca-certificates \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖并安装
 COPY services/knowledge-ai/python/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN python -m pip install \
+      --index-url https://download.pytorch.org/whl/cpu \
+      "torch==2.13.0" \
+    && python -m pip install -r /app/requirements.txt
 
-# 复制代码
 COPY services/knowledge-ai/python/main.py /app/main.py
+COPY services/knowledge-ai/python/orientation.py /app/orientation.py
 
-# 健康检查
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /data /models/huggingface /models/torch /models/cache /models/paddlex \
+    && chown -R appuser:appuser /data /models
+
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python -c "import urllib.request; import json; r = urllib.request.urlopen('http://localhost:8084/api/health'); assert json.loads(r.read()).get('status') == 'ok'"
 
 EXPOSE 8084
+
+USER appuser
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8084"]

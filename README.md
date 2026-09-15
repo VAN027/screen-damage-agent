@@ -69,7 +69,7 @@
 | **decision-engine** | 8081 | 决策树判定引擎 + 置信度打分 |
 | **decision-admin** | 8082 | 管理中台（案例库 + 向量索引 + 评估 + 规则 + 模型配置） |
 | **knowledge-ai** | 8083 | 知识检索 + DINOv2 向量融合匹配 + LLM 分析 + RAG |
-| **python-features** | 8084 | DINOv2 ViT-S/14 图像特征提取 (384维) + 向量数据库 |
+| **python-features** | 8084 | DINOv2 ViT-S/14 图像特征提取 (384维) + 电视方向检测/OCR + 向量数据库 |
 
 ---
 
@@ -157,16 +157,22 @@
 
 ### 4.1 环境要求
 
-- **Node.js** v18+
-- **Python** 3.9+（含 venv）
-- Python 依赖需提前安装：`pip install -r services/knowledge-ai/python/requirements.txt`
+- **Node.js** v20+
+- **Python** 3.10+（建议使用 venv）
+- Node.js 依赖：`npm ci && npm ci --omit=dev --prefix services/knowledge-ai`
+- Python 依赖：`python -m pip install -r services/knowledge-ai/python/requirements.txt`
 - DINOv2 模型需提前下载至本地缓存（首次运行自动下载 `facebook/dinov2-small`）
+- 必须分别配置 `ADMIN_API_TOKEN` 和 `INTERNAL_SERVICE_TOKEN`；两者应使用不同的高强度随机值，禁止提交到仓库
 
 ### 4.2 一键启动（PM2 推荐）
 
 ```bash
 # 安装 PM2
 npm install -g pm2
+
+# 示例：使用密码管理系统注入两个不同的随机令牌
+export ADMIN_API_TOKEN="$(openssl rand -hex 32)"
+export INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)"
 
 # 启动所有服务
 pm2 start ecosystem.config.cjs
@@ -177,6 +183,19 @@ pm2 status
 # 查看日志
 pm2 logs
 ```
+
+Docker Compose 部署时先复制 `.env.example` 为 `.env`，填入两个独立令牌，再执行：
+
+```bash
+docker compose config --quiet
+docker compose up -d --build
+```
+
+Compose 默认只把 `8080` 和管理端 `8082` 绑定到本机回环地址，避免绕过 TLS 反向代理；不要在公网直接发布 `8081`、`8082`、`8083`、`8084`。
+
+默认 Compose 内网为 `172.30.240.0/24`，BFF 只信任其网关 `172.30.240.1` 注入的 `X-Forwarded-For`，从而在宿主 Nginx 后仍按真实客户端限流。若网段冲突，必须成对修改 `.env` 中的 `SCREEN_DAMAGE_SUBNET` 与 `SCREEN_DAMAGE_GATEWAY`，不要把不可信地址加入代理白名单。
+
+LLM 默认全局预算为每分钟 30 次、每天 500 次、并发 3；向量分析并发为 4。可通过 `.env` 中的 `LLM_GLOBAL_REQUESTS_PER_MINUTE`、`LLM_GLOBAL_REQUESTS_PER_DAY`、`LLM_GLOBAL_CONCURRENCY`、`VECTOR_GLOBAL_CONCURRENCY` 调整。限额按进程实例计数，多副本部署时需接入共享限流存储或按副本数折算。
 
 ### 4.3 分步启动（调试用）
 
@@ -207,14 +226,22 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 
 ### 4.5 Nginx 反向代理（生产部署）
 
-参考项目根目录 `nginx-site.conf` 配置。
+根目录 `nginx-site.conf` 是强制 TLS 的生产模板：80 端口只做 HTTPS 跳转，443 端口才代理应用。部署前必须：
+
+1. 将 `screen-damage.example.com` 替换为证书对应的真实域名。
+2. 将证书链和私钥以只读方式放到 `/etc/nginx/tls/fullchain.pem` 与 `/etc/nginx/tls/privkey.pem`。
+3. 执行 `nginx -t` 后再 reload。证书缺失时配置应拒绝启动，禁止为了绕过检查而退回明文 HTTP。
+
+模板还按应用实际限制收紧了请求体：普通判定 32KB、反馈 16KB、单图 9MB、纠错 4MB、多图 LLM 22MB。图片与 LLM 请求关闭 Nginx 请求体预缓冲，由 Nginx 流式转发，同时仍由 Nginx 和应用双重校验总大小并限制慢速上传。
+
+如果 TLS 在负载均衡器终止，负载均衡器到本机 Nginx 的链路也必须位于可信隔离网络，并应由防火墙阻止用户直接访问后端端口。
 
 ### 4.6 访问地址
 
 | 地址 | 用途 | 角色 |
 |------|------|------|
-| `http://localhost:8080/` | H5 鉴定页面 | 一线售后 |
-| `http://localhost:8082/admin` | 管理后台 | 导师/管理员 |
+| `https://你的域名/` | H5 鉴定页面 | 一线售后 |
+| `https://你的域名/admin` | 管理后台 | 导师/管理员 |
 | `http://localhost:8083/api/knowledge/vector-stats` | 向量服务状态 | 调试 |
 
 ---
@@ -238,6 +265,7 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 | GET/POST | `/api/knowledge/model-config` | 主模型配置 |
 | GET/POST | `/api/knowledge/annotation-config` | 标注模型配置 |
 | POST | `/api/knowledge/search-vector` | 纯向量检索 |
+| POST/PATCH | `/api/knowledge/assessment-records` | 创建鉴定记录并保存处理后图片 / 更新鉴定结果 |
 | POST | `/api/knowledge/correction` | 提交纠错（进入待审核队列） |
 | POST | `/api/knowledge/annotate-single` | 单张图片 AI 标注 |
 | POST | `/api/knowledge/annotate-batch` | 批量图片 AI 标注 |
@@ -268,6 +296,10 @@ Python 服务启动时自动检测 Milvus，检测到则优先使用，未检测
 | POST | `/api/knowledge/cases/from-images` | 图片批量入库 |
 | GET/POST | `/api/knowledge/training` | 训练数据管理 |
 | POST | `/api/knowledge/correction` | 纠错反馈（写入待审核队列） |
+| POST/PATCH | `/api/knowledge/assessment-records` | 创建鉴定记录 / 更新处理状态和结果 |
+| GET | `/api/knowledge/assessment-records` | 管理员分页查询鉴定记录 |
+| GET/DELETE | `/api/knowledge/assessment-record` | 管理员查看 / 删除鉴定记录 |
+| GET | `/api/knowledge/assessment-image` | 管理员读取鉴定记录图片 |
 | POST | `/api/knowledge/feedback` | 提交判定正确率反馈 |
 | GET | `/api/knowledge/feedback/stats` | 判定正确率统计 |
 | POST | `/api/knowledge/feedback/report` | 判定报错（翻转正确→不正确） |
@@ -422,15 +454,43 @@ Content-Type: application/json
 | created_at | TEXT | 创建时间 |
 | reviewed_at | TEXT | 审核时间 |
 
-#### feedback 表（判定正确率反馈）
+#### feedback 表（鉴定主记录与结果反馈）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER (PK) | 自增 ID |
+| submission_id | TEXT (UNIQUE) | 用户端单次鉴定 ID |
+| process_status | TEXT | 处理状态（analyzing/completed/failed） |
+| install_status | TEXT | 安装状态 |
+| auth_personnel | TEXT | 是否由授权人员开箱 |
+| package_damage | TEXT | 包装破损状态 |
+| fault_links | JSON | 故障环节列表 |
+| analysis_mode | TEXT | 分析模式（hybrid/rag 等） |
+| analysis_payload | JSON | AI 分析完整结果 |
+| decision_payload | JSON | 决策引擎完整结果 |
+| llm_conclusion | TEXT | LLM 结论 |
+| final_result | TEXT | 最终判定结果 |
+| image_count | INTEGER | 关联图片数量 |
+| error_message | TEXT | 失败原因 |
 | case_id | TEXT | 关联案例 ID |
 | conclusion | TEXT | 鉴定结论 |
-| feedback | TEXT | 反馈结果（correct/incorrect） |
+| status | TEXT | 用户反馈状态（unconfirmed/confirmed_correct/reported_incorrect） |
 | remark | TEXT | 备注 |
 | source | TEXT | 来源（h5 等） |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 更新时间 |
+| completed_at | TEXT | 鉴定完成时间 |
+
+#### feedback_images 表（鉴定图片元数据）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER (PK) | 自增 ID |
+| feedback_id | INTEGER (FK) | 关联 `feedback.id`，主记录删除时级联删除 |
+| sort_order | INTEGER | 用户上传顺序 |
+| filename | TEXT | 相对 `data/feedback-images/` 的本地文件路径 |
+| mime_type | TEXT | 服务端检测到的图片类型 |
+| file_size | INTEGER | 文件字节数 |
+| width / height | INTEGER | 图片尺寸 |
+| sha256 | TEXT | 文件内容摘要 |
 | created_at | TEXT | 创建时间 |
 
 #### training 表
@@ -517,6 +577,7 @@ Content-Type: application/json
 │       ├── Dockerfile.python
 │       ├── src/
 │       │   ├── index.mjs              ← API 路由（~50 个端点）
+│       │   ├── assessment-records.mjs ← 鉴定记录与本地图片存储
 │       │   ├── search-engine.mjs      ← 向量融合检索 + 案例 CRUD + 纠正反馈
 │       │   ├── llm-analyzer.mjs       ← LLM 分析 + 标注模型 + SSE 流式
 │       │   ├── knowledge-base.mjs     ← RAG 知识库管理
@@ -531,7 +592,8 @@ Content-Type: application/json
 │       │   ├── field-defs.json        ← 集中式字段定义
 │       │   ├── knowledge-base.json    ← 知识库文档索引
 │       │   ├── backup/                ← 数据库自动备份（保留 7 天）
-│       │   └── images/                ← 案例图片存储
+│       │   ├── feedback-images/        ← 用户鉴定处理后图片（不入库）
+│       │   └── images/                 ← 案例图片存储
 │       └── python/
 │           ├── main.py                ← DINOv2 特征服务 (FastAPI)
 │           └── requirements.txt       ← Python 依赖

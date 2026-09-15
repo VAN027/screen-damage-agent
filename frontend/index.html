@@ -233,6 +233,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .paste-url-actions .btn-cancel { padding: 8px 20px; border: 1px solid #d1d5db; background: #fff; border-radius: 8px; font-size: 13px; color: #64748b; cursor: pointer; }
 .paste-url-actions .btn-confirm { padding: 8px 20px; border: none; background: #e60012; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .paste-url-actions .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+.orientation-card { background:#fff; width:92%; max-width:520px; max-height:92vh; overflow-y:auto; border-radius:16px; padding:20px; box-shadow:0 12px 40px rgba(0,0,0,0.28); }
+.orientation-title { font-size:17px; font-weight:700; color:#1e293b; }
+.orientation-hint { margin:8px 0 14px; color:#64748b; font-size:13px; line-height:1.55; }
+.orientation-preview-stage { height:min(54vh,420px); display:flex; align-items:center; justify-content:center; overflow:hidden; background:#111827; border-radius:10px; }
+.orientation-preview-stage img { max-width:92%; max-height:92%; object-fit:contain; transition:transform .2s ease; }
+.orientation-reason { margin-top:10px; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:12px; line-height:1.45; }
+.orientation-rotate-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+.orientation-rotate-actions button { border:1px solid #cbd5e1; background:#f8fafc; color:#334155; border-radius:8px; padding:9px 4px; cursor:pointer; }
+.orientation-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+.orientation-footer button { padding:9px 18px; border-radius:8px; font-size:13px; cursor:pointer; }
+.orientation-cancel { border:1px solid #d1d5db; background:#fff; color:#64748b; }
+.orientation-confirm { border:none; background:#e60012; color:#fff; font-weight:600; }
 
 </style>
 </head>
@@ -399,6 +411,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
   </div>
 </div>
 
+<!-- 方向证据不足时必须由用户确认，确认后的像素才会进入损伤分析。 -->
+<div class="overlay" id="orientationOverlay" style="display:none">
+  <div class="orientation-card" onclick="event.stopPropagation()">
+    <div class="orientation-title" id="orientationTitle">确认电视机方向</div>
+    <div class="orientation-hint">请确保电视机天侧在上、地侧在下。可依据侧边居中的文字、Logo 或底座方向调整。</div>
+    <div class="orientation-preview-stage"><img id="orientationPreview" alt="待确认的电视图片" /></div>
+    <div class="orientation-reason" id="orientationReason"></div>
+    <div class="orientation-rotate-actions">
+      <button type="button" onclick="adjustOrientationPreview(-90)">↶ 左转 90°</button>
+      <button type="button" onclick="adjustOrientationPreview(180)">↻ 翻转 180°</button>
+      <button type="button" onclick="adjustOrientationPreview(90)">↷ 右转 90°</button>
+    </div>
+    <div class="orientation-footer">
+      <button type="button" class="orientation-cancel" onclick="finishOrientationConfirmation(false)">取消分析</button>
+      <button type="button" class="orientation-confirm" onclick="finishOrientationConfirmation(true)">方向正确，继续</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin + '/api/v1/cases/decide'
 
@@ -409,7 +440,11 @@ let state = {
   analysis: null,
   infoConfirmed: false,
   topSimilarCaseId: '',
-  feedbackId: null, // 当前判定的反馈记录 id（默认记正确，报错时翻转）
+  feedbackId: null,
+  feedbackToken: '', // 与反馈记录绑定的高熵凭证，防止枚举 ID 篡改他人反馈
+  submissionId: '',
+  assessmentFinalized: false,
+  incorrectFeedbackSubmitted: false,
   mainIndex: 0, // 当前主图索引
 }
 let stream = null
@@ -423,10 +458,91 @@ let lbDragStartY = 0
 let lbStartX = 0
 let lbStartY = 0
 let panelConfig = { showRagPanel: true, showAiPanel: true, analysisMode: 'hybrid' }
+let orientationPreparationPromise = null
+let orientationConfirmationResolve = null
+let orientationPreviewAngle = 0
+
+function randomUrlSafeToken(byteLength = 32) {
+  const bytes = new Uint8Array(byteLength)
+  window.crypto.getRandomValues(bytes)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function ensureAssessmentIdentity() {
+  if (!state.submissionId) {
+    state.submissionId = window.crypto.randomUUID
+      ? window.crypto.randomUUID()
+      : `sub_${randomUrlSafeToken(24)}`
+  }
+  if (!state.feedbackToken) state.feedbackToken = randomUrlSafeToken(32)
+}
+
+async function ensureAssessmentRecord() {
+  if (state.feedbackId && state.submissionId && state.feedbackToken) return true
+  ensureAssessmentIdentity()
+  const response = await fetch('/api/knowledge/assessment-records', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      submissionId: state.submissionId,
+      capabilityToken: state.feedbackToken,
+      images: state.photos.map(photo => photo.evidenceUrl || photo.url),
+      installStatus: state.installStatus,
+      authPersonnel: state.authPersonnel,
+      packageDamage: state.packageDamage,
+      faultLinks: state.faultLinks,
+      analysisMode: panelConfig.analysisMode || 'hybrid',
+    }),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok || !payload?.success || !payload?.data?.id) {
+    throw new Error(payload?.error?.message || `鉴定记录保存失败（HTTP ${response.status}）`)
+  }
+  state.feedbackId = payload.data.id
+  state.submissionId = payload.data.submissionId
+  state.assessmentFinalized = false
+  return true
+}
+
+async function patchAssessmentRecord(changes) {
+  if (!state.submissionId || !state.feedbackToken) return false
+  const response = await fetch('/api/knowledge/assessment-records', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      submissionId: state.submissionId,
+      capabilityToken: state.feedbackToken,
+      ...changes,
+    }),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok || !payload?.success) {
+    throw new Error(payload?.error?.message || `鉴定记录更新失败（HTTP ${response.status}）`)
+  }
+  return true
+}
+
+async function markAssessmentFailed(message) {
+  if (!state.submissionId || !state.feedbackToken) return
+  try {
+    await patchAssessmentRecord({ processStatus: 'failed', errorMessage: String(message || '鉴定失败').slice(0, 1000) })
+    state.assessmentFinalized = true
+  } catch (error) {
+    console.error('[assessment] 失败状态保存失败:', error)
+  }
+}
+
+function abandonAssessmentRecord(message = '用户重新开始鉴定') {
+  if (!state.submissionId || !state.feedbackToken || state.assessmentFinalized) return
+  patchAssessmentRecord({ processStatus: 'failed', errorMessage: message })
+    .catch(error => console.error('[assessment] 中止状态保存失败:', error))
+}
 
 async function loadPanelConfig() {
   try {
-    const resp = await fetch('/api/knowledge/model-config')
+    const resp = await fetch('/api/knowledge/public-config')
     const data = await resp.json()
     if (data.success && data.data) {
       panelConfig.showRagPanel = data.data.showRagPanel !== false
@@ -628,7 +744,7 @@ function showCameraFallback() {
           document.getElementById('photoPreview').style.display = 'block'
           updateSubmitState()
           document.getElementById('btnInfoRow').style.display = ''
-          if (state.photos.length === 1) resetLLMResult()
+          if (state.photos.length === 1) { resetLLMResult(); openInfoSheet() }
           if (state.photos.length >= MAX_PHOTOS) btn.disabled = true
           maybeRunInitialAnalysis()
           state.analysis = null
@@ -671,6 +787,136 @@ function compressImage(src) {
   c.height = Math.round(sh * ratio)
   c.getContext('2d').drawImage(src, 0, 0, c.width, c.height)
   return c
+}
+
+function drawEvidenceWatermark(canvas, photo) {
+  const ctx = canvas.getContext('2d')
+  const locationText = photo.locationText || ''
+  const hasLoc = !!locationText
+  const fh = Math.round(canvas.height * (hasLoc ? 0.10 : 0.07))
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(0, canvas.height - fh, canvas.width, fh)
+  const fontSize1 = Math.max(12, Math.round(canvas.width / 50))
+  const fontSize2 = Math.max(10, Math.round(canvas.width / 60))
+  ctx.fillStyle = '#fff'
+  ctx.font = `bold ${fontSize1}px sans-serif`
+  ctx.fillText(`${photo.ts}  TCL智能鉴定`, 12, canvas.height - fh + fontSize1 + 4)
+  ctx.font = `${fontSize2}px sans-serif`
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'
+  ctx.fillText(`ID:${photo.id}${hasLoc ? '  ' + locationText : ''}`, 12, canvas.height - fh + fontSize1 + fontSize2 + 8)
+}
+
+function loadDataUrlImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('纠正后的图片无法加载'))
+    image.src = dataUrl
+  })
+}
+
+async function rotateImageDataUrl(dataUrl, degrees) {
+  const angle = ((Number(degrees) % 360) + 360) % 360
+  if (!angle) return dataUrl
+  const image = await loadDataUrlImage(dataUrl)
+  const canvas = document.createElement('canvas')
+  const swapSides = angle === 90 || angle === 270
+  canvas.width = swapSides ? image.height : image.width
+  canvas.height = swapSides ? image.width : image.height
+  const ctx = canvas.getContext('2d')
+  ctx.translate(canvas.width / 2, canvas.height / 2)
+  ctx.rotate(angle * Math.PI / 180)
+  ctx.drawImage(image, -image.width / 2, -image.height / 2)
+  return canvas.toDataURL('image/jpeg', IMG_JPEG_Q)
+}
+
+async function buildEvidenceDataUrl(photo) {
+  const image = await loadDataUrlImage(photo.analysisUrl)
+  const canvas = document.createElement('canvas')
+  canvas.width = image.width
+  canvas.height = image.height
+  canvas.getContext('2d').drawImage(image, 0, 0)
+  drawEvidenceWatermark(canvas, photo)
+  return canvas.toDataURL('image/jpeg', IMG_JPEG_Q)
+}
+
+function adjustOrientationPreview(degrees) {
+  orientationPreviewAngle = (orientationPreviewAngle + Number(degrees) + 360) % 360
+  document.getElementById('orientationPreview').style.transform = `rotate(${orientationPreviewAngle}deg)`
+}
+
+function finishOrientationConfirmation(confirmed) {
+  const resolve = orientationConfirmationResolve
+  orientationConfirmationResolve = null
+  document.getElementById('orientationOverlay').style.display = 'none'
+  document.getElementById('orientationPreview').style.transform = ''
+  if (resolve) resolve(confirmed ? orientationPreviewAngle : null)
+}
+
+function requestOrientationConfirmation(photo, index, orientation) {
+  if (orientationConfirmationResolve) throw new Error('已有图片正在等待方向确认')
+  orientationPreviewAngle = 0
+  document.getElementById('orientationTitle').textContent = `确认电视机方向（${index + 1}/${state.photos.length}）`
+  document.getElementById('orientationPreview').src = photo.analysisUrl
+  const confidence = Math.round((Number(orientation?.confidence) || 0) * 100)
+  document.getElementById('orientationReason').textContent = `${orientation?.reason || '自动方向证据不足'}（置信度 ${confidence}%）`
+  document.getElementById('orientationOverlay').style.display = 'flex'
+  return new Promise(resolve => { orientationConfirmationResolve = resolve })
+}
+
+async function preparePhotoOrientations() {
+  const pending = state.photos
+    .map((photo, index) => ({ photo, index }))
+    .filter(item => !item.photo.orientationPrepared)
+  if (!pending.length) return true
+
+  const response = await fetch('/api/knowledge/orient-images', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      images: pending.map(item => item.photo.originalAnalysisUrl || item.photo.analysisUrl || item.photo.url),
+      // 纯 RAG 模式保持照片不出域；不确定方向转人工确认。
+      allowModel: panelConfig.analysisMode !== 'rag',
+    }),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok || !payload?.success || !Array.isArray(payload?.data?.results)) {
+    throw new Error(payload?.error?.message || `图片方向检测失败（HTTP ${response.status}）`)
+  }
+  if (payload.data.results.length !== pending.length) throw new Error('图片方向检测返回数量不一致')
+
+  for (let resultIndex = 0; resultIndex < pending.length; resultIndex++) {
+    const { photo, index } = pending[resultIndex]
+    const result = payload.data.results[resultIndex]
+    if (!result?.normalizedImage || !result?.orientation) throw new Error(`第 ${index + 1} 张图片缺少方向检测结果`)
+    photo.analysisUrl = result.normalizedImage
+    photo.orientation = result.orientation
+    if (result.orientation.requiresConfirmation) {
+      const userAngle = await requestOrientationConfirmation(photo, index, result.orientation)
+      if (userAngle === null) throw new Error('图片方向确认已取消，未开始损伤分析')
+      photo.analysisUrl = await rotateImageDataUrl(photo.analysisUrl, userAngle)
+      photo.orientation = {
+        ...result.orientation,
+        status: 'user_confirmed',
+        requiresConfirmation: false,
+        userAdjustment: userAngle,
+        source: 'user-confirmed',
+      }
+    }
+    photo.evidenceUrl = await buildEvidenceDataUrl(photo)
+    photo.url = photo.evidenceUrl
+    photo.orientationPrepared = true
+    renderPhotoGrid()
+  }
+  return true
+}
+
+function ensurePhotoOrientations() {
+  if (!orientationPreparationPromise) {
+    orientationPreparationPromise = preparePhotoOrientations()
+      .finally(() => { orientationPreparationPromise = null })
+  }
+  return orientationPreparationPromise
 }
 
 function renderPhotoGrid() {
@@ -743,27 +989,22 @@ function renderPhotoGrid() {
 }
 
 function addPhotoFromCanvas(canvas) {
-  // 先压缩再打水印，大幅减少上传体积
+  // 分析图先压缩但不打水印；取证图在方向纠正完成后重新生成水印。
   const src = compressImage(canvas)
   const now = new Date()
   const ts = now.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+  const id = Date.now().toString(36)
+  const analysisUrl = src.toDataURL('image/jpeg', IMG_JPEG_Q)
+  const photo = { id, ts, locationText: locationAddr, originalAnalysisUrl: analysisUrl, analysisUrl, orientationPrepared: false }
   const tempCanvas = document.createElement('canvas')
   tempCanvas.width = src.width; tempCanvas.height = src.height
   const ctx = tempCanvas.getContext('2d')
   ctx.drawImage(src, 0, 0)
-  // 水印栏高 — 有位置信息时略高
-  const hasLoc = !!locationAddr
-  const fh = Math.round(tempCanvas.height * (hasLoc ? 0.10 : 0.07))
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, tempCanvas.height - fh, tempCanvas.width, fh)
-  const fontSize1 = Math.max(12, Math.round(tempCanvas.width / 50))
-  const fontSize2 = Math.max(10, Math.round(tempCanvas.width / 60))
-  // 第一行：时间戳 + 标识
-  ctx.fillStyle = '#fff'; ctx.font = `bold ${fontSize1}px sans-serif`
-  ctx.fillText(`${ts}  TCL智能鉴定`, 12, tempCanvas.height - fh + fontSize1 + 4)
-  // 第二行：ID + 位置
-  ctx.font = `${fontSize2}px sans-serif`; ctx.fillStyle = 'rgba(255,255,255,0.7)'
-  ctx.fillText(`ID:${Date.now().toString(36)}${hasLoc ? '  ' + locationAddr : ''}`, 12, tempCanvas.height - fh + fontSize1 + fontSize2 + 8)
-  state.photos.push({ id: Date.now().toString(36), ts: ts, url: tempCanvas.toDataURL('image/jpeg', IMG_JPEG_Q) })
+  drawEvidenceWatermark(tempCanvas, photo)
+  photo.evidenceUrl = tempCanvas.toDataURL('image/jpeg', IMG_JPEG_Q)
+  photo.originalEvidenceUrl = photo.evidenceUrl
+  photo.url = photo.evidenceUrl
+  state.photos.push(photo)
   renderPhotoGrid()
 }
 
@@ -784,6 +1025,7 @@ function removePhoto(index) {
     document.getElementById('btnRetake').style.display = 'none'
     document.getElementById('btnInfoRow').style.display = 'none'
     document.getElementById('infoSheetOverlay').classList.remove('open')
+    document.getElementById('actionButtons').style.display = ''
     state.analysis = null
     state.infoConfirmed = false
     document.getElementById('correctionPanel').style.display = 'none'
@@ -794,6 +1036,7 @@ function removePhoto(index) {
     // 删除后清除确认状态和分析，等待重新确认
     state.analysis = null
     state.infoConfirmed = false
+    document.getElementById('actionButtons').style.display = ''
     resetLLMResult()
     document.getElementById('analysisPanel').style.display = 'none'
     document.getElementById('aiAnalysisPanel').style.display = 'none'
@@ -855,21 +1098,9 @@ function restoreCameraUI() {
 }
 
 function retake() {
-  state.photos = []
-  state.analysis = null
-  state.infoConfirmed = false
-  restoreCameraUI()
-  document.getElementById('cameraView').style.display = 'block'
-  document.getElementById('photoPreview').style.display = 'none'
-  document.getElementById('analysisPanel').style.display = 'none'
-  document.getElementById('analysisHint').style.display = 'none'
-  document.getElementById('analysisActions').style.display = 'none'
-  document.getElementById('btnRetake').style.display = 'none'
-  document.getElementById('btnCapture').disabled = true
-  document.getElementById('btnInfoRow').style.display = 'none'
-  document.getElementById('infoSheetOverlay').classList.remove('open')
-  resetLLMResult()
-  showCameraConsent()
+  // 完全重置：复用 resetAll 清理所有状态（判定结果/相似案例/LLM 结果/反馈记录/表单），
+  // 避免「再鉴定另一张」时残留上一张照片的数据导致串号或 UI 残留。
+  resetAll()
 }
 
 function uploadFromAlbum(event) {
@@ -985,6 +1216,7 @@ async function confirmPasteUrl() {
     document.getElementById('photoPreview').style.display = 'block'
     updateSubmitState()
     document.getElementById('btnInfoRow').style.display = ''
+    if (state.photos.length === 1) openInfoSheet()
     if (state.photos.length >= MAX_PHOTOS) document.getElementById('btnCapture').disabled = true
     maybeRunInitialAnalysis()
     showToast('已加载图片')
@@ -1016,6 +1248,7 @@ document.addEventListener('paste', (e) => {
         document.getElementById('cameraView').style.display = 'none'
         document.getElementById('photoPreview').style.display = 'block'
         updateSubmitState(); document.getElementById('btnInfoRow').style.display = ''
+        if (state.photos.length === 1) openInfoSheet()
         if (state.photos.length >= MAX_PHOTOS) document.getElementById('btnCapture').disabled = true
         maybeRunInitialAnalysis()
         showToast('已粘贴图片')
@@ -1038,6 +1271,7 @@ document.addEventListener('paste', (e) => {
 let llmAbortController = null
 
 function resetLLMResult() {
+  abandonAssessmentRecord('用户修改了图片或鉴定信息')
   // 取消正在进行的 LLM 分析
   if (llmAbortController) {
     llmAbortController.abort()
@@ -1058,6 +1292,7 @@ function resetLLMResult() {
   btn.style.borderColor = ''
   // 重置手动分析按钮
   const manualBtn = document.getElementById('manualAnalyzeBtn')
+  manualBtn.style.display = ''
   manualBtn.disabled = false
   manualBtn.textContent = '鉴定分析'
   manualBtn.style.opacity = '1'
@@ -1073,6 +1308,13 @@ function resetLLMResult() {
     if (ji) { ji.disabled = false; ji.textContent = '✗ 判定有误'; ji.classList.remove('active') }
   }
   state.feedbackId = null
+  state.feedbackToken = ''
+  state.submissionId = ''
+  state.assessmentFinalized = false
+  state.incorrectFeedbackSubmitted = false
+  delete state.llmPayload
+  delete state.llmResult
+  delete state.originalLLM
 }
 function togglePill(el) {
   el.classList.toggle('selected')
@@ -1111,6 +1353,8 @@ function updateUncertaintyHint() {
   hint.style.display = count > 0 ? '' : 'none'
   if (count >= 2) {
     hint.textContent = '已选择 ' + count + ' 项不确定，系统将建议转人工复核'
+  } else if (count === 1) {
+    hint.textContent = '有 1 项信息不确定，建议补充信息以提高判定可靠性'
   }
 }
 function syncFormState() {
@@ -1156,8 +1400,11 @@ function maybeRunInitialAnalysis() {
   // photos + info confirmed → 仅显示「鉴定分析」按钮，由用户点击后手动触发分析
   document.getElementById('analysisHint').style.display = 'none'
   document.getElementById('analysisActions').style.display = ''
+  // 已上传图片并确认信息后，隐藏「拍照/上传相册」操作按钮
+  document.getElementById('actionButtons').style.display = 'none'
   // 确保「鉴定分析」按钮处于可点击的初始状态（重新填写信息后能再次点击）
   const manualBtn = document.getElementById('manualAnalyzeBtn')
+  manualBtn.style.display = ''
   manualBtn.disabled = false
   manualBtn.textContent = '鉴定分析'
   manualBtn.style.opacity = '1'
@@ -1179,7 +1426,8 @@ function maybeRunInitialAnalysis() {
   }
 }
 function resetAll() {
-  state = { step:1, photos:[], installStatus:'not_installed', authPersonnel:'yes', packageDamage:'none', faultLinks:[], currentResult:null, analysis:null, infoConfirmed:false, topSimilarCaseId:'', feedbackId:null, mainIndex:0 }
+  abandonAssessmentRecord('用户重新开始鉴定')
+  state = { step:1, photos:[], installStatus:'not_installed', authPersonnel:'yes', packageDamage:'none', faultLinks:[], currentResult:null, analysis:null, infoConfirmed:false, topSimilarCaseId:'', feedbackId:null, feedbackToken:'', submissionId:'', assessmentFinalized:false, incorrectFeedbackSubmitted:false, mainIndex:0 }
   restoreCameraUI()
   document.getElementById('resultContent').innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
   document.getElementById('resultSection').style.display = 'none'
@@ -1200,6 +1448,24 @@ function resetAll() {
   scrollToTop()
   showCameraConsent()
 }
+
+// 故障环节已改为由图像分析自动识别，不再要求一线人员手工选择。
+// 决策接口要求 faultLinks 非空；无法从分析结果判断时必须显式提交 unknown。
+function resolveFaultLinksForDecision() {
+  if (Array.isArray(state.faultLinks) && state.faultLinks.length > 0) {
+    return [...new Set(state.faultLinks)]
+  }
+
+  const analysis = state.llmResult || state.analysis || {}
+  const stage = String(analysis.stage || '').trim()
+  const links = []
+  if (stage.includes('产品因素')) links.push('product_factor')
+  if (stage.includes('物流') || stage.includes('运输') || stage.includes('搬运')) links.push('logistics_transport')
+  if (stage.includes('拆机') || stage.includes('验机') || stage.includes('安装')) links.push('unboxing_install')
+  if (stage.includes('使用') || stage.includes('保管')) links.push('usage_mishandling')
+  return links.length > 0 ? [...new Set(links)] : ['unknown']
+}
+
 async function submitCase() {
   const rc = document.getElementById('resultContent')
   const rs = document.getElementById('resultSection')
@@ -1207,16 +1473,21 @@ async function submitCase() {
   rc.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top:16px;color:#888;">正在调用决策引擎...</div></div>'
   rs.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
+  const llm = state.llmResult || {}
+  const analysis = state.analysis || {}
+  const faultLinks = resolveFaultLinksForDecision()
+  state.faultLinks = faultLinks
   const body = {
     installStatus: state.installStatus,
     authPersonnel: state.authPersonnel,
     packageDamage: state.packageDamage,
-    faultLinks: state.faultLinks,
-    crackLocation: state.analysis ? state.analysis.location : '',
-    crackShape: state.analysis ? state.analysis.shape : '',
-    crackPrinciple: state.analysis ? (state.analysis.principle || '') : '',
-    crackStage: state.analysis ? (state.analysis.stage || '') : '',
-    conclusion: state.analysis ? (state.analysis.conclusion || '') : '',
+    faultLinks,
+    crackLocation: analysis.location || llm.location || '',
+    crackShape: analysis.shape || llm.shape || '',
+    crackPrinciple: analysis.principle || llm.principle || '',
+    crackStage: analysis.stage || llm.stage || '',
+    // 浏览器侧的大模型结论只作为提示字段；决策引擎不会把客户端字段当作可信结论。
+    conclusion: llm.conclusion || '',
   }
 
   const DECIDE_TIMEOUT = 15000 // 15 秒超时
@@ -1242,9 +1513,10 @@ async function submitCase() {
       if (!data.success) throw new Error(data.error?.message || '判定失败')
       state.currentResult = data.data.decision
       renderResult(data.data)
-      fetchSimilarCases(data.data.decision)
-      // 判定完成：自动记录为「正确」（隐式正样本）
-      recordJudgementComplete()
+      await fetchSimilarCases(data.data.decision)
+      // 判定完成：记录为「未确认」，等待用户主动反馈
+      const feedbackReady = await recordJudgementComplete(data.data)
+      if (!feedbackReady) showToast('判定已完成，但反馈功能暂不可用，请稍后重新鉴定')
       return // 成功，直接返回
     } catch (e) {
       clearTimeout(timer)
@@ -1262,8 +1534,10 @@ async function submitCase() {
     ? '请求超时，请检查网络后重试'
     : (lastError?.message || '未知错误')
 
+  await markAssessmentFailed(errMsg)
+
   rc.innerHTML = `<div style="text-align:center;padding:40px 0;color:#dc2626">
-    <div>判定请求失败</div><div style="font-size:12px;color:#999;margin-top:8px">${errMsg}</div>
+    <div>判定请求失败</div><div style="font-size:12px;color:#999;margin-top:8px">${escHtml(errMsg)}</div>
     <div style="margin-top:16px">${!navigator.onLine ? '网络连接异常' : '后端服务可能未启动'}</div>
     <button class="btn btn-outline" style="margin-top:16px" onclick="submitCase()">重试</button>
   </div>`
@@ -1279,7 +1553,7 @@ function renderResult(data) {
     for (const o of _fieldDefs.conclusion.options) {
       const v = typeof o === 'string' ? o : o.value
       const cssClass = typeof o === 'object' ? (o.cssClass || '') : ''
-      clsMap[v] = cssClass
+      clsMap[v] = /^[A-Za-z0-9_-]+$/.test(cssClass) ? cssClass : ''
     }
   } else {
     clsMap = { product_quality_issue:'quality', not_product_quality:'review', no_damage:'' }
@@ -1357,7 +1631,8 @@ async function fetchSimilarCases(decision) {
       topK: 5,
     }
     if (state.photos[0]) {
-      body.imageBase64 = state.photos[0].url
+      body.imageBase64 = state.photos[0].analysisUrl || state.photos[0].url
+      body.orientationPrepared = state.photos[0].orientationPrepared === true
     }
     const res = await fetch('/api/v1/cases/search-similar', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
     const data = await res.json()
@@ -1386,17 +1661,18 @@ async function fetchSimilarCases(decision) {
         let scoreDetail = ''
         if (c.vecSimilarity != null && c.labelSimilarity != null) {
           const vecPct = Math.round(c.vecSimilarity)
-          const lblPct = Math.round(c.labelSimilarity * 100)
+          const lblPct = Math.round(c.labelSimilarity)
           scoreDetail = `<span class="sim-detail">向量 ${vecPct}% × 0.6 + 标签 ${lblPct}% × 0.4</span>`
         }
+        const imageUrl = c.image ? `/api/knowledge/images?name=${encodeURIComponent(c.image)}` : ''
         return `<div class="similar-card" style="animation-delay:${i*0.1}s">
           <div class="sim-header">
             <div class="sim-title">${escHtml(c.title)}</div>
             <div class="sim-score ${cls}">相似度 ${c.similarity}%</div>
           </div>
           ${scoreDetail}
-          <div class="sim-model">${c.deviceModel} | 结论: ${c.resultLabel}</div>
-          ${c.image ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:140px;"><img src="/api/knowledge/images?name=${encodeURIComponent(c.image)}" style="width:100%;max-height:140px;object-fit:cover;cursor:pointer;" onclick="event.stopPropagation();openLightbox('/api/knowledge/images?name=${encodeURIComponent(c.image)}')" title="点击查看原图" loading="lazy" /></div>` : ''}
+          <div class="sim-model">${escHtml(c.deviceModel)} | 结论: ${escHtml(c.resultLabel)}</div>
+          ${imageUrl ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:140px;"><img src="${escHtml(imageUrl)}" data-full-src="${escHtml(imageUrl)}" style="width:100%;max-height:140px;object-fit:cover;cursor:pointer;" onclick="event.stopPropagation();openLightbox(this.dataset.fullSrc)" title="点击查看原图" loading="lazy" /></div>` : ''}
           <div class="sim-summary">${escHtml(c.summary)}</div>
           ${c.possibleCause ? '<div class="sim-cause">故障原理：' + escHtml(c.possibleCause) + '</div>' : ''}
           ${c.warrantyTip ? '<div class="sim-warranty">保修提示：' + escHtml(c.warrantyTip) + '</div>' : ''}
@@ -1404,11 +1680,19 @@ async function fetchSimilarCases(decision) {
       }).join('')}
     </div>`
   } catch (e) {
+    state.topSimilarCaseId = ''
     sc.innerHTML = '<div style="text-align:center;padding:16px;color:#999;font-size:13px;">案例检索服务暂不可用</div>'
   }
 }
 
-function escHtml(s) { return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 let _toastTimer = null
 function showToast(msg, duration = 2500) {
@@ -1636,7 +1920,7 @@ function generateAnalysisReport(analysis) {
   const principle = analysis.principle || ''
 
   // ---- 摘要 ----
-  const summary = `故障位置：<strong>${loc}</strong>，故障形态：<strong>${shape}</strong>`
+  const summary = `故障位置：<strong>${escHtml(loc)}</strong>，故障形态：<strong>${escHtml(shape)}</strong>`
 
   // ---- 详细报告 ----
   let report
@@ -1645,10 +1929,10 @@ function generateAnalysisReport(analysis) {
     report = `<div class="report-section">${renderMarkdown(analysis.description)}</div>`
   } else {
     // 回退：仅基于结构化字段输出客观事实，不做任何归因推断
-    let parts = `<p>经AI检测，屏幕<strong>${loc}</strong>区域出现<strong>${shape}</strong>特征。</p>`
-    if (principle) parts += `<p><strong>故障原理：</strong>${principle}</p>`
-    if (stage) parts += `<p><strong>故障环节：</strong>${stage}</p>`
-    if (conclusion) parts += `<p><strong>鉴定结论：</strong>${conclusion}</p>`
+    let parts = `<p>经AI检测，屏幕<strong>${escHtml(loc)}</strong>区域出现<strong>${escHtml(shape)}</strong>特征。</p>`
+    if (principle) parts += `<p><strong>故障原理：</strong>${escHtml(principle)}</p>`
+    if (stage) parts += `<p><strong>故障环节：</strong>${escHtml(stage)}</p>`
+    if (conclusion) parts += `<p><strong>鉴定结论：</strong>${escHtml(conclusion)}</p>`
     report = `<div class="report-section">${parts}</div>`
   }
 
@@ -1677,20 +1961,17 @@ async function runAnalysis(canvas) {
     let sourceText = ''
     let clipUsed = false
 
-    // 1. 优先尝试 CLIP 向量检索（带 2s 超时回退）
+    // 1. 优先尝试 DINOv2 向量检索（带 2s 超时回退）
     try {
-      const base64 = state.photos[0].url
+      const base64 = state.photos[0].analysisUrl || state.photos[0].url
       const clipController = new AbortController()
       const clipTimer = setTimeout(() => clipController.abort(), 2000)
-      const resp = await Promise.race([
-        fetch('/api/knowledge/search-vector', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, topK: 3, mode: panelConfig.analysisMode === 'rag' ? 'rag' : undefined }),
-          signal: clipController.signal,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
-      ])
+      const resp = await fetch('/api/knowledge/search-vector', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, orientationPrepared: true, topK: 3, mode: panelConfig.analysisMode === 'rag' ? 'rag' : undefined }),
+        signal: clipController.signal,
+      })
       clearTimeout(clipTimer)
       const data = await resp.json()
       if (data.success && data.data?.results?.length > 0) {
@@ -1717,28 +1998,29 @@ async function runAnalysis(canvas) {
             shape: Array.isArray(top.crackShape) ? top.crackShape.join('、') : (top.crackShape || '点放射状屏裂'),
             shapeConfidence: Math.round(top.similarity),
           }
-          sourceText = `基于 CLIP ViT-B/32 向量检索匹配 (相似度 ${top.similarity}%，共检索 ${data.data.totalHits} 条)`
+          sourceText = `基于 DINOv2 ViT-S/14 向量检索匹配 (相似度 ${top.similarity}%，共检索 ${data.data.totalHits} 条)`
         }
         clipUsed = true
       }
     } catch (e) {
-      // CLIP 不可用或超时，回退到本地分析
+      // 向量服务不可用或超时，回退到本地分析
     }
 
     // 2. 回退：本地 Sobel 边缘检测 + 启发式分析
     if (!analysis) {
       analysis = analyzeScreenDamage(canvas)
-      sourceText = '基于本地启发式规则分析 (CLIP 服务不可用，使用 Sobel 边缘检测)'
+      sourceText = '基于本地启发式规则分析 (向量服务不可用，使用 Sobel 边缘检测)'
     }
 
       state.analysis = analysis
       // 保存原始分析结果，用于纠正反馈时对比
       state.originalAnalysis = { location: analysis.location, shape: analysis.shape }
 
-      // 调用 LLM 生成 AI 描述文本（带 5s 超时，失败不影响主流程）
-      try {
+      // 仅混合模式可调用云端 LLM；纯 RAG 模式绝不上传照片到模型提供方。
+      if (panelConfig.analysisMode !== 'rag') try {
         const llmBody = {
-          images: state.photos.map(p => p.url),
+          images: state.photos.map(p => p.analysisUrl || p.url),
+          orientationPrepared: true,
           context: {
             installStatus: state.installStatus,
             authPersonnel: state.authPersonnel,
@@ -1747,14 +2029,15 @@ async function runAnalysis(canvas) {
           },
           mode: 'llm',
         }
-        const llmResp = await Promise.race([
-          fetch('/api/knowledge/analyze-llm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(llmBody),
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-        ])
+        const descriptionController = new AbortController()
+        const descriptionTimer = setTimeout(() => descriptionController.abort(), 5000)
+        const llmResp = await fetch('/api/knowledge/analyze-llm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(llmBody),
+          signal: descriptionController.signal,
+        })
+        clearTimeout(descriptionTimer)
         if (llmResp.ok) {
           const llmData = await llmResp.json()
           if (llmData.success && llmData.data) {
@@ -1776,7 +2059,8 @@ async function runAnalysis(canvas) {
         document.getElementById('aiAnalysisPanel').style.display = 'block'
       }
     } catch (e) {
-      loading.innerHTML = '分析失败: ' + e.message
+      loading.textContent = '分析失败: ' + e.message
+      await markAssessmentFailed(e.message || 'RAG 分析失败')
     }
 }
 
@@ -1911,7 +2195,7 @@ function renderMarkdown(text) {
   return html
 }
 
-function triggerManualAnalysis() {
+async function triggerManualAnalysis() {
   const btn = document.getElementById('manualAnalyzeBtn')
   btn.disabled = true
   btn.textContent = '⏳ 分析中...'
@@ -1919,10 +2203,25 @@ function triggerManualAnalysis() {
   btn.style.background = ''
   document.getElementById('analysisErrorBox').style.display = 'none'
 
+  try {
+    btn.textContent = '⏳ 正在校正图片方向...'
+    await ensurePhotoOrientations()
+    btn.textContent = '⏳ 分析中...'
+    await ensureAssessmentRecord()
+  } catch (error) {
+    btn.disabled = false
+    btn.textContent = '鉴定分析'
+    btn.style.opacity = '1'
+    showToast(error.message || '鉴定记录保存失败', 4000)
+    document.getElementById('analysisErrorBox').textContent = '无法开始鉴定: ' + (error.message || '记录保存失败')
+    document.getElementById('analysisErrorBox').style.display = 'block'
+    return
+  }
+
   const mode = panelConfig.analysisMode || 'hybrid'
 
   if (mode === 'rag') {
-    // 纯RAG模式：运行边缘检测 + CLIP向量检索
+    // 纯RAG模式：运行边缘检测 + DINOv2 向量检索
     // RAG分析完成后保持按钮可见，允许用户再次手动触发
     const first = state.photos[0]
     const img = new Image()
@@ -1930,7 +2229,9 @@ function triggerManualAnalysis() {
       const c = document.createElement('canvas')
       c.width = img.width; c.height = img.height
       c.getContext('2d').drawImage(img, 0, 0)
-      runAnalysis(c).finally(() => {
+      runAnalysis(c).then(() => {
+        if (state.analysis) return submitCase()
+      }).finally(() => {
         btn.disabled = false
         btn.textContent = '鉴定分析'
         btn.style.opacity = '1'
@@ -1943,8 +2244,9 @@ function triggerManualAnalysis() {
       showToast('图片加载失败', 3000)
       document.getElementById('analysisErrorBox').textContent = '鉴定分析失败: 图片加载失败'
       document.getElementById('analysisErrorBox').style.display = 'block'
+      markAssessmentFailed('图片加载失败')
     }
-    img.src = first.url
+    img.src = first.analysisUrl || first.url
   } else {
     // LLM 或混合模式：运行大模型分析
     document.getElementById('aiAnalysisPanel').style.display = 'block'
@@ -1965,6 +2267,27 @@ async function runLLMAnalysis() {
   const label = resultDiv.querySelector('.llm-result-label')
 
   if (!state.photos[0]) return
+  try {
+    await ensurePhotoOrientations()
+  } catch (error) {
+    showToast(error.message || '图片方向确认失败', 4000)
+    document.getElementById('analysisErrorBox').textContent = '无法开始鉴定: ' + (error.message || '图片方向确认失败')
+    document.getElementById('analysisErrorBox').style.display = 'block'
+    const manualBtn = document.getElementById('manualAnalyzeBtn')
+    manualBtn.disabled = false
+    manualBtn.style.display = ''
+    manualBtn.textContent = '鉴定分析'
+    manualBtn.style.opacity = '1'
+    return
+  }
+  if (!state.feedbackId) {
+    try {
+      await ensureAssessmentRecord()
+    } catch (error) {
+      showToast(error.message || '鉴定记录保存失败', 4000)
+      return
+    }
+  }
 
   // 取消上一次未完成的请求，避免并发导致状态错乱
   if (llmAbortController) { llmAbortController.abort(); llmAbortController = null }
@@ -2010,7 +2333,7 @@ async function runLLMAnalysis() {
     const resp = await fetch('/api/knowledge/analyze-llm-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ images: state.photos.map(p => p.url), context, mode: panelConfig.analysisMode === 'llm' ? 'llm' : 'hybrid' }),
+      body: JSON.stringify({ images: state.photos.map(p => p.analysisUrl || p.url), orientationPrepared: true, context, mode: panelConfig.analysisMode === 'llm' ? 'llm' : 'hybrid' }),
       signal: controller.signal,
     })
 
@@ -2063,6 +2386,7 @@ async function runLLMAnalysis() {
           progressDiv.style.display = 'none'
 
           const r = event.result
+          state.llmPayload = { ...r }
           // 保存 LLM 原始结果，供纠正时回传对比
           state.llmResult = {
             statusObs: r.statusObs || '',
@@ -2076,19 +2400,24 @@ async function runLLMAnalysis() {
           label.style.display = ''
           tag.textContent = `(耗时 ${(r.elapsed/1000).toFixed(1)}s)`
           textDiv.innerHTML = renderMarkdown(r.description || '')
-          metaDiv.innerHTML = `位置: ${r.location} | 形状: ${r.shape} | 环节: ${r.stage || '未知'} | 严重程度: ${r.severity}`
+          metaDiv.innerHTML = `位置: ${escHtml(r.location)} | 形状: ${escHtml(r.shape)} | 环节: ${escHtml(r.stage || '未知')} | 严重程度: ${escHtml(r.severity)}`
           // 故障原理和鉴定结论单独展示
-          if (r.principle) metaDiv.innerHTML += `<br/>故障原理: ${r.principle}`
+          if (r.principle) metaDiv.innerHTML += `<br/>故障原理: ${escHtml(r.principle)}`
           if (r.conclusion) {
-            const conclusionLabelMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好' }
-            metaDiv.innerHTML += `<br/>鉴定结论: ${conclusionLabelMap[r.conclusion] || r.conclusion}`
+            const conclusionLabelMap = { product_quality_issue: '质量问题', not_product_quality: '非质量问题', no_damage: '屏幕完好', manual_review: '转人工复核' }
+            metaDiv.innerHTML += `<br/>鉴定结论: ${escHtml(conclusionLabelMap[r.conclusion] || r.conclusion)}`
           }
           btn.style.display = 'none'
           // 隐藏手动分析按钮
           document.getElementById('analysisActions').style.display = 'none'
           // 显示判定正确率反馈按钮
           const judgeFeedback = document.getElementById('judgeFeedback')
-          if (judgeFeedback) judgeFeedback.style.display = ''
+          if (judgeFeedback) {
+            judgeFeedback.style.display = 'none'
+            // 决策接口完成并创建反馈 capability 前不允许抢先提交反馈。
+            document.getElementById('judgeCorrectBtn').disabled = true
+            document.getElementById('judgeIncorrectBtn').disabled = true
+          }
           // 清理本次请求的控制器（仅当仍是当前请求时）
           if (llmAbortController === controller) llmAbortController = null
           // LLM 分析完成后自动触发判定结果（决策引擎 + 相似案例）
@@ -2105,6 +2434,7 @@ async function runLLMAnalysis() {
       return
     }
     console.error('[LLM] runLLMAnalysis 失败:', e.message, e)
+    await markAssessmentFailed(e.message || '大模型分析失败')
     progressDiv.style.display = 'none'
     streamBox.style.display = 'none'
     label.style.display = ''
@@ -2168,7 +2498,7 @@ function renderCorrectionFields() {
   // 仅保留「鉴定结论」选择
   if (conclusionDef) {
     html += `<div class="correction-field">
-      <div class="field-label">${conclusionDef.label}</div>
+      <div class="field-label">${escHtml(conclusionDef.label)}</div>
       <div class="correction-pills" id="corrPills_conclusion">`
     for (const opt of (conclusionDef.options || [])) {
       const val = typeof opt === 'string' ? opt : opt.value
@@ -2215,6 +2545,14 @@ function showCorrection() {
 
 function hideCorrection() {
   document.getElementById('correctionPanel').style.display = 'none'
+  if (!state.incorrectFeedbackSubmitted) {
+    const btnIncorrect = document.getElementById('judgeIncorrectBtn')
+    const btnCorrect = document.getElementById('judgeCorrectBtn')
+    btnIncorrect.disabled = false
+    btnIncorrect.textContent = '✗ 判定有误'
+    btnIncorrect.classList.remove('active')
+    btnCorrect.disabled = false
+  }
 }
 
 // 统一绑定纠正面板 pill + textarea 事件
@@ -2245,114 +2583,129 @@ function updateCorrConfirm() {
   document.getElementById('corrConfirmBtn').disabled = !corrSelected.conclusion || !remarkOk
 }
 
-// 用户显式确认判定正确（判定完成已默认记正确，此处仅做 UI 确认，不重复计数）
-function confirmJudgementCorrect() {
+// 用户显式确认判定正确：翻转为 confirmed_correct（真正记录，不再仅 UI）
+async function confirmJudgementCorrect() {
   const btnCorrect = document.getElementById('judgeCorrectBtn')
   const btnIncorrect = document.getElementById('judgeIncorrectBtn')
-  btnCorrect.textContent = '✓ 已确认'
-  btnCorrect.classList.add('active')
+  if (!state.feedbackId || !state.feedbackToken) {
+    showToast('反馈会话尚未就绪，请稍后再试')
+    return
+  }
+  btnCorrect.textContent = '提交中...'
   btnCorrect.disabled = true
   btnIncorrect.disabled = true
-}
-
-// 判定完成时自动记录为「正确」（隐式正样本），返回记录 id 供后续报错翻转
-async function recordJudgementComplete() {
-  const conclusion = (state.llmResult && state.llmResult.conclusion) || (state.analysis && state.analysis.conclusion) || ''
   try {
-    const res = await fetch('/api/knowledge/feedback', {
+    const response = await fetch('/api/knowledge/feedback/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ caseId: state.topSimilarCaseId || '', conclusion, feedback: 'correct' }),
+      body: JSON.stringify({ id: state.feedbackId, capabilityToken: state.feedbackToken }),
     })
-    const data = await res.json()
-    if (!res.ok || !data?.success) return
-    if (data?.data?.id) state.feedbackId = data.data.id
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.error?.message || `HTTP ${response.status}`)
+    }
+    btnCorrect.textContent = '✓ 已确认'
+    btnCorrect.classList.add('active')
   } catch (e) {
-    console.error('[feedback] 记录判定完成失败:', e)
+    btnCorrect.textContent = '✓ 判定正确'
+    btnCorrect.classList.remove('active')
+    btnCorrect.disabled = false
+    btnIncorrect.disabled = false
+    showToast('确认提交失败: ' + (e.message || '网络错误'))
+    console.error('[feedback] 确认正确失败:', e)
   }
 }
 
-// 用户主动报错：把当前判定从「正确」翻转为「不正确」，并打开纠正面板
-async function reportJudgementIncorrect() {
-  const btn = document.getElementById('judgeIncorrectBtn')
-  btn.disabled = true
-  btn.textContent = '✗ 已记录'
-  btn.classList.add('active')
+// 判定完成后补齐分析与决策结果；创建记录时签发的 capability 继续用于用户反馈。
+async function recordJudgementComplete(decisionData) {
+  const conclusion = (state.llmResult && state.llmResult.conclusion) || (state.analysis && state.analysis.conclusion) || ''
+  if (!state.feedbackId || !state.feedbackToken || !state.submissionId) return false
   try {
-    if (state.feedbackId) {
-      await fetch('/api/knowledge/feedback/report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: state.feedbackId, remark: '' }),
-      })
-    }
-    // 自动打开纠正面板，引导用户纠正
-    showCorrection()
+    await patchAssessmentRecord({
+      processStatus: 'completed',
+      caseId: state.topSimilarCaseId || '',
+      faultLinks: state.faultLinks,
+      analysis: state.llmPayload || state.llmResult || state.analysis || {},
+      decision: decisionData?.decision || state.currentResult || {},
+      llmConclusion: conclusion,
+      finalResult: decisionData?.decision?.result || state.currentResult?.result || '',
+      errorMessage: '',
+    })
+    state.assessmentFinalized = true
+    document.getElementById('judgeFeedback').style.display = ''
+    document.getElementById('judgeCorrectBtn').disabled = false
+    document.getElementById('judgeIncorrectBtn').disabled = false
+    return true
   } catch (e) {
-    btn.disabled = false
-    btn.textContent = '✗ 判定有误'
-    btn.classList.remove('active')
-    showToast('反馈提交失败: ' + (e.message || '网络错误'))
-    console.error('[feedback] 报错失败:', e)
+    console.error('[assessment] 鉴定结果保存失败:', e)
   }
+  return false
+}
+
+// “判定有误”只打开反馈表单；用户确认提交前不向后台写入反馈。
+function reportJudgementIncorrect() {
+  const btn = document.getElementById('judgeIncorrectBtn')
+  const btnCorrect = document.getElementById('judgeCorrectBtn')
+  if (!state.feedbackId || !state.feedbackToken) {
+    showToast('反馈会话尚未就绪，请稍后再试')
+    return
+  }
+  if (state.incorrectFeedbackSubmitted) {
+    showToast('问题反馈已提交')
+    return
+  }
+  btn.textContent = '✗ 填写反馈'
+  btn.classList.add('active')
+  btnCorrect.disabled = true
+  showCorrection()
 }
 
 async function submitCorrection() {
   if (!corrSelected.conclusion) { showToast('请选择鉴定结论'); return }
   if (!(corrSelected.remark || '').trim()) { showToast('请填写问题备注'); return }
+  if (!state.feedbackId || !state.feedbackToken) { showToast('反馈会话已失效，请重新执行鉴定'); return }
 
   const btn = document.getElementById('corrConfirmBtn')
   btn.className = 'btn-confirm'
   btn.disabled = true
   btn.textContent = '提交中...'
 
-  // 存储纠正前 LLM 分析结果（用于回传 original 对比）
-  if (!state.originalLLM && state.llmResult) state.originalLLM = { ...state.llmResult }
-
-  // 位置/形态/环节/原理沿用原 LLM 分析结果，仅纠正「鉴定结论」和「问题备注」
-  const llm = state.llmResult || {}
-  const loc = llm.location || ''
-  const shape = llm.shape || ''
-  const stage = llm.stage || ''
-  const principle = llm.principle || ''
-
-  // 更新本地分析结果（用于页面展示）
-  state.analysis = {
-    statusObs: llm.statusObs || '',
-    location: loc,
-    locationConfidence: 100,
-    shape: shape,
-    shapeConfidence: 100,
-    principle: principle,
-    stage: stage,
-    conclusion: corrSelected.conclusion,
-    corrected: true,
+  // 位置/形态沿用本次结构化分析，但服务端仍会严格校验；缺失时不得创建空审核项。
+  const analysis = state.llmResult || state.analysis || {}
+  const original = state.originalLLM || state.originalAnalysis || analysis
+  const loc = analysis.location || ''
+  const shape = analysis.shape || ''
+  const stage = analysis.stage || ''
+  const principle = analysis.principle || ''
+  const imageBase64 = state.photos[0]?.url || ''
+  if (!loc || !shape || !imageBase64) {
+    btn.disabled = false
+    btn.textContent = '确认提交'
+    showToast('当前分析缺少图片、位置或形态，请重新执行鉴定')
+    return
   }
-  const report = generateAnalysisReport(state.analysis)
-  document.getElementById('analysisDetail').innerHTML = report.report
-  const srcEl = document.getElementById('analysisSource')
-  srcEl.innerHTML = '人工校正 <span class="corrected-badge">已纠正</span>'
 
-  // 回传后端 — 纠正数据 + 同步到案例库
+  // 最终提交时，后端在同一事务中标记“判定有误”并写入待审核队列。
+  // 审核通过前不改案例、不写训练数据。
   try {
     const payload = {
-      correctedStatusObs: llm.statusObs || '',
+      feedbackId: state.feedbackId,
+      capabilityToken: state.feedbackToken,
+      correctedStatusObs: analysis.statusObs || '',
       correctedLocation: loc,
       correctedShape: shape,
       correctedPrinciple: principle,
       correctedStage: stage,
       correctedConclusion: corrSelected.conclusion,
       remark: corrSelected.remark || '',
-      originalStatusObs: (state.originalLLM && state.originalLLM.statusObs) || '',
-      originalLocation: (state.originalLLM && state.originalLLM.location) || '',
-      originalShape: (state.originalLLM && state.originalLLM.shape) || '',
-      originalPrinciple: (state.originalLLM && state.originalLLM.principle) || '',
-      originalStage: (state.originalLLM && state.originalLLM.stage) || '',
-      originalConclusion: (state.originalLLM && state.originalLLM.conclusion) || '',
+      originalStatusObs: original.statusObs || '',
+      originalLocation: original.location || '',
+      originalShape: original.shape || '',
+      originalPrinciple: original.principle || '',
+      originalStage: original.stage || '',
+      originalConclusion: original.conclusion || '',
       caseId: state.topSimilarCaseId || '',
-    }
-    if (state.photos[0] && state.photos[0].url) {
-      payload.imageBase64 = state.photos[0].url
+      imageBase64,
     }
     const res = await fetch('/api/knowledge/correction', {
       method: 'POST',
@@ -2360,18 +2713,24 @@ async function submitCorrection() {
       body: JSON.stringify(payload),
     })
     const data = await res.json()
-    // 成功反馈：按钮变绿 + 明确成功文案
+    const alreadyQueued = res.status === 409 && data?.error?.code === 'CORRECTION_CAPABILITY_USED'
+    if ((!res.ok || !data?.success) && !alreadyQueued) {
+      throw new Error(data?.error?.message || `提交失败（HTTP ${res.status}）`)
+    }
+    state.incorrectFeedbackSubmitted = true
+    const btnIncorrect = document.getElementById('judgeIncorrectBtn')
+    const btnCorrect = document.getElementById('judgeCorrectBtn')
+    btnIncorrect.textContent = '✗ 已提交'
+    btnIncorrect.classList.add('active')
+    btnIncorrect.disabled = true
+    btnCorrect.disabled = true
+    // 待管理员审核通过后才改变案例和训练数据，前端不得提前显示“已纠正”。
     btn.className = 'btn-confirm success'
-    btn.textContent = '✓ 提交成功'
+    btn.textContent = '✓ 已提交审核'
     btn.disabled = true
-    if (data?.data?.totalTraining) {
-      showToast(`训练数据已入库，当前共 ${data.data.totalTraining} 条反馈`)
-    }
-    if (data?.data?.caseCreated) {
-      showToast(`已自动创建案例并同步至案例库`)
-    } else if (data?.data?.caseUpdated) {
-      showToast(`已提交`)
-    }
+    showToast(alreadyQueued
+      ? '该纠错已在待审核队列中，请勿重复提交'
+      : '纠错已进入待审核队列，审核通过后才会用于案例与训练')
     // 延迟隐藏纠正面板，让用户看到成功反馈
     setTimeout(() => {
       document.getElementById('correctionPanel').style.display = 'none'

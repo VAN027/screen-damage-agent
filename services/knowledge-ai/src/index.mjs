@@ -1,11 +1,14 @@
 import { createServer, json } from './server-utils.mjs'
-import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable, saveCorrection, getResultStats, analyzeWithRAG, aggregateRAGFields, listPendingCases, approvePendingCase, rejectPendingCase, getPendingStats } from './search-engine.mjs'
+import { searchSimilar, getCaseById, getStats, listCases, createCase, updateCase, deleteCase, batchDeleteCases, batchImport, validateCase, getImagePath, batchImportFromImages, loadTraining, addTraining, getTrainingStats, searchSimilarVector, indexCaseVector, rebuildVectorIndex, isClipAvailable, saveCorrection, getResultStats, analyzeWithRAG, aggregateRAGFields, listPendingCases, getPendingCaseImage, approvePendingCase, rejectPendingCase, getPendingStats, isValidImageDataUrl, initializeSearchEngine } from './search-engine.mjs'
 import { analyzeWithLLM, analyzeWithLLMStream, loadModelConfig, saveModelConfig, loadAnnotationConfig, saveAnnotationConfig, annotateSingle, annotateBatch } from './llm-analyzer.mjs'
+import { normalizeTVImage, prepareImagesForAnalysis } from './orientation-normalizer.mjs'
+import { buildSafeConfigUpdate } from './config-validation.mjs'
 import { uploadDocument, listDocuments, getDocument, deleteDocument, getKBStats, searchKB } from './knowledge-base.mjs'
 import { normalizeEvalField } from './field-normalize.mjs'
 import { readFile, stat } from 'node:fs/promises'
-import { loadFieldDefsSync, loadFieldDefs, saveFeedback, getFeedbackStats, reportFeedback } from './db.mjs'
-import { execFile } from 'node:child_process'
+import { DATA_DIR, loadFieldDefsSync, loadFieldDefs, saveFeedback, getFeedbackStats, reportFeedback, confirmFeedback, getExpertReviewStats, getAppealStats, checkpointWal, backupDb, cleanupExpiredPendingCaseImages } from './db.mjs'
+import { createAssessmentRecord, updateAssessmentRecord, listAssessmentRecords, getAssessmentRecord, readAssessmentImage, deleteAssessmentRecord, deleteFeedbackRecord, deleteFeedbackRecords } from './assessment-records.mjs'
+import { previewDatabaseBatch, deleteDatabaseBatch } from './database-batch.mjs'
 
 // 加载集中式字段定义
 const _fieldDefs = loadFieldDefsSync()
@@ -16,18 +19,99 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PORT = parseInt(process.env.KNOWLEDGE_PORT || '8083', 10)
 const startTime = Date.now()
+const MAX_SINGLE_IMAGE_BODY_BYTES = 9 * 1024 * 1024
+const MAX_MULTI_IMAGE_BODY_BYTES = 22 * 1024 * 1024
+const MAX_MULTI_IMAGE_DATA_URL_CHARS = 20 * 1024 * 1024
+const MAX_CORRECTION_BODY_BYTES = 4 * 1024 * 1024
+
+function validateImageList(images, maxCount = 5, maxTotalChars = MAX_MULTI_IMAGE_DATA_URL_CHARS) {
+  if (!Array.isArray(images) || images.length === 0 || images.length > maxCount) return false
+  let totalChars = 0
+  return images.every(image => {
+    if (typeof image !== 'string') return false
+    totalChars += image.length
+    return totalChars <= maxTotalChars && isValidImageDataUrl(image)
+  })
+}
+
+function boundedRequestString(value, field, maxLength) {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') throw Object.assign(new Error(`${field} 必须是字符串`), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
+  const normalized = value.trim()
+  if (normalized.length > maxLength) throw Object.assign(new Error(`${field} 超过 ${maxLength} 个字符上限`), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
+  return normalized
+}
+
+function positiveInteger(value, field = 'id') {
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw Object.assign(new Error(`${field} 必须是正整数`), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
+  }
+  return parsed
+}
+
+function feedbackCapability(value) {
+  const token = boundedRequestString(value, 'capabilityToken', 128)
+  if (token.length < 32) {
+    throw Object.assign(new Error('反馈凭证无效或缺失'), { statusCode: 403, code: 'INVALID_CAPABILITY', expose: true })
+  }
+  return token
+}
 
 function normalizeQuery(q) {
-  return {
-    symptoms: q.symptoms || [],
-    crackShape: q.crackShape || '',
-    physicalFeature: q.physicalFeature || '',
-    liquidState: q.liquidState || '',
-    installStatus: q.installStatus || '',
-    result: q.result || '',
-    excludeId: q.excludeId || '',
-    topK: Math.min(parseInt(q.topK) || 3, 10),
+  if (!q || typeof q !== 'object' || Array.isArray(q)) {
+    throw Object.assign(new Error('检索请求必须是 JSON 对象'), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
   }
+  const symptoms = q.symptoms === undefined ? [] : q.symptoms
+  if (!Array.isArray(symptoms) || symptoms.length > 20 || symptoms.some(item => typeof item !== 'string' || item.length > 100)) {
+    throw Object.assign(new Error('symptoms 必须是不超过 20 项的短字符串数组'), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
+  }
+  const scalar = (key, maxLength = 100) => boundedRequestString(q[key], key, maxLength)
+  const requestedTopK = q.topK === undefined || q.topK === '' ? 3 : Number(q.topK)
+  if (!Number.isSafeInteger(requestedTopK) || requestedTopK < 1 || requestedTopK > 10) {
+    throw Object.assign(new Error('topK 必须是 1-10 的整数'), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
+  }
+  return {
+    symptoms,
+    crackShape: scalar('crackShape'),
+    crackLocation: scalar('crackLocation'),
+    physicalFeature: scalar('physicalFeature'),
+    liquidState: scalar('liquidState'),
+    installStatus: scalar('installStatus'),
+    result: scalar('result'),
+    excludeId: scalar('excludeId', 128),
+    topK: requestedTopK,
+  }
+}
+
+function searchQuerySummary(query, imageBase64) {
+  return {
+    ...query,
+    hasImage: typeof imageBase64 === 'string' && imageBase64.length > 0,
+    imageDataUrlChars: typeof imageBase64 === 'string' ? imageBase64.length : 0,
+  }
+}
+
+function prepareSafeSelect(db, sql) {
+  if (typeof sql !== 'string' || !sql.trim()) throw new Error('请提供 SQL 语句')
+  if (sql.length > 10_000) throw new Error('SQL 语句过长')
+  const trimmed = sql.trim()
+  if (!/^SELECT\b/i.test(trimmed)) throw new Error('仅允许 SELECT 查询')
+  if (/\bWITH\s+RECURSIVE\b/i.test(trimmed)) throw new Error('不允许递归查询')
+  const statement = db.prepare(trimmed)
+  if (!statement.reader || !statement.readonly) throw new Error('仅允许只读查询')
+  return statement
+}
+
+function readLimitedRows(statement, maxRows = 5000) {
+  const rows = []
+  for (const row of statement.iterate()) {
+    rows.push(row)
+    if (rows.length > maxRows) break
+  }
+  const truncated = rows.length > maxRows
+  if (truncated) rows.length = maxRows
+  return { rows, truncated, total: truncated ? maxRows + 1 : rows.length }
 }
 
 // 归一化结论标签（中文/英文统一）
@@ -412,27 +496,32 @@ const routes = [
   {
     method: 'POST',
     path: '/api/knowledge/search',
+    maxBodyBytes: MAX_SINGLE_IMAGE_BODY_BYTES,
     handler: async (_req, res, { body }) => {
+      const q = normalizeQuery(body)
       // 优先使用向量检索（融合标签加权）
       if (body.imageBase64) {
+        if (!isValidImageDataUrl(body.imageBase64)) {
+          return json(res, 400, { success: false, error: { code: 'INVALID_IMAGE', message: '图片格式无效或超过大小限制' } })
+        }
         try {
           const queryLabels = {
-            symptoms: body.symptoms || [],
-            crackShape: body.crackShape || '',
-            crackLocation: body.crackLocation || '',
-            physicalFeature: body.physicalFeature || '',
-            liquidState: body.liquidState || '',
-            installStatus: body.installStatus || '',
-            result: body.result || '',
+            symptoms: q.symptoms,
+            crackShape: q.crackShape,
+            crackLocation: q.crackLocation,
+            physicalFeature: q.physicalFeature,
+            liquidState: q.liquidState,
+            installStatus: q.installStatus,
+            result: q.result,
           }
-          const results = await searchSimilarVector(body.imageBase64, body.topK || 5, body.excludeId || '', queryLabels)
+          const results = await searchSimilarVector(body.imageBase64, q.topK, q.excludeId, queryLabels)
           if (results.length > 0) {
             return json(res, 200, {
               success: true,
               data: {
-                query: body,
+                query: searchQuerySummary(q, body.imageBase64),
                 totalHits: results.length,
-                engine: 'vector+label-fusion (PIL+Numpy 512-dim)',
+                engine: 'vector+label-fusion (DINOv2 384-dim)',
                 results: results.map(r => ({
                   id: r.id,
                   title: r.title,
@@ -456,13 +545,12 @@ const routes = [
       }
 
       // 回退：标签加权匹配
-      const q = normalizeQuery(body)
       const { getCaseImages } = await import('./search-engine.mjs')
       const results = await searchSimilar(q, q.topK)
       json(res, 200, {
         success: true,
         data: {
-          query: body,
+          query: searchQuerySummary(q, body.imageBase64),
           totalHits: results.length,
           engine: 'multi-label-weighted-match (fallback)',
           results: results.map(r => ({
@@ -484,11 +572,20 @@ const routes = [
   {
     method: 'POST',
     path: '/api/knowledge/search-vector',
+    maxBodyBytes: MAX_SINGLE_IMAGE_BODY_BYTES,
     handler: async (_req, res, { body }) => {
       if (!body.imageBase64) return json(res, 400, { success: false, error: { code: 'MISSING_IMAGE', message: '缺少图片数据 imageBase64' } })
+      if (!isValidImageDataUrl(body.imageBase64)) return json(res, 400, { success: false, error: { code: 'INVALID_IMAGE', message: '图片格式无效或超过大小限制' } })
       try {
+        const prepared = await prepareImagesForAnalysis([body.imageBase64], {
+          alreadyPrepared: body.orientationPrepared === true,
+          // 纯向量检索不把图片发送到外部模型；证据不足时由前端预检确认。
+          allowModel: false,
+          requireResolved: true,
+        })
+        const normalizedImage = prepared.images[0]
         const queryLabels = body.labels || null
-        const results = await searchSimilarVector(body.imageBase64, body.topK || 5, body.excludeId || '', queryLabels)
+        const results = await searchSimilarVector(normalizedImage, body.topK || 5, body.excludeId || '', queryLabels)
         // 仅RAG模式：附上 Top-K 加权投票聚合的结构化识别结果
         let aggregated = null
         if (body.mode === 'rag' && results.length > 0) {
@@ -497,15 +594,15 @@ const routes = [
         json(res, 200, {
           success: true,
           data: {
-            query: { imageSize: body.imageBase64.length },
+            query: { imageSize: normalizedImage.length, orientationPreprocessed: prepared.preprocessed },
             totalHits: results.length,
-            engine: 'vector+label-fusion (PIL+Numpy 512-dim)',
+            engine: 'vector+label-fusion (DINOv2 384-dim)',
             results,
             aggregated,
           },
         })
       } catch (e) {
-        json(res, 500, { success: false, error: { code: 'VECTOR_SEARCH_ERROR', message: e.message } })
+        json(res, e.statusCode || 500, { success: false, error: { code: e.code || 'VECTOR_SEARCH_ERROR', message: e.message, details: e.details } })
       }
     },
   },
@@ -612,9 +709,9 @@ const routes = [
     path: '/api/knowledge/cases',
     handler: async (_req, res, { query }) => {
       if (!query.id) return json(res, 400, { success: false, error: { code: 'MISSING_ID', message: '缺少案例 id' } })
-      const ok = await deleteCase(query.id)
-      if (!ok) return json(res, 404, { success: false, error: { code: 'NOT_FOUND', message: '案例不存在' } })
-      json(res, 200, { success: true, data: { id: query.id, deleted: true } })
+      const result = await deleteCase(query.id)
+      if (!result) return json(res, 404, { success: false, error: { code: 'NOT_FOUND', message: '案例不存在' } })
+      json(res, 200, { success: true, data: result })
     },
   },
   {
@@ -644,9 +741,9 @@ const routes = [
       try {
         const filepath = getImagePath(query.name)
         const data = await readFile(filepath)
-        const mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
-        const ct = mime[extname(query.name).toLowerCase()] || 'image/jpeg'
-        res.writeHead(200, { 'Content-Type': ct, 'Content-Length': data.length, 'Cache-Control': 'public, max-age=86400' })
+        const mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.avif': 'image/avif' }
+        const ct = mime[extname(query.name).toLowerCase()] || 'application/octet-stream'
+        res.writeHead(200, { 'Content-Type': ct, 'Content-Length': data.length, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' })
         res.end(data)
       } catch {
         json(res, 404, { success: false, error: { code: 'IMAGE_NOT_FOUND', message: '图片不存在' } })
@@ -688,30 +785,173 @@ const routes = [
   {
     method: 'POST',
     path: '/api/knowledge/correction',
+    maxBodyBytes: MAX_CORRECTION_BODY_BYTES,
     handler: async (_req, res, { body }) => {
-      if (!body.correctedLocation || !body.correctedShape || !body.correctedStage || !body.correctedConclusion) {
-        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少必填字段（故障位置/形态/环节/结论）' } })
-      }
       try {
         const result = await saveCorrection(body)
         json(res, 201, { success: true, data: result })
       } catch (err) {
-        json(res, 500, { success: false, error: { code: 'SAVE_FAILED', message: err.message } })
+        const status = err.statusCode || 500
+        const message = status < 500 || err.expose ? err.message : '纠错提交失败'
+        json(res, status, { success: false, error: { code: err.code || 'SAVE_FAILED', message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/assessment-records',
+    maxBodyBytes: MAX_MULTI_IMAGE_BODY_BYTES,
+    handler: async (_req, res, { body }) => {
+      try {
+        const result = await createAssessmentRecord(body)
+        json(res, result.created ? 201 : 200, { success: true, data: result })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_CREATE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'PATCH',
+    path: '/api/knowledge/assessment-records',
+    maxBodyBytes: 512 * 1024,
+    handler: async (_req, res, { body }) => {
+      try {
+        json(res, 200, { success: true, data: updateAssessmentRecord(body) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_UPDATE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/assessment-records',
+    handler: async (_req, res, { query }) => {
+      try {
+        json(res, 200, { success: true, data: listAssessmentRecords(query) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_LIST_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/assessment-record',
+    handler: async (_req, res, { query }) => {
+      try {
+        json(res, 200, { success: true, data: getAssessmentRecord(query.submissionId) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_GET_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/assessment-image',
+    handler: async (_req, res, { query }) => {
+      try {
+        const image = await readAssessmentImage(query.id)
+        res.writeHead(200, {
+          'Content-Type': image.mimeType,
+          'Content-Length': image.data.length,
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        res.end(image.data)
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_IMAGE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/knowledge/assessment-record',
+    handler: async (_req, res, { query }) => {
+      try {
+        json(res, 200, { success: true, data: await deleteAssessmentRecord(query.submissionId) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'ASSESSMENT_DELETE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/knowledge/feedback-record',
+    handler: async (_req, res, { query }) => {
+      try {
+        json(res, 200, { success: true, data: await deleteFeedbackRecord(query.id) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'FEEDBACK_DELETE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/feedback-records/batch-delete',
+    maxBodyBytes: 64 * 1024,
+    handler: async (_req, res, { body }) => {
+      try {
+        const ids = body?.ids
+        if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 || ids.some(id => !Number.isSafeInteger(Number(id)) || Number(id) <= 0)) {
+          return json(res, 400, { success: false, error: { code: 'INVALID_FEEDBACK_IDS', message: '请选择 1-1000 条有效鉴定记录' } })
+        }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const backupPath = await backupDb(join(DATA_DIR, 'backup', `knowledge-backup-${stamp}-before-feedback-delete.db`))
+        const result = await deleteFeedbackRecords(ids)
+        json(res, 200, { success: true, data: { ...result, backupPath } })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'FEEDBACK_BATCH_DELETE_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/database-records/batch-preview',
+    maxBodyBytes: 64 * 1024,
+    handler: async (_req, res, { body }) => {
+      try {
+        json(res, 200, { success: true, data: previewDatabaseBatch(body?.table, body?.keys) })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'DATABASE_BATCH_PREVIEW_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/database-records/batch-delete',
+    maxBodyBytes: 64 * 1024,
+    handler: async (_req, res, { body }) => {
+      try {
+        const preview = previewDatabaseBatch(body?.table, body?.keys)
+        if (!preview.deletable) {
+          return json(res, 409, { success: false, error: { code: 'NO_DELETABLE_RECORDS', message: preview.warning || '所选记录不可删除' } })
+        }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const backupPath = await backupDb(join(DATA_DIR, 'backup', `knowledge-backup-${stamp}-before-${preview.table}-delete.db`))
+        const result = await deleteDatabaseBatch(preview.table, body.keys)
+        json(res, 200, { success: true, data: { ...result, backupPath } })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'DATABASE_BATCH_DELETE_FAILED', message: err.message } })
       }
     },
   },
   {
     method: 'POST',
     path: '/api/knowledge/feedback',
+    maxBodyBytes: 16 * 1024,
     handler: async (_req, res, { body }) => {
-      if (!body.feedback || !['correct', 'incorrect'].includes(body.feedback)) {
-        return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: 'feedback 必须为 correct 或 incorrect' } })
-      }
+      // 判定完成时创建一条 unconfirmed 记录（不再默认记为正确）
       try {
-        const stats = saveFeedback(body)
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw Object.assign(new Error('请求体必须是对象'), { statusCode: 400 })
+        const stats = saveFeedback({
+          caseId: boundedRequestString(body.caseId, 'caseId', 128),
+          conclusion: boundedRequestString(body.conclusion, 'conclusion', 100),
+          remark: boundedRequestString(body.remark, 'remark', 1000),
+          status: 'unconfirmed',
+          source: 'h5',
+        })
         json(res, 201, { success: true, data: stats })
       } catch (err) {
-        json(res, 500, { success: false, error: { code: 'SAVE_FAILED', message: err.message } })
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'SAVE_FAILED', message: err.message } })
       }
     },
   },
@@ -729,12 +969,32 @@ const routes = [
   {
     method: 'POST',
     path: '/api/knowledge/feedback/report',
+    maxBodyBytes: 16 * 1024,
     handler: async (_req, res, { body }) => {
       try {
-        const result = reportFeedback(body.id, body.remark)
+        const result = reportFeedback(
+          positiveInteger(body?.id),
+          boundedRequestString(body?.remark, 'remark', 1000),
+          feedbackCapability(body?.capabilityToken),
+        )
+        if (!result.updated) return json(res, 409, { success: false, error: { code: 'FEEDBACK_NOT_MUTABLE', message: '反馈记录不存在、凭证无效或已处理' } })
         json(res, 200, { success: true, data: result })
       } catch (err) {
-        json(res, 500, { success: false, error: { code: 'REPORT_FAILED', message: err.message } })
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'REPORT_FAILED', message: err.message } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/feedback/confirm',
+    maxBodyBytes: 16 * 1024,
+    handler: async (_req, res, { body }) => {
+      try {
+        const result = confirmFeedback(positiveInteger(body?.id), feedbackCapability(body?.capabilityToken))
+        if (!result.updated) return json(res, 409, { success: false, error: { code: 'FEEDBACK_NOT_MUTABLE', message: '反馈记录不存在、凭证无效或已处理' } })
+        json(res, 200, { success: true, data: result })
+      } catch (err) {
+        json(res, err.statusCode || 500, { success: false, error: { code: err.code || 'CONFIRM_FAILED', message: err.message } })
       }
     },
   },
@@ -744,10 +1004,33 @@ const routes = [
     handler: async (_req, res, { query }) => {
       try {
         const status = query.status || 'pending'
-        const list = await listPendingCases(status)
-        json(res, 200, { success: true, data: { list, total: list.length } })
+        const data = await listPendingCases(status, { limit: query.limit, offset: query.offset })
+        json(res, 200, { success: true, data })
       } catch (e) {
-        json(res, 500, { success: false, error: { code: 'REVIEW_ERROR', message: e.message } })
+        json(res, e.statusCode || 500, { success: false, error: { code: e.code || 'REVIEW_ERROR', message: e.message } })
+      }
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/review/image',
+    handler: async (_req, res, { query }) => {
+      try {
+        const imageDataUrl = await getPendingCaseImage(query.id)
+        if (!imageDataUrl) return json(res, 404, { success: false, error: { code: 'NOT_FOUND', message: '待审核案例图片不存在' } })
+        const match = imageDataUrl.match(/^data:image\/(jpeg|jpg|png|webp|gif|bmp|avif);base64,(.+)$/i)
+        if (!match) return json(res, 422, { success: false, error: { code: 'INVALID_IMAGE', message: '待审核案例图片无效' } })
+        const data = Buffer.from(match[2], 'base64')
+        const subtype = match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase()
+        res.writeHead(200, {
+          'Content-Type': `image/${subtype}`,
+          'Content-Length': data.length,
+          'Cache-Control': 'private, no-store',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        res.end(data)
+      } catch (e) {
+        json(res, e.statusCode || 500, { success: false, error: { code: e.code || 'REVIEW_ERROR', message: e.message } })
       }
     },
   },
@@ -792,33 +1075,69 @@ const routes = [
   },
   {
     method: 'POST',
-    path: '/api/knowledge/analyze-llm',
+    path: '/api/knowledge/orient-images',
+    maxBodyBytes: MAX_MULTI_IMAGE_BODY_BYTES,
     handler: async (_req, res, { body }) => {
       const images = body.images || (body.image ? [body.image] : null)
-      if (!images || !images.length) return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少图片数据 image 或 images (base64 数组)' } })
+      if (!validateImageList(images)) return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '请提供 1-5 张有效图片，图片总数据不得超过 20MB' } })
       try {
+        const results = []
+        for (const image of images) {
+          results.push(await normalizeTVImage(image, {
+            allowModel: body.allowModel !== false,
+            useOcr: true,
+          }))
+        }
+        json(res, 200, {
+          success: true,
+          data: {
+            results: results.map(result => ({
+              normalizedImage: result.normalizedImage,
+              orientation: result.orientation,
+            })),
+          },
+        })
+      } catch (e) {
+        json(res, e.statusCode || 500, { success: false, error: { code: e.code || 'ORIENTATION_ERROR', message: e.message, details: e.details } })
+      }
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/knowledge/analyze-llm',
+    maxBodyBytes: MAX_MULTI_IMAGE_BODY_BYTES,
+    handler: async (_req, res, { body }) => {
+      const images = body.images || (body.image ? [body.image] : null)
+      if (!validateImageList(images)) return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '请提供 1-5 张有效图片，图片总数据不得超过 20MB' } })
+      try {
+        const prepared = await prepareImagesForAnalysis(images, {
+          alreadyPrepared: body.orientationPrepared === true,
+          allowModel: true,
+          requireResolved: true,
+        })
         // mode: hybrid=RAG+LLM混合(默认) | rag=仅RAG识别 | llm=仅LLM识别
         const mode = body.mode || 'hybrid'
         let result
         if (mode === 'rag') {
-          result = await analyzeWithRAG(images[0], body.topK || 5)
+          result = await analyzeWithRAG(prepared.images[0], body.topK || 5)
         } else {
-          result = await analyzeWithLLM(images, body.context, null, { skipRag: mode === 'llm' })
+          result = await analyzeWithLLM(prepared.images, body.context, null, { skipRag: mode === 'llm' })
         }
-        json(res, 200, { success: true, data: result })
+        json(res, 200, { success: true, data: result, orientations: prepared.orientations })
       } catch (e) {
-        json(res, 500, { success: false, error: { code: 'LLM_ERROR', message: e.message } })
+        json(res, e.statusCode || 500, { success: false, error: { code: e.code || 'LLM_ERROR', message: e.message, details: e.details } })
       }
     },
   },
   {
     method: 'POST',
     path: '/api/knowledge/analyze-llm-stream',
-    handler: async (_req, res, { body }) => {
+    maxBodyBytes: MAX_MULTI_IMAGE_BODY_BYTES,
+    handler: async (req, res, { body }) => {
       const images = body.images || (body.image ? [body.image] : null)
-      if (!images || !images.length) {
-        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
-        res.end(JSON.stringify({ success: false, error: { code: 'INVALID_FORMAT', message: '缺少图片数据 image 或 images (base64 数组)' } }))
+      if (!validateImageList(images)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: { code: 'INVALID_FORMAT', message: '请提供 1-5 张有效图片，图片总数据不得超过 20MB' } }))
         return
       }
 
@@ -827,7 +1146,12 @@ const routes = [
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
+      })
+
+      const controller = new AbortController()
+      req.on('aborted', () => controller.abort())
+      res.on('close', () => {
+        if (!res.writableEnded) controller.abort()
       })
 
       const send = (event) => {
@@ -839,27 +1163,37 @@ const routes = [
       }
 
       try {
+        const prepared = await prepareImagesForAnalysis(images, {
+          alreadyPrepared: body.orientationPrepared === true,
+          allowModel: true,
+          requireResolved: true,
+          signal: controller.signal,
+        })
         // mode: hybrid=RAG+LLM混合(默认) | rag=仅RAG识别 | llm=仅LLM识别
         const mode = body.mode || 'hybrid'
         if (mode === 'rag') {
-          const result = await analyzeWithRAG(images[0], body.topK || 5)
+          const result = await analyzeWithRAG(prepared.images[0], body.topK || 5)
           send({ stage: 'done', percent: 100, message: `RAG 识别完成！命中 ${result.totalHits} 条案例`, result })
         } else {
-          const result = await analyzeWithLLMStream(images, send, body.context, { skipRag: mode === 'llm' })
+          const result = await analyzeWithLLMStream(prepared.images, send, body.context, {
+            skipRag: mode === 'llm',
+            signal: controller.signal,
+          })
           send({ stage: 'done', percent: 100, message: '分析完成！', result })
         }
       } catch (e) {
-        send({ stage: 'error', message: e.message || '分析失败' })
+        send({ stage: 'error', code: e.code || 'LLM_ERROR', message: e.message || '分析失败', details: e.details })
       } finally {
-        res.end()
+        if (!res.writableEnded) res.end()
       }
     },
   },
   {
     method: 'POST',
     path: '/api/knowledge/annotate-single',
+    maxBodyBytes: MAX_SINGLE_IMAGE_BODY_BYTES,
     handler: async (_req, res, { body }) => {
-      if (!body.image || !body.image.startsWith('data:image/')) {
+      if (!isValidImageDataUrl(body.image)) {
         return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少有效的 base64 图片' } })
       }
       try {
@@ -873,8 +1207,9 @@ const routes = [
   {
     method: 'POST',
     path: '/api/knowledge/annotate-batch',
+    maxBodyBytes: 64 * 1024 * 1024,
     handler: async (_req, res, { body }) => {
-      if (!body.images || !Array.isArray(body.images) || body.images.length === 0) {
+      if (!validateImageList(body.images, 50, 60 * 1024 * 1024)) {
         return json(res, 400, { success: false, error: { code: 'INVALID_FORMAT', message: '缺少有效的图片数组' } })
       }
       try {
@@ -890,22 +1225,32 @@ const routes = [
     path: '/api/knowledge/model-config',
     handler: async (_req, res) => {
       const config = await loadModelConfig()
-      // 隐藏部分 API Key
-      const masked = { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 8) + '****' + config.apiKey.substring(config.apiKey.length - 4) : '' }
+      const masked = { ...config, apiKey: config.apiKey ? `********${config.apiKey.slice(-4)}` : '' }
       json(res, 200, { success: true, data: masked })
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/knowledge/public-config',
+    handler: async (_req, res) => {
+      const config = await loadModelConfig()
+      json(res, 200, {
+        success: true,
+        data: {
+          showRagPanel: config.showRagPanel !== false,
+          showAiPanel: config.showAiPanel !== false,
+          analysisMode: ['hybrid', 'rag', 'llm'].includes(config.analysisMode) ? config.analysisMode : 'hybrid',
+        },
+      })
     },
   },
   {
     method: 'POST',
     path: '/api/knowledge/model-config',
+    maxBodyBytes: 256 * 1024,
     handler: async (_req, res, { body }) => {
       const config = await loadModelConfig()
-      const updated = { ...config, ...body }
-      // 如果 API Key 包含 **** 说明是脱敏后的值，保留原来的 Key
-      if (body.apiKey && body.apiKey.includes('****')) {
-        delete updated.apiKey
-        updated.apiKey = config.apiKey
-      }
+      const updated = buildSafeConfigUpdate(config, body, 'model')
       await saveModelConfig(updated)
       json(res, 200, { success: true, data: { message: '模型配置已保存' } })
     },
@@ -915,20 +1260,17 @@ const routes = [
     path: '/api/knowledge/annotation-config',
     handler: async (_req, res) => {
       const config = await loadAnnotationConfig()
-      const masked = { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 8) + '****' + config.apiKey.substring(config.apiKey.length - 4) : '' }
+      const masked = { ...config, apiKey: config.apiKey ? `********${config.apiKey.slice(-4)}` : '' }
       json(res, 200, { success: true, data: masked })
     },
   },
   {
     method: 'POST',
     path: '/api/knowledge/annotation-config',
+    maxBodyBytes: 64 * 1024,
     handler: async (_req, res, { body }) => {
       const config = await loadAnnotationConfig()
-      const updated = { ...config, ...body }
-      if (body.apiKey && body.apiKey.includes('****')) {
-        delete updated.apiKey
-        updated.apiKey = config.apiKey
-      }
+      const updated = buildSafeConfigUpdate(config, body, 'annotation')
       await saveAnnotationConfig(updated)
       json(res, 200, { success: true, data: { message: '标注模型配置已保存' } })
     },
@@ -1040,12 +1382,12 @@ const routes = [
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
       })
       const send = (evt) => { try { res.write(`data: ${JSON.stringify(evt)}\n\n`) } catch {} }
       let aborted = false
       const llmController = new AbortController()
-      _req.on('close', () => {
+      res.on('close', () => {
+        if (res.writableEnded) return
         aborted = true
         llmController.abort()
       })
@@ -1264,7 +1606,6 @@ const routes = [
         'Content-Disposition': `attachment; filename="eval-report.xlsx"`,
         'Content-Length': buf.length,
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Access-Control-Allow-Origin': '*',
       })
       res.end(buf)
     },
@@ -1546,6 +1887,8 @@ const routes = [
             images: { count: imageCount, dir: IMAGES_DIR },
             vector: { clipAvailable: clipOk, ...(vectorStats || {}) },
             feedback: getFeedbackStats(),
+            expertReview: getExpertReviewStats(),
+            appeal: getAppealStats(),
           },
         })
       } catch (e) {
@@ -1583,23 +1926,18 @@ const routes = [
       if (!sql || typeof sql !== 'string') {
         return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 SQL 语句' } })
       }
-      const trimmed = sql.trim()
-      if (!/^SELECT\b/i.test(trimmed)) {
-        return json(res, 403, { success: false, error: { code: 'FORBIDDEN', message: '仅允许 SELECT 查询，不支持修改操作' } })
-      }
       try {
         const { getDb } = await import('./db.mjs')
         const db = getDb()
-        const rows = db.prepare(trimmed).all()
-        // 限制总行数，防止返回过多
         const maxRows = 5000
-        const truncated = rows.length > maxRows ? rows.slice(0, maxRows) : rows
+        const { rows, total, truncated } = readLimitedRows(prepareSafeSelect(db, sql), maxRows)
         json(res, 200, {
           success: true,
           data: {
-            rows: truncated,
-            total: rows.length,
-            truncated: rows.length > maxRows,
+            rows,
+            total,
+            totalIsLowerBound: truncated,
+            truncated,
             maxRows,
           },
         })
@@ -1616,16 +1954,11 @@ const routes = [
       if (!sql || typeof sql !== 'string') {
         return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 SQL 语句' } })
       }
-      const trimmed = sql.trim()
-      if (!/^SELECT\b/i.test(trimmed)) {
-        return json(res, 403, { success: false, error: { code: 'FORBIDDEN', message: '仅允许 SELECT 查询' } })
-      }
       try {
         const { getDb } = await import('./db.mjs')
         const db = getDb()
-        const rows = db.prepare(trimmed).all()
         const maxRows = 5000
-        const data = rows.length > maxRows ? rows.slice(0, maxRows) : rows
+        const { rows: data } = readLimitedRows(prepareSafeSelect(db, sql), maxRows)
 
         const ExcelJS = (await import('exceljs')).default
         const wb = new ExcelJS.Workbook()
@@ -1651,7 +1984,6 @@ const routes = [
           'Content-Disposition': 'attachment; filename="sql-query-result.xlsx"',
           'Content-Length': buf.length,
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Access-Control-Allow-Origin': '*',
         })
         res.end(buf)
       } catch (e) {
@@ -1664,43 +1996,28 @@ const routes = [
     path: '/api/debug/tv-orient',
     handler: async (_req, res, { body }) => {
       try {
-        if (!body.image || !body.image.startsWith('data:image/')) {
+        if (!isValidImageDataUrl(body.image)) {
           return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 base64 图片' } })
         }
-        const base64Data = body.image.replace(/^data:image\/\w+;base64,/, '')
-        const imgBuf = Buffer.from(base64Data, 'base64')
-
-        const params = {
-          canny_low: parseInt(body.canny_low) || 30,
-          canny_high: parseInt(body.canny_high) || 100,
-          blur_kernel: parseInt(body.blur_kernel) || 5,
-          dilate_kernel: parseInt(body.dilate_kernel) || 7,
-          dilate_iter: parseInt(body.dilate_iter) || 1,
-          area_min_ratio: parseFloat(body.area_min_ratio) || 0.12,
-          fill_min: parseFloat(body.fill_min) || 0.3,
-          rot90_ratio: parseFloat(body.rot90_ratio) || 1.1,
-          ocr_enabled: body.ocr_enabled !== 'false',
-          ocr_strip_ratio: parseFloat(body.ocr_strip_ratio) || 0.15,
-          ocr_min_score: parseFloat(body.ocr_min_score) || 0.6,
-        }
-
-        const PYTHON_VENV = join(__dirname, '..', 'python', 'venv', 'bin', 'python3')
-        const DETECT_SCRIPT = join(__dirname, '..', 'tools', 'detect-tv-orientation.py')
-
-        const stdout = await new Promise((resolve, reject) => {
-          const child = execFile(PYTHON_VENV, [
-            DETECT_SCRIPT, '--json', '--annotate',
-            '--params', JSON.stringify(params), '-'
-          ], { timeout: 300000, maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
-            if (err) return reject(err)
-            resolve(stdout)
-          })
-          child.stdin.write(imgBuf)
-          child.stdin.end()
+        const normalized = await normalizeTVImage(body.image, {
+          allowModel: false,
+          useOcr: body.ocr_enabled !== false && body.ocr_enabled !== 'false',
         })
-
-        const result = JSON.parse(stdout.trim())
-        json(res, 200, { success: true, data: result })
+        const orientation = normalized.orientation
+        const originalBase64 = body.image.replace(/^data:image\/\w+;base64,/, '')
+        const normalizedBase64 = normalized.normalizedImage.replace(/^data:image\/\w+;base64,/, '')
+        json(res, 200, { success: true, data: {
+          angle: orientation.angle,
+          confidence: orientation.confidence,
+          need_rot90: orientation.geometry?.baseRotation === 90,
+          need_flip180: [180, 270].includes(orientation.angle),
+          tv_region: orientation.geometry || {},
+          ocr_result: orientation.ocr || {},
+          params_used: { service: 'long-running', modelFallback: false },
+          annotated_base64: originalBase64,
+          rotated_base64: normalizedBase64,
+          requires_confirmation: orientation.requiresConfirmation,
+        } })
       } catch (e) {
         json(res, 500, { success: false, error: { code: 'DETECT_ERROR', message: e.message } })
       }
@@ -1734,24 +2051,55 @@ const routes = [
   },
 ]
 
-createServer(routes, PORT, 'knowledge-ai')
+// Knowledge-AI 从不直接暴露业务接口：H5 由网关携带内部令牌访问，
+// 管理操作则必须携带管理员令牌。管理后台代理会原样转发该令牌。
+const RUNTIME_ROUTE_KEYS = new Set([
+  'GET /api/knowledge/cases/result-stats',
+  'POST /api/knowledge/search',
+  'POST /api/knowledge/search-vector',
+  'GET /api/knowledge/images',
+  'POST /api/knowledge/correction',
+  'POST /api/knowledge/assessment-records',
+  'PATCH /api/knowledge/assessment-records',
+  'POST /api/knowledge/feedback',
+  'POST /api/knowledge/feedback/report',
+  'POST /api/knowledge/feedback/confirm',
+  'POST /api/knowledge/analyze-llm',
+  'POST /api/knowledge/analyze-llm-stream',
+  'POST /api/knowledge/orient-images',
+  'GET /api/knowledge/field-defs',
+  'GET /api/knowledge/public-config',
+])
+for (const route of routes) {
+  if (route.path === '/api/health') continue
+  const key = `${route.method} ${route.path}`
+  route.auth = RUNTIME_ROUTE_KEYS.has(key) ? ['internal', 'admin'] : 'admin'
+}
 
-// 启动时初始化数据库（search-engine 是懒加载，需要显式触发）
-import('./db.mjs').then(({ initDb }) => initDb()).catch(e => console.warn('[knowledge-ai] DB 初始化失败:', e.message))
-console.log(`[knowledge-ai] 相似案例检索 → POST http://localhost:${PORT}/api/knowledge/search`)
-console.log(`[knowledge-ai] 案例库统计 → GET  http://localhost:${PORT}/api/knowledge/stats`)
-
-// 定时 WAL checkpoint（每 30 分钟一次），防止 WAL 文件无限增长
-import('./db.mjs').then(({ checkpointWal, backupDb }) => {
+function scheduleMaintenance() {
+  // 定时 WAL checkpoint（每 30 分钟一次），防止 WAL 文件无限增长
   setInterval(() => {
     checkpointWal()
   }, 30 * 60 * 1000)
 
+  // 每天清理超过保留期的纠错审核图片；只清文件与路径，审核记录本身永久保留。
+  const cleanReviewImages = () => cleanupExpiredPendingCaseImages()
+    .then(result => {
+      if (result.deleted || result.fileErrors.length) {
+        console.log(`[knowledge-ai] 纠错图片到期清理：删除 ${result.deleted} 个，失败 ${result.fileErrors.length} 个`)
+      }
+    })
+    .catch(error => console.warn('[knowledge-ai] 纠错图片到期清理失败:', error.message))
+  cleanReviewImages()
+  setInterval(cleanReviewImages, 24 * 3600000)
+
   // 每日凌晨 3 点自动备份
   const scheduleBackup = () => {
     const now = new Date()
-    const msUntil3am = ((24 - now.getHours() + 3) % 24) * 3600000 - now.getHours() * 3600000 - now.getMinutes() * 60000 - now.getSeconds() * 1000
-    const delay = msUntil3am < 0 ? msUntil3am + 86400000 : msUntil3am
+    const next = new Date(now)
+    next.setHours(3, 0, 0, 0)
+    if (next <= now) next.setDate(next.getDate() + 1)
+    const delay = next.getTime() - now.getTime()
     setTimeout(() => {
       backupDb().catch(e => console.warn('[knowledge-ai] 定时备份失败:', e.message))
       // 之后每 24 小时备份一次
@@ -1761,4 +2109,21 @@ import('./db.mjs').then(({ checkpointWal, backupDb }) => {
     }, delay)
   }
   scheduleBackup()
-})
+}
+
+export async function startKnowledgeService() {
+  // 数据库迁移或权限收敛失败时不监听端口，避免 health 假绿和半初始化写入。
+  await initializeSearchEngine()
+  const server = createServer(routes, PORT, 'knowledge-ai')
+  scheduleMaintenance()
+  console.log(`[knowledge-ai] 相似案例检索 → POST http://localhost:${PORT}/api/knowledge/search`)
+  console.log(`[knowledge-ai] 案例库统计 → GET  http://localhost:${PORT}/api/knowledge/stats`)
+  return server
+}
+
+if (process.env.KNOWLEDGE_DISABLE_AUTOSTART !== '1') {
+  startKnowledgeService().catch(error => {
+    console.error('[knowledge-ai] 启动失败:', error.message)
+    process.exitCode = 1
+  })
+}

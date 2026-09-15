@@ -3,19 +3,56 @@
  * 封装对 Python CLIP 微服务 (端口 8084) 的 HTTP 调用
  */
 
-const CLIP_SERVICE_URL = process.env.CLIP_SERVICE_URL || 'http://localhost:8084'
+const CLIP_SERVICE_URL = (process.env.CLIP_SERVICE_URL || 'http://localhost:8084').replace(/\/$/, '')
+const INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || ''
+const DEFAULT_TIMEOUT_MS = Number(process.env.CLIP_REQUEST_TIMEOUT_MS) || 60_000
+const INFERENCE_TIMEOUT_MS = Number(process.env.CLIP_INFERENCE_TIMEOUT_MS) || 180_000
+const REBUILD_TIMEOUT_MS = Number(process.env.CLIP_REBUILD_TIMEOUT_MS) || 900_000
 
 async function clipApi(path, options = {}) {
   const url = `${CLIP_SERVICE_URL}${path}`
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
-    throw new Error(err.detail || err.message || `CLIP 服务错误: ${res.status}`)
+  const requiresAuth = path !== '/api/health'
+  if (requiresAuth && !INTERNAL_SERVICE_TOKEN) {
+    throw new Error('缺少 INTERNAL_SERVICE_TOKEN，已拒绝调用向量服务')
   }
-  return res.json()
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    headers = {},
+    signal: externalSignal,
+    ...fetchOptions
+  } = options
+  const controller = new AbortController()
+  const onExternalAbort = () => controller.abort(externalSignal?.reason)
+  if (externalSignal) {
+    if (externalSignal.aborted) onExternalAbort()
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+  }
+  const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs))
+
+  try {
+    const res = await fetch(url, {
+      ...fetchOptions,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+        ...(INTERNAL_SERVICE_TOKEN ? { 'X-Internal-Token': INTERNAL_SERVICE_TOKEN } : {}),
+      },
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+      throw new Error(err.detail || err.message || `CLIP 服务错误: ${res.status}`)
+    }
+    return await res.json()
+  } catch (error) {
+    if (controller.signal.aborted && !externalSignal?.aborted) {
+      throw new Error(`CLIP 服务请求超时 (${timeoutMs}ms): ${path}`, { cause: error })
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+    externalSignal?.removeEventListener('abort', onExternalAbort)
+  }
 }
 
 /**
@@ -23,7 +60,9 @@ async function clipApi(path, options = {}) {
  */
 export async function clipHealth() {
   try {
-    return await clipApi('/api/health')
+    const result = await clipApi('/api/health', { timeoutMs: 3_000 })
+    // 健康端点可公开探活，但 Node 若没有内部凭据仍不能把向量能力标为可用。
+    return INTERNAL_SERVICE_TOKEN ? result : null
   } catch {
     return null
   }
@@ -45,6 +84,20 @@ export async function extractFeatures(imageBase64) {
   return clipApi('/api/knowledge/extract-base64', {
     method: 'POST',
     body: JSON.stringify({ image_base64: imageBase64 }),
+    timeoutMs: INFERENCE_TIMEOUT_MS,
+  })
+}
+
+/**
+ * 检测电视机方向。Python 服务常驻，OpenCV/Paddle 模型按进程复用。
+ * 失败会抛出异常，由上层明确标记为需要人工确认，禁止静默当作 0°。
+ */
+export async function detectTVOrientation(imageBase64, { useOcr = true, signal } = {}) {
+  return clipApi('/api/knowledge/orientation', {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageBase64, use_ocr: useOcr }),
+    timeoutMs: INFERENCE_TIMEOUT_MS,
+    signal,
   })
 }
 
@@ -63,6 +116,7 @@ export async function searchByImage(imageBase64, topK = 5, excludeCaseId = '') {
       top_k: topK,
       exclude_case_id: excludeCaseId,
     }),
+    timeoutMs: INFERENCE_TIMEOUT_MS,
   })
 }
 
@@ -83,6 +137,7 @@ export async function indexCase(caseId, imageBase64, meta = {}) {
       crack_location: meta.crackLocation || '',
       crack_shape: Array.isArray(meta.crackShape) ? meta.crackShape.join(',') : (meta.crackShape || ''),
     }),
+    timeoutMs: INFERENCE_TIMEOUT_MS,
   })
 }
 
@@ -93,7 +148,9 @@ export async function indexCase(caseId, imageBase64, meta = {}) {
 export async function indexBatch(items) {
   return clipApi('/api/knowledge/index-batch', {
     method: 'POST',
-    body: JSON.stringify({ items }),
+    // Python 端点的请求模型是 List[BatchIndexItem]，顶层必须直接是数组。
+    body: JSON.stringify(items),
+    timeoutMs: REBUILD_TIMEOUT_MS,
   })
 }
 
@@ -108,6 +165,17 @@ export async function deleteIndex(caseId) {
 }
 
 /**
+ * 批量删除案例向量，避免逐条请求和回退索引逐条全量写盘。
+ * @param {string[]} caseIds
+ */
+export async function deleteIndexes(caseIds) {
+  return clipApi('/api/knowledge/delete-batch', {
+    method: 'POST',
+    body: JSON.stringify({ case_ids: caseIds }),
+  })
+}
+
+/**
  * 清空并重建全部向量索引
  * @param {Array} items - 同 indexBatch 的 items 格式
  */
@@ -115,5 +183,6 @@ export async function rebuildIndex(items) {
   return clipApi('/api/knowledge/rebuild-index', {
     method: 'POST',
     body: JSON.stringify({ items }),
+    timeoutMs: REBUILD_TIMEOUT_MS,
   })
 }

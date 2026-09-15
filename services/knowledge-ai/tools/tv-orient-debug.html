@@ -118,7 +118,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <img id="origImg" alt="原始图片">
       </div>
       <div class="img-container">
-        <div class="img-label">检测标注</div>
+        <div class="img-label">输入图片</div>
         <img id="annotImg" alt="标注图片">
         <div class="loading" id="imgLoading" style="display:none">检测中...</div>
       </div>
@@ -224,7 +224,7 @@ async function runDetect() {
     const badgeClass = `badge-${d.angle}`;
     const rotLabel = {0:'无需旋转 ✅', 90:'旋转 90° ↻', 180:'翻转 180° ↕', 270:'旋转 270° ↺'};
     const tv = d.tv_region || {};
-    const ocrTexts = d.ocr_result?.texts || [];
+    const ocrTexts = d.ocr_result?.candidateA?.texts || [];
     const ocrTextsHtml = ocrTexts.length
       ? `<div style="color:#546;font-size:10px;margin:8px 0 4px;">OCR 识别文字 (${ocrTexts.length})</div>
          <div class="result-json">${ocrTexts.map(t => `${esc(t.text)}  <span style="color:#64ffda">${(t.score*100).toFixed(0)}%</span>`).join('\n')}</div>`
@@ -238,13 +238,12 @@ async function runDetect() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:11px;margin-bottom:10px;">
         <div><span style="color:#546;">Rot90:</span> <span style="color:${d.need_rot90?'#fbbf24':'#34d399'}">${d.need_rot90?'是':'否'}</span></div>
         <div><span style="color:#546;">Flip180:</span> <span style="color:${d.need_flip180?'#fbbf24':'#34d399'}">${d.need_flip180?'是':'否'}</span></div>
-        ${tv.cx ? `<div><span style="color:#546;">TV区域:</span> ${tv.w}×${tv.h}</div>` : ''}
-        ${tv.cx ? `<div><span style="color:#546;">中心:</span> (${tv.cx},${tv.cy})</div>` : ''}
-        <div><span style="color:#546;">轮廓数:</span> ${tv.contours_found || 0}</div>
-        <div><span style="color:#546;">通过:</span> ${tv.contours_passed || 0}</div>
-        <div><span style="color:#546;">OCR条带:</span> ${d.ocr_result?.strip || '-'}</div>
-        <div><span style="color:#546;">OCR方向:</span> ${d.ocr_result?.label || '-'}</div>
-        <div><span style="color:#546;">OCR置信度:</span> ${d.ocr_result?.score ? (d.ocr_result.score*100).toFixed(1)+'%' : '-'}</div>
+        <div><span style="color:#546;">TV检测:</span> ${tv.tvDetected ? '是' : '否'}</div>
+        <div><span style="color:#546;">长轴:</span> ${tv.longAxis || '-'}</div>
+        <div><span style="color:#546;">几何置信度:</span> ${tv.confidence ? (tv.confidence*100).toFixed(1)+'%' : '-'}</div>
+        <div><span style="color:#546;">需人工确认:</span> ${d.requires_confirmation ? '是' : '否'}</div>
+        <div><span style="color:#546;">OCR方向:</span> ${d.ocr_result?.decision || '-'}</div>
+        <div><span style="color:#546;">OCR置信度:</span> ${d.ocr_result?.confidence ? (d.ocr_result.confidence*100).toFixed(1)+'%' : '-'}</div>
       </div>
       ${ocrTextsHtml}
       <div style="color:#546;font-size:10px;margin-bottom:4px;">当前参数</div>

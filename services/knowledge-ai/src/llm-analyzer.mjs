@@ -1,6 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, chmod, mkdir, rename, unlink } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import crypto from 'node:crypto'
 import { normalizeEvalField } from './field-normalize.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -11,6 +12,7 @@ const DEFAULT_CONFIG = {
   provider: 'openai',
   model: 'gpt-4o',
   apiKey: '',
+  inheritEnvApiKey: true,
   endpoint: 'https://api.openai.com/v1/chat/completions',
   temperature: 0.3,
   maxTokens: 4096,
@@ -40,21 +42,20 @@ export async function loadModelConfig() {
   try {
     const raw = await readFile(CONFIG_PATH, 'utf8')
     config = { ...config, ...JSON.parse(raw) }
-  } catch {
-    // 配置文件不存在，使用默认值
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw new Error(`模型配置读取失败: ${error.message}`)
   }
   // 优先使用配置文件中的 apiKey，为空时回退到环境变量
-  if (!config.apiKey) {
+  if (!config.apiKey && config.inheritEnvApiKey !== false) {
     config.apiKey = process.env.LLM_API_KEY || ''
+    if (config.apiKey) Object.defineProperty(config, '__apiKeyFromEnv', { value: true, enumerable: false })
   }
   return config
 }
 
 export async function saveModelConfig(config) {
-  const dir = dirname(CONFIG_PATH)
-  const { mkdir } = await import('node:fs/promises')
-  await mkdir(dir, { recursive: true })
-  await writeFile(CONFIG_PATH, JSON.stringify({ ...DEFAULT_CONFIG, ...config }, null, 2), 'utf8')
+  validateModelEndpoint(config.endpoint, config.provider)
+  await writeConfigAtomic(CONFIG_PATH, { ...DEFAULT_CONFIG, ...config })
 }
 
 // ===== 标注模型独立配置 =====
@@ -65,6 +66,7 @@ const DEFAULT_ANNO_CONFIG = {
   provider: 'openai',
   model: 'deepseek-chat',
   apiKey: '',
+  inheritEnvApiKey: true,
   endpoint: 'https://api.deepseek.com',
   temperature: 0.3,
   maxTokens: 1024,
@@ -78,21 +80,113 @@ export async function loadAnnotationConfig() {
   try {
     const raw = await readFile(ANNO_CONFIG_PATH, 'utf8')
     config = { ...config, ...JSON.parse(raw) }
-  } catch {
-    // 配置文件不存在，使用默认值
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw new Error(`标注模型配置读取失败: ${error.message}`)
   }
   // apiKey 为空时回退到环境变量
-  if (!config.apiKey) {
+  if (!config.apiKey && config.inheritEnvApiKey !== false) {
     config.apiKey = process.env.LLM_ANNO_API_KEY || process.env.LLM_API_KEY || ''
+    if (config.apiKey) Object.defineProperty(config, '__apiKeyFromEnv', { value: true, enumerable: false })
   }
   return config
 }
 
 export async function saveAnnotationConfig(config) {
-  const dir = dirname(ANNO_CONFIG_PATH)
-  const { mkdir } = await import('node:fs/promises')
-  await mkdir(dir, { recursive: true })
-  await writeFile(ANNO_CONFIG_PATH, JSON.stringify({ ...DEFAULT_ANNO_CONFIG, ...config }, null, 2), 'utf8')
+  validateModelEndpoint(config.endpoint, config.provider)
+  await writeConfigAtomic(ANNO_CONFIG_PATH, { ...DEFAULT_ANNO_CONFIG, ...config })
+}
+
+async function writeConfigAtomic(path, config) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  const tempPath = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    await writeFile(tempPath, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 })
+    await rename(tempPath, path)
+    await chmod(path, 0o600)
+  } catch (error) {
+    try { await unlink(tempPath) } catch {}
+    throw error
+  }
+}
+
+function isPrivateHost(hostname) {
+  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase()
+  if (host === 'localhost' || host === '::1' || host.endsWith('.localhost') || host.endsWith('.local')) return true
+  const octets = host.split('.').map(Number)
+  if (octets.length === 4 && octets.every(n => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    return octets[0] === 10 || octets[0] === 127 || octets[0] === 0 ||
+      (octets[0] === 169 && octets[1] === 254) ||
+      (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] === 192 && octets[1] === 168)
+  }
+  return host === '::' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe8') || host.startsWith('fe9') || host.startsWith('fea') || host.startsWith('feb')
+}
+
+function isLoopbackHost(hostname) {
+  const host = String(hostname || '').replace(/^\[|\]$/g, '').toLowerCase()
+  if (host === 'localhost' || host === '::1') return true
+  const octets = host.split('.').map(Number)
+  return octets.length === 4 && octets.every(n => Number.isInteger(n) && n >= 0 && n <= 255) && octets[0] === 127
+}
+
+const TRUSTED_MODEL_HOSTS = new Set([
+  'api.openai.com',
+  'api.anthropic.com',
+  'api.deepseek.com',
+  'dashscope.aliyuncs.com',
+  'ark.cn-beijing.volces.com',
+  'api.moonshot.cn',
+  'open.bigmodel.cn',
+  'api.siliconflow.cn',
+])
+
+function matchesConfiguredEndpoint(target) {
+  const entries = String(process.env.LLM_ALLOWED_HOSTS || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean)
+  for (const entry of entries) {
+    if (entry.includes('://')) {
+      try {
+        if (new URL(entry).origin.toLowerCase() === target.origin.toLowerCase()) return true
+      } catch {}
+      continue
+    }
+    // 带端口的配置必须精确匹配 host:port；裸主机只允许标准 HTTPS。
+    if (entry.includes(':')) {
+      if (target.host.toLowerCase() === entry) return true
+    } else if (target.protocol === 'https:' && !target.port && target.hostname.toLowerCase() === entry) {
+      return true
+    }
+  }
+  return false
+}
+
+// 防止配置端点成为 SSRF 跳板。默认只信任常见模型厂商；自建端点需运维显式列入 allowlist。
+export function validateModelEndpoint(endpoint, provider = 'openai') {
+  let target
+  try { target = new URL(String(endpoint || '')) }
+  catch { throw new Error('模型 API Endpoint 不是有效 URL') }
+  if (target.username || target.password) throw new Error('模型 API Endpoint 不允许包含用户名或密码')
+  if (target.hash) throw new Error('模型 API Endpoint 不允许包含 URL 片段')
+  if (!['openai', 'anthropic', 'ollama'].includes(provider)) throw new Error('模型 Provider 不受支持')
+
+  const host = target.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  const explicitlyAllowed = matchesConfiguredEndpoint(target)
+  const defaultVendor = target.protocol === 'https:' && !target.port && (
+    TRUSTED_MODEL_HOSTS.has(host) || host.endsWith('.openai.azure.com')
+  )
+  const localOllama = provider === 'ollama' && target.protocol === 'http:' && target.port === '11434' && isLoopbackHost(host)
+  if (provider === 'ollama' && !localOllama && !explicitlyAllowed) {
+    throw new Error('Ollama 默认仅允许 loopback:11434；其他地址必须以 host:port 加入 LLM_ALLOWED_HOSTS')
+  }
+  if (provider !== 'ollama' && !defaultVendor && !explicitlyAllowed) {
+    throw new Error('模型 API Endpoint 主机未获授权，请加入 LLM_ALLOWED_HOSTS')
+  }
+  if (target.protocol !== 'https:' && !localOllama && !explicitlyAllowed) {
+    throw new Error('模型 API Endpoint 必须使用 HTTPS')
+  }
+  if (isPrivateHost(host) && !localOllama && !explicitlyAllowed) {
+    throw new Error('模型 API Endpoint 不允许访问内网或本机地址')
+  }
+  return target
 }
 
 // 构建分析 Prompt（始终输出 JSON 格式提示，确保后端能解析）
@@ -184,6 +278,48 @@ function normalizeEndpoint(endpoint) {
   return trimmed + '/v1/chat/completions'
 }
 
+function normalizeAnthropicEndpoint(endpoint) {
+  const trimmed = (endpoint || '').replace(/\/+$/, '')
+  if (trimmed.endsWith('/v1/messages') || trimmed.endsWith('/messages')) return trimmed
+  if (trimmed.endsWith('/v1')) return trimmed + '/messages'
+  return trimmed + '/v1/messages'
+}
+
+const TRANSIENT_MODEL_NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+])
+
+function isTransientModelNetworkError(error) {
+  if (!error || error.name === 'AbortError' || error.name === 'TimeoutError') return false
+  const code = error.cause?.code || error.code
+  return TRANSIENT_MODEL_NETWORK_CODES.has(code)
+    || (error.name === 'TypeError' && /fetch failed/i.test(error.message || ''))
+}
+
+async function fetchModelEndpoint(url, options, maxAttempts = 3) {
+  let lastError
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetch(url, options)
+    } catch (error) {
+      lastError = error
+      if (options?.signal?.aborted || !isTransientModelNetworkError(error) || attempt === maxAttempts) break
+      await new Promise(resolve => setTimeout(resolve, 250 * (2 ** (attempt - 1))))
+    }
+  }
+  const code = lastError?.cause?.code || lastError?.code
+  const error = new Error(`模型服务网络连接失败${code ? `（${code}）` : ''}，请稍后重试`)
+  error.cause = lastError
+  throw error
+}
+
 // 调用 OpenAI 兼容 API（GPT-4V / Qwen-VL / Ollama 等）
 async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = '', formContext = '', signal = null) {
   const promptText = buildPrompt(config, imageBase64s.length) + caseContext + kbContext + formContext
@@ -203,7 +339,7 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
   const effectiveSignal = signal
     ? AbortSignal.any([signal, timeoutSignal])
     : timeoutSignal
-  const resp = await fetch(normalizeEndpoint(config.endpoint), {
+  const resp = await fetchModelEndpoint(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -217,10 +353,11 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
       thinking: { type: 'disabled' },
     }),
     signal: effectiveSignal,
+    redirect: 'error',
   })
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+    await resp.body?.cancel().catch(() => {})
+    throw new Error(`模型服务调用失败（HTTP ${resp.status}）`)
   }
   const data = await resp.json()
   const raw = data.choices?.[0]?.message?.content || ''
@@ -228,7 +365,7 @@ async function callOpenAI(config, imageBase64s, kbContext = '', caseContext = ''
 }
 
 // OpenAI 流式调用，支持 token 级进度回调
-async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, onProgress, formContext = '') {
+async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, onProgress, formContext = '', signal = null) {
   const promptText = buildPrompt(config, imageBase64s.length) + caseContext + kbContext + formContext
   const imageBlocks = imageBase64s.map(img => ({ type: 'image_url', image_url: { url: img, detail: 'high' } }))
   const messages = []
@@ -241,10 +378,10 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
       ...imageBlocks,
     ],
   })
-  // 120 秒超时（已关闭深度思考，速度快很多）
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(new Error('LLM 流式请求超时 (120s)')), 120000)
-  const resp = await fetch(normalizeEndpoint(config.endpoint), {
+  // 超时信号覆盖完整响应体读取；客户端断开时也会立即中止上游请求。
+  const timeoutSignal = AbortSignal.timeout(120000)
+  const effectiveSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+  const resp = await fetchModelEndpoint(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -259,14 +396,13 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
       max_tokens: config.maxTokens,
       thinking: { type: 'disabled' },
     }),
-    signal: controller.signal,
+    signal: effectiveSignal,
+    redirect: 'error',
   })
 
-  clearTimeout(timeoutId)
-
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+    await resp.body?.cancel().catch(() => {})
+    throw new Error(`模型服务调用失败（HTTP ${resp.status}）`)
   }
 
   const reader = resp.body.getReader()
@@ -327,7 +463,7 @@ async function callOpenAIStream(config, imageBase64s, kbContext, caseContext, on
 }
 
 // 调用 Anthropic API（Claude 3）
-async function callAnthropic(config, imageBase64s, kbContext = '', caseContext = '', formContext = '') {
+async function callAnthropic(config, imageBase64s, kbContext = '', caseContext = '', formContext = '', signal = null) {
   const promptText = buildPrompt(config, imageBase64s.length) + caseContext + kbContext + formContext
   const imageBlocks = imageBase64s.map(img => {
     const mediaType = img.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/png'
@@ -335,7 +471,7 @@ async function callAnthropic(config, imageBase64s, kbContext = '', caseContext =
     return { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
   })
 
-  const resp = await fetch(normalizeEndpoint(config.endpoint), {
+  const resp = await fetchModelEndpoint(normalizeAnthropicEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -355,10 +491,12 @@ async function callAnthropic(config, imageBase64s, kbContext = '', caseContext =
         ],
       }],
     }),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000),
+    redirect: 'error',
   })
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+    await resp.body?.cancel().catch(() => {})
+    throw new Error(`模型服务调用失败（HTTP ${resp.status}）`)
   }
   const data = await resp.json()
   const raw = data.content?.[0]?.text || ''
@@ -366,8 +504,8 @@ async function callAnthropic(config, imageBase64s, kbContext = '', caseContext =
 }
 
 // 调用 Ollama（本地模型，如 llava）
-async function callOllama(config, imageBase64s, kbContext = '', caseContext = '', formContext = '') {
-  const resp = await fetch(config.endpoint, {
+async function callOllama(config, imageBase64s, kbContext = '', caseContext = '', formContext = '', signal = null) {
+  const resp = await fetchModelEndpoint(config.endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -380,10 +518,12 @@ async function callOllama(config, imageBase64s, kbContext = '', caseContext = ''
       }],
       options: { temperature: config.temperature, num_predict: config.maxTokens },
     }),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000),
+    redirect: 'error',
   })
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+    await resp.body?.cancel().catch(() => {})
+    throw new Error(`模型服务调用失败（HTTP ${resp.status}）`)
   }
   const data = await resp.json()
   const raw = data.message?.content || ''
@@ -575,13 +715,143 @@ async function buildSimilarCaseContext(imageBase64, config) {
   return result
 }
 
+const ORIENTATION_COMPARE_PROMPT = `你只负责比较同一台电视的两张方向候选图。候选 A 与候选 B 相差 180°。
+请观察电视边框侧边居中的品牌文字或 Logo、屏幕内可辨认文字、底座/支架等方向证据，判断哪张图是天侧在上、地侧在下。
+不要分析屏幕损伤，不要根据裂纹方向猜测。证据不足必须返回 uncertain。
+只返回 JSON：{"choice":"A|B|uncertain","confidence":0到1之间的数字,"evidence":"不超过80字的可见证据"}`
+
+function parseOrientationChoice(raw) {
+  const text = String(raw || '').replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+  let parsed = null
+  const candidates = [text, text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)]
+  for (const candidate of candidates) {
+    if (!candidate || !candidate.includes('{')) continue
+    try { parsed = JSON.parse(candidate); break } catch {}
+  }
+  const rawChoice = String(parsed?.choice || '').trim().toUpperCase()
+  const choice = rawChoice === 'A' || rawChoice === 'B' ? rawChoice : 'uncertain'
+  let confidence = Number(parsed?.confidence)
+  if (!Number.isFinite(confidence)) confidence = 0
+  if (confidence > 1 && confidence <= 100) confidence /= 100
+  confidence = Math.min(1, Math.max(0, confidence))
+  return {
+    choice,
+    confidence: Math.round(confidence * 1000) / 1000,
+    evidence: typeof parsed?.evidence === 'string' ? parsed.evidence.trim().slice(0, 160) : '',
+  }
+}
+
+/**
+ * 多模态兜底只做 A/B 两候选比较，避免让通用模型一次完成 0/90/180/270 四分类。
+ */
+export async function judgeTVOrientationCandidates(candidateA, candidateB, signal = null) {
+  const config = await loadModelConfig()
+  validateModelEndpoint(config.endpoint, config.provider)
+  if (!config.enabled || (config.provider !== 'ollama' && !config.apiKey)) {
+    throw new Error('方向兜底所需的多模态模型未启用或未配置 API Key')
+  }
+
+  const timeoutSignal = AbortSignal.timeout(120000)
+  const effectiveSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+  let raw = ''
+
+  if (config.provider === 'anthropic') {
+    const imageBlock = image => {
+      const mediaType = image.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg'
+      return { type: 'image', source: { type: 'base64', media_type: mediaType, data: image.replace(/^data:image\/\w+;base64,/, '') } }
+    }
+    const resp = await fetchModelEndpoint(normalizeAnthropicEndpoint(config.endpoint), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 256,
+        temperature: 0,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: `${ORIENTATION_COMPARE_PROMPT}\n下面依次是候选 A、候选 B。` },
+          imageBlock(candidateA),
+          imageBlock(candidateB),
+        ] }],
+      }),
+      signal: effectiveSignal,
+      redirect: 'error',
+    })
+    if (!resp.ok) {
+      await resp.body?.cancel().catch(() => {})
+      throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
+    }
+    const data = await resp.json()
+    raw = data.content?.map(item => item.text || '').join('') || ''
+  } else if (config.provider === 'ollama') {
+    const resp = await fetchModelEndpoint(config.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.model,
+        stream: false,
+        messages: [{
+          role: 'user',
+          content: `${ORIENTATION_COMPARE_PROMPT}\n下面依次是候选 A、候选 B。`,
+          images: [candidateA, candidateB],
+        }],
+        options: { temperature: 0, num_predict: 256 },
+      }),
+      signal: effectiveSignal,
+      redirect: 'error',
+    })
+    if (!resp.ok) {
+      await resp.body?.cancel().catch(() => {})
+      throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
+    }
+    const data = await resp.json()
+    raw = data.message?.content || ''
+  } else {
+    const resp = await fetchModelEndpoint(normalizeEndpoint(config.endpoint), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: `${ORIENTATION_COMPARE_PROMPT}\n下面依次是候选 A、候选 B。` },
+            { type: 'image_url', image_url: { url: candidateA, detail: 'high' } },
+            { type: 'image_url', image_url: { url: candidateB, detail: 'high' } },
+          ],
+        }],
+        temperature: 0,
+        max_tokens: 256,
+        thinking: { type: 'disabled' },
+      }),
+      signal: effectiveSignal,
+      redirect: 'error',
+    })
+    if (!resp.ok) {
+      await resp.body?.cancel().catch(() => {})
+      throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
+    }
+    const data = await resp.json()
+    raw = data.choices?.[0]?.message?.content || ''
+  }
+
+  return { ...parseOrientationChoice(raw), model: config.model }
+}
+
 // 主入口：使用大模型分析图片
 export async function analyzeWithLLM(imageBase64s, contextObj, signal = null, options = {}) {
   // 兼容单张图片（字符串）
   const images = Array.isArray(imageBase64s) ? imageBase64s : [imageBase64s]
   const context = buildContextFromForm(contextObj)
   const config = await loadModelConfig()
-  if (!config.enabled || !config.apiKey) {
+  validateModelEndpoint(config.endpoint, config.provider)
+  if (!config.enabled || (config.provider !== 'ollama' && !config.apiKey)) {
     throw new Error('大模型分析未启用或未配置 API Key，请在管理后台设置')
   }
 
@@ -608,9 +878,9 @@ export async function analyzeWithLLM(imageBase64s, contextObj, signal = null, op
 
   switch (config.provider) {
     case 'anthropic':
-      return { ...await callAnthropic(config, images, kbContext, caseContext, context), elapsed: Date.now() - start, model: config.model }
+      return { ...await callAnthropic(config, images, kbContext, caseContext, context, signal), elapsed: Date.now() - start, model: config.model }
     case 'ollama':
-      return { ...await callOllama(config, images, kbContext, caseContext, context), elapsed: Date.now() - start, model: config.model }
+      return { ...await callOllama(config, images, kbContext, caseContext, context, signal), elapsed: Date.now() - start, model: config.model }
     case 'openai':
     default:
       return { ...await callOpenAI(config, images, kbContext, caseContext, context, signal), elapsed: Date.now() - start, model: config.model }
@@ -622,8 +892,9 @@ export async function analyzeWithLLMStream(imageBase64s, onProgress, contextObj,
   // 兼容单张图片（字符串）
   const images = Array.isArray(imageBase64s) ? imageBase64s : [imageBase64s]
   const config = await loadModelConfig()
+  validateModelEndpoint(config.endpoint, config.provider)
   const context = buildContextFromForm(contextObj)
-  if (!config.enabled || !config.apiKey) {
+  if (!config.enabled || (config.provider !== 'ollama' && !config.apiKey)) {
     throw new Error('大模型分析未启用或未配置 API Key，请在管理后台设置')
   }
 
@@ -654,7 +925,7 @@ export async function analyzeWithLLMStream(imageBase64s, onProgress, contextObj,
 
   // OpenAI 走流式 API，可获得真实 token 生成进度
   if (config.provider === 'openai') {
-    const result = await callOpenAIStream(config, images, kbContext, caseContext, onProgress, context)
+    const result = await callOpenAIStream(config, images, kbContext, caseContext, onProgress, context, options.signal)
     onProgress({ stage: 'parse', percent: 92, message: '正在解析分析结果...' })
     return { ...result, elapsed: Date.now() - start, model: config.model }
   }
@@ -665,13 +936,13 @@ export async function analyzeWithLLMStream(imageBase64s, onProgress, contextObj,
   let result
   switch (config.provider) {
     case 'anthropic':
-      result = await callAnthropic(config, images, kbContext, caseContext, context)
+      result = await callAnthropic(config, images, kbContext, caseContext, context, options.signal)
       break
     case 'ollama':
-      result = await callOllama(config, images, kbContext, caseContext, context)
+      result = await callOllama(config, images, kbContext, caseContext, context, options.signal)
       break
     default:
-      result = await callOpenAI(config, images, kbContext, caseContext, context)
+      result = await callOpenAI(config, images, kbContext, caseContext, context, options.signal)
   }
 
   onProgress({ stage: 'parse', percent: 92, message: '正在解析分析结果...' })
@@ -707,6 +978,7 @@ function buildAnnotationPrompt(config = {}, ragContext = '') {
 
 // 调用大模型生成案例标注
 async function callLLMForAnnotation(config, imageBase64, ragContext = '') {
+  validateModelEndpoint(config.endpoint, config.provider)
   const { systemPrompt, userMessage } = buildAnnotationPrompt(config, ragContext)
   const messages = []
   if (systemPrompt) {
@@ -719,7 +991,7 @@ async function callLLMForAnnotation(config, imageBase64, ragContext = '') {
       { type: 'image_url', image_url: { url: imageBase64, detail: 'high' } },
     ],
   })
-  const resp = await fetch(normalizeEndpoint(config.endpoint), {
+  const resp = await fetchModelEndpoint(normalizeEndpoint(config.endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -731,10 +1003,12 @@ async function callLLMForAnnotation(config, imageBase64, ragContext = '') {
       temperature: config.temperature,
       max_tokens: Math.min(config.maxTokens, 2048),
     }),
+    signal: AbortSignal.timeout(120000),
+    redirect: 'error',
   })
   if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status}): ${errText}`)
+    await resp.body?.cancel().catch(() => {})
+    throw new Error(`模型服务调用失败（HTTP ${resp.status}）`)
   }
   const data = await resp.json()
   const raw = data.choices?.[0]?.message?.content || ''

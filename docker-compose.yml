@@ -1,101 +1,202 @@
-version: "3.8"
+x-runtime-defaults: &runtime-defaults
+  init: true
+  read_only: true
+  restart: unless-stopped
+  stop_grace_period: 20s
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
 
 services:
   # ============================================
   # 管理中台（规则管理 + admin 页面）:8082
   # ============================================
   decision-admin:
+    <<: *runtime-defaults
     build:
       context: .
       dockerfile: services/decision-admin/Dockerfile
-    container_name: screen-damage-admin
     ports:
-      - "8082:8082"
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${ADMIN_PUBLISHED_PORT:-8082}:8082"
+    environment:
+      SERVICE_HOST: 0.0.0.0
+      ADMIN_API_TOKEN: "${ADMIN_API_TOKEN:?ADMIN_API_TOKEN must be set}"
+      INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
+      KNOWLEDGE_AI_URL: http://knowledge-ai:8083
+      DECISION_ENGINE_URL: http://decision-engine:8081
+    depends_on:
+      knowledge-ai:
+        condition: service_healthy
     volumes:
       - admin-data:/app/services/decision-admin/data
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=64m"
     networks:
       - screen-damage
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8082/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   # ============================================
   # 知识库（案例检索 + LLM 分析）:8083
   # ============================================
   knowledge-ai:
+    <<: *runtime-defaults
     build:
       context: .
       dockerfile: services/knowledge-ai/Dockerfile
-    container_name: screen-damage-knowledge
     environment:
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - CLIP_SERVICE_URL=http://python-features:8084
+      SERVICE_HOST: 0.0.0.0
+      ADMIN_API_TOKEN: "${ADMIN_API_TOKEN:?ADMIN_API_TOKEN must be set}"
+      INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_ANNO_API_KEY: "${LLM_ANNO_API_KEY:-}"
+      LLM_ALLOWED_HOSTS: "${LLM_ALLOWED_HOSTS:-}"
+      REVIEW_IMAGE_RETENTION_DAYS: "${REVIEW_IMAGE_RETENTION_DAYS:-90}"
+      CLIP_SERVICE_URL: http://python-features:8084
     depends_on:
       python-features:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - knowledge-data:/app/services/knowledge-ai/data
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=256m"
     networks:
       - screen-damage
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8083/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 20s
+
+  # ============================================
+  # 只读 MCP Server（固定查询 + 统计）:8090
+  # ============================================
+  read-only-mcp:
+    <<: *runtime-defaults
+    build:
+      context: .
+      dockerfile: services/read-only-mcp/Dockerfile
+    ports:
+      - "${MCP_BIND_ADDRESS:-127.0.0.1}:${MCP_PUBLISHED_PORT:-8090}:8090"
+    environment:
+      SERVICE_HOST: 0.0.0.0
+      MCP_PORT: "8090"
+      MCP_API_TOKEN: "${MCP_API_TOKEN:?MCP_API_TOKEN must be set}"
+      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:-localhost,127.0.0.1,knowledge-mcp,read-only-mcp}"
+      MCP_REQUESTS_PER_MINUTE: "${MCP_REQUESTS_PER_MINUTE:-120}"
+      KNOWLEDGE_DB_PATH: /app/services/knowledge-ai/data/knowledge.db
+    depends_on:
+      knowledge-ai:
+        condition: service_healthy
+    volumes:
+      - knowledge-data:/app/services/knowledge-ai/data:ro
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=32m"
+    networks:
+      - screen-damage
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8090/health',r=>process.exit(r.statusCode===200?0:1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================
   # 决策引擎（规则判定）:8081
   # ============================================
   decision-engine:
+    <<: *runtime-defaults
     build:
       context: .
       dockerfile: services/decision-engine/Dockerfile
-    container_name: screen-damage-engine
+    environment:
+      SERVICE_HOST: 0.0.0.0
+      INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
+      ADMIN_URL: http://decision-admin:8082
     depends_on:
       decision-admin:
         condition: service_healthy
     networks:
       - screen-damage
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8081/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
   # ============================================
   # Python 特征提取服务（DINOv2 向量）:8084
   # ============================================
   python-features:
+    <<: *runtime-defaults
     build:
       context: .
       dockerfile: services/knowledge-ai/Dockerfile.python
-    container_name: screen-damage-python
-    ports:
-      - "8084:8084"
+    expose:
+      - "8084"
+    environment:
+      SERVICE_HOST: 0.0.0.0
+      INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
+      CLIP_PORT: "8084"
+      ORIENTATION_OCR_ENABLED: "${ORIENTATION_OCR_ENABLED:-true}"
+      ORIENTATION_OCR_LANG: "${ORIENTATION_OCR_LANG:-ch}"
+      VECTOR_DATA_DIR: /data
+      HF_HOME: /models/huggingface
+      HF_HUB_CACHE: /models/huggingface/hub
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DINO_MODEL_NAME: "${DINO_MODEL_NAME:-facebook/dinov2-small}"
+      DINO_LOCAL_FILES_ONLY: "${DINO_LOCAL_FILES_ONLY:-false}"
+      MILVUS_HOST: "${MILVUS_HOST:-localhost}"
+      MILVUS_PORT: "${MILVUS_PORT:-19530}"
+      MILVUS_REST_PORT: "${MILVUS_REST_PORT:-9091}"
+    volumes:
+      - knowledge-data:/data
+      - model-cache:/models
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=256m"
     networks:
       - screen-damage
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; import json; r = urllib.request.urlopen('http://localhost:8084/api/health'); exit(0 if json.loads(r.read()).get('status') == 'ok' else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
 
   # ============================================
   # BFF 网关（对外入口 + 前端页面）:8080
   # ============================================
   gateway-bff:
+    <<: *runtime-defaults
     build:
       context: .
       dockerfile: services/gateway-bff/Dockerfile
-    container_name: screen-damage-gateway
     ports:
-      - "8080:8080"
+      - "${GATEWAY_BIND_ADDRESS:-127.0.0.1}:${GATEWAY_PUBLISHED_PORT:-8080}:8080"
+    environment:
+      SERVICE_HOST: 0.0.0.0
+      INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}"
+      DECISION_ENGINE_URL: http://decision-engine:8081
+      KNOWLEDGE_AI_URL: http://knowledge-ai:8083
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
+      TRUST_PROXY: "1"
+      TRUSTED_PROXY_IPS: "${SCREEN_DAMAGE_GATEWAY:-172.30.240.1}"
+      LLM_GLOBAL_REQUESTS_PER_MINUTE: "${LLM_GLOBAL_REQUESTS_PER_MINUTE:-30}"
+      LLM_GLOBAL_REQUESTS_PER_DAY: "${LLM_GLOBAL_REQUESTS_PER_DAY:-500}"
+      LLM_GLOBAL_CONCURRENCY: "${LLM_GLOBAL_CONCURRENCY:-3}"
+      VECTOR_GLOBAL_CONCURRENCY: "${VECTOR_GLOBAL_CONCURRENCY:-4}"
     depends_on:
       decision-engine:
         condition: service_healthy
@@ -103,12 +204,14 @@ services:
         condition: service_healthy
     networks:
       - screen-damage
-    restart: unless-stopped
+    tmpfs:
+      - "/tmp:rw,noexec,nosuid,size=64m"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(JSON.parse(d).status==='ok'?0:1))})"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
 # ============================================
 # 网络
@@ -116,6 +219,10 @@ services:
 networks:
   screen-damage:
     driver: bridge
+    ipam:
+      config:
+        - subnet: "${SCREEN_DAMAGE_SUBNET:-172.30.240.0/24}"
+          gateway: "${SCREEN_DAMAGE_GATEWAY:-172.30.240.1}"
 
 # ============================================
 # 持久化数据
@@ -123,3 +230,4 @@ networks:
 volumes:
   admin-data:
   knowledge-data:
+  model-cache:

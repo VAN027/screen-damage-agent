@@ -1,21 +1,249 @@
 import Database from 'better-sqlite3'
-import { readFile, mkdir, access } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, access, chmod, rename, unlink, readdir, stat } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import crypto from 'node:crypto'
 import { normalizeEvalField } from './field-normalize.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = join(__dirname, '..', 'data')
+export const DATA_DIR = resolve(process.env.KNOWLEDGE_DATA_DIR || join(__dirname, '..', 'data'))
 const BACKUP_DIR = join(DATA_DIR, 'backup')
+const REVIEW_IMAGES_DIR = join(DATA_DIR, 'review-images')
 const DB_PATH = join(DATA_DIR, 'knowledge.db')
 const CASES_FILE = join(DATA_DIR, 'cases.json')
 const TRAINING_FILE = join(DATA_DIR, 'training.json')
 
+function configuredReviewImageRetentionDays() {
+  const parsed = Number.parseInt(process.env.REVIEW_IMAGE_RETENTION_DAYS || '90', 10)
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 3650 ? parsed : 90
+}
+
+export const REVIEW_IMAGE_RETENTION_DAYS = configuredReviewImageRetentionDays()
+
+const REVIEW_IMAGE_TYPES = Object.freeze({
+  jpeg: { mime: 'image/jpeg', extension: 'jpg' },
+  jpg: { mime: 'image/jpeg', extension: 'jpg' },
+  png: { mime: 'image/png', extension: 'png' },
+  webp: { mime: 'image/webp', extension: 'webp' },
+  gif: { mime: 'image/gif', extension: 'gif' },
+  bmp: { mime: 'image/bmp', extension: 'bmp' },
+  avif: { mime: 'image/avif', extension: 'avif' },
+})
+
+function sqliteTimestamp(value = new Date()) {
+  return value.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function reviewImageSignatureMatches(subtype, data) {
+  if (!Buffer.isBuffer(data) || data.length < 4) return false
+  if (subtype === 'jpeg' || subtype === 'jpg') return data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  if (subtype === 'png') return data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  if (subtype === 'gif') return data.subarray(0, 6).toString('ascii') === 'GIF87a' || data.subarray(0, 6).toString('ascii') === 'GIF89a'
+  if (subtype === 'webp') return data.length >= 12 && data.subarray(0, 4).toString('ascii') === 'RIFF' && data.subarray(8, 12).toString('ascii') === 'WEBP'
+  if (subtype === 'bmp') return data[0] === 0x42 && data[1] === 0x4d
+  if (subtype === 'avif') return data.length >= 12 && data.subarray(4, 8).toString('ascii') === 'ftyp' && data.subarray(8, 12).toString('ascii').includes('avif')
+  return false
+}
+
+function decodeReviewImageDataUrl(value) {
+  const match = typeof value === 'string'
+    ? value.match(/^data:image\/(jpeg|jpg|png|webp|gif|bmp|avif);base64,([A-Za-z0-9+/]+={0,2})$/i)
+    : null
+  if (!match) throw new Error('纠错图片不是受支持的 Base64 图片')
+  const subtype = match[1].toLowerCase()
+  const type = REVIEW_IMAGE_TYPES[subtype]
+  const data = Buffer.from(match[2], 'base64')
+  if (!data.length || !reviewImageSignatureMatches(subtype, data)) throw new Error('纠错图片内容与格式不匹配')
+  return { data, ...type }
+}
+
+function resolveStoredReviewImagePath(storedPath) {
+  if (typeof storedPath !== 'string' || !storedPath.trim()) return null
+  const absolute = resolve(DATA_DIR, storedPath)
+  if (absolute === REVIEW_IMAGES_DIR || !absolute.startsWith(REVIEW_IMAGES_DIR + sep)) {
+    throw new Error('纠错图片路径越界')
+  }
+  return absolute
+}
+
+async function existingFile(path) {
+  try {
+    await access(path)
+    return true
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false
+    throw error
+  }
+}
+
+export async function archivePendingCaseImage(id) {
+  const safeId = Number(id)
+  if (!Number.isSafeInteger(safeId) || safeId <= 0) throw new Error('纠错审核记录 id 不合法')
+  const activeDb = getDb()
+  const row = activeDb.prepare(`SELECT id, status, imageBase64, image_path, image_mime_type,
+      image_file_size, image_archived_at, image_expires_at
+    FROM pending_cases WHERE id = ?`).get(safeId)
+  if (!row) return { id: safeId, archived: false, missing: true }
+  if (!['approved', 'rejected'].includes(row.status)) return { id: safeId, archived: false, pending: true }
+
+  const now = new Date()
+  const archivedAt = sqliteTimestamp(now)
+  const expiresAt = sqliteTimestamp(new Date(now.getTime() + REVIEW_IMAGE_RETENTION_DAYS * 86400000))
+  const storedAbsolute = resolveStoredReviewImagePath(row.image_path)
+  if (storedAbsolute && await existingFile(storedAbsolute)) {
+    activeDb.prepare(`UPDATE pending_cases SET
+        imageBase64 = '', correction_payload = '',
+        image_archived_at = CASE WHEN image_archived_at = '' THEN ? ELSE image_archived_at END,
+        image_expires_at = CASE WHEN image_expires_at = '' THEN ? ELSE image_expires_at END,
+        image_deleted_at = ''
+      WHERE id = ? AND status IN ('approved', 'rejected')`).run(archivedAt, expiresAt, safeId)
+    return { id: safeId, archived: true, path: row.image_path, reused: true }
+  }
+
+  if (!row.imageBase64) {
+    activeDb.prepare(`UPDATE pending_cases SET correction_payload = ''
+      WHERE id = ? AND status IN ('approved', 'rejected')`).run(safeId)
+    return { id: safeId, archived: false, noImage: true }
+  }
+
+  const decoded = decodeReviewImageDataUrl(row.imageBase64)
+  const digest = crypto.createHash('sha256').update(decoded.data).digest('hex')
+  const dateParts = archivedAt.slice(0, 10).split('-')
+  const targetDir = join(REVIEW_IMAGES_DIR, ...dateParts)
+  await ensureDir(targetDir)
+  const target = join(targetDir, `pending-${safeId}-${digest.slice(0, 16)}.${decoded.extension}`)
+  const storedPath = relative(DATA_DIR, target).split(sep).join('/')
+  let created = false
+  try {
+    try {
+      await writeFile(target, decoded.data, { flag: 'wx', mode: 0o600 })
+      created = true
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error
+    }
+    await chmod(target, 0o600)
+    const updated = activeDb.prepare(`UPDATE pending_cases SET
+        image_path = ?, image_mime_type = ?, image_file_size = ?,
+        image_archived_at = ?, image_expires_at = ?, image_deleted_at = '',
+        imageBase64 = '', correction_payload = ''
+      WHERE id = ? AND status IN ('approved', 'rejected')`).run(
+      storedPath, decoded.mime, decoded.data.length, archivedAt, expiresAt, safeId,
+    )
+    if (updated.changes !== 1) {
+      if (created) await unlink(target).catch(() => {})
+      return { id: safeId, archived: false, stateChanged: true }
+    }
+    return { id: safeId, archived: true, path: storedPath, bytes: decoded.data.length, expiresAt }
+  } catch (error) {
+    if (created) await unlink(target).catch(() => {})
+    throw error
+  }
+}
+
+export async function archiveTerminalPendingImages() {
+  const activeDb = getDb()
+  const rows = activeDb.prepare(`SELECT id FROM pending_cases
+    WHERE status IN ('approved', 'rejected')
+      AND (imageBase64 <> '' OR correction_payload <> '')`).all()
+  let archived = 0
+  let failed = 0
+  for (const row of rows) {
+    try {
+      const result = await archivePendingCaseImage(row.id)
+      if (result.archived) archived++
+    } catch (error) {
+      failed++
+      console.warn(`[knowledge-ai] 纠错审核记录 ${row.id} 图片归档失败: ${error.message}`)
+    }
+  }
+  return { scanned: rows.length, archived, failed }
+}
+
+export async function readPendingCaseImageDataUrl(id) {
+  const safeId = Number(id)
+  if (!Number.isSafeInteger(safeId) || safeId <= 0) throw new Error('纠错审核记录 id 不合法')
+  const row = getDb().prepare(`SELECT imageBase64, image_path, image_mime_type
+    FROM pending_cases WHERE id = ?`).get(safeId)
+  if (!row) return null
+  if (row.imageBase64) return row.imageBase64
+  const absolute = resolveStoredReviewImagePath(row.image_path)
+  if (!absolute) return ''
+  try {
+    const data = await readFile(absolute)
+    const mime = /^image\/(?:jpeg|png|webp|gif|bmp|avif)$/i.test(row.image_mime_type)
+      ? row.image_mime_type.toLowerCase()
+      : 'application/octet-stream'
+    if (mime === 'application/octet-stream') throw new Error('纠错图片 MIME 类型无效')
+    return `data:${mime};base64,${data.toString('base64')}`
+  } catch (error) {
+    if (error?.code === 'ENOENT') return ''
+    throw error
+  }
+}
+
+export async function cleanupExpiredPendingCaseImages(now = new Date()) {
+  const activeDb = getDb()
+  const cutoff = sqliteTimestamp(now)
+  const rows = activeDb.prepare(`SELECT id, image_path FROM pending_cases
+    WHERE image_path <> '' AND image_expires_at <> '' AND image_expires_at <= ?
+      AND status IN ('approved', 'rejected')`).all(cutoff)
+  let deleted = 0
+  const fileErrors = []
+  for (const row of rows) {
+    try {
+      const absolute = resolveStoredReviewImagePath(row.image_path)
+      if (absolute) await unlink(absolute).catch(error => { if (error?.code !== 'ENOENT') throw error })
+      const updated = activeDb.prepare(`UPDATE pending_cases SET
+          image_path = '', image_deleted_at = ?
+        WHERE id = ? AND image_path = ?`).run(cutoff, row.id, row.image_path)
+      deleted += updated.changes
+    } catch (error) {
+      fileErrors.push({ id: row.id, message: error.message })
+    }
+  }
+  return { scanned: rows.length, deleted, fileErrors }
+}
+
+export async function removePendingCaseImageFiles(storedPaths) {
+  const uniquePaths = [...new Set((storedPaths || []).filter(Boolean).map(String))]
+  const fileErrors = []
+  let deletedFiles = 0
+  for (const storedPath of uniquePaths) {
+    try {
+      const absolute = resolveStoredReviewImagePath(storedPath)
+      if (!absolute) continue
+      await unlink(absolute)
+      deletedFiles++
+    } catch (error) {
+      if (error?.code !== 'ENOENT') fileErrors.push({ path: storedPath, message: error.message })
+    }
+  }
+  return { deletedFiles, fileErrors }
+}
+
+// knowledge-ai 是独立进程；其新建的 DB/WAL/备份/用户图片默认仅服务账号可读写。
+process.umask(0o077)
+
 let db = null
+let initPromise = null
 
 async function ensureDir(dir) {
-  try { await access(dir) } catch { await mkdir(dir, { recursive: true }) }
+  try { await access(dir) } catch { await mkdir(dir, { recursive: true, mode: 0o700 }) }
+  await chmod(dir, 0o700)
+}
+
+async function secureDatabaseFiles() {
+  for (const path of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
+    try { await chmod(path, 0o600) } catch (error) { if (error?.code !== 'ENOENT') throw error }
+  }
+  try {
+    for (const name of await readdir(BACKUP_DIR)) {
+      if (/^knowledge-backup-.*\.db(?:\..*\.tmp)?$/.test(name)) await chmod(join(BACKUP_DIR, name), 0o600)
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
 }
 
 export function getDb() {
@@ -24,8 +252,21 @@ export function getDb() {
 }
 
 export async function initDb() {
+  if (!initPromise) {
+    initPromise = initializeDb().catch(error => {
+      try { db?.close() } catch {}
+      db = null
+      initPromise = null
+      throw error
+    })
+  }
+  return initPromise
+}
+
+async function initializeDb() {
   await ensureDir(DATA_DIR)
   await ensureDir(BACKUP_DIR)
+  await ensureDir(REVIEW_IMAGES_DIR)
 
   db = new Database(DB_PATH)
 
@@ -33,6 +274,7 @@ export async function initDb() {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')
+  await secureDatabaseFiles()
 
   // 建表
   db.exec(`
@@ -65,6 +307,8 @@ export async function initDb() {
 
     CREATE TABLE IF NOT EXISTS pending_cases (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      feedback_id INTEGER DEFAULT 0,
+      source_case_id TEXT DEFAULT '',
       title TEXT DEFAULT '',
       deviceModel TEXT DEFAULT '',
       statusObs TEXT DEFAULT '',
@@ -75,10 +319,18 @@ export async function initDb() {
       result TEXT DEFAULT '',
       remark TEXT DEFAULT '',
       imageBase64 TEXT DEFAULT '',
+      image_path TEXT DEFAULT '',
+      image_mime_type TEXT DEFAULT '',
+      image_file_size INTEGER DEFAULT 0,
+      image_archived_at TEXT DEFAULT '',
+      image_expires_at TEXT DEFAULT '',
+      image_deleted_at TEXT DEFAULT '',
+      correction_payload TEXT DEFAULT '',
       source TEXT DEFAULT 'manual_correction',
       status TEXT DEFAULT 'pending',
       reviewed_by TEXT DEFAULT '',
       review_remark TEXT DEFAULT '',
+      approved_case_id TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now')),
       reviewed_at TEXT DEFAULT ''
     );
@@ -93,6 +345,7 @@ export async function initDb() {
       originalShape TEXT DEFAULT '',
       source TEXT DEFAULT 'manual',
       imageBase64 TEXT DEFAULT '',
+      source_pending_id INTEGER DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -131,10 +384,52 @@ export async function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       case_id TEXT DEFAULT '',
       conclusion TEXT DEFAULT '',
-      feedback TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'unconfirmed',
       remark TEXT DEFAULT '',
       source TEXT DEFAULT 'h5',
+      capability_hash TEXT NOT NULL DEFAULT '',
+      correction_pending_id INTEGER DEFAULT NULL,
+      correction_consumed_at TEXT DEFAULT '',
+      submission_id TEXT DEFAULT '',
+      process_status TEXT NOT NULL DEFAULT 'completed',
+      install_status TEXT DEFAULT '',
+      auth_personnel TEXT DEFAULT '',
+      package_damage TEXT DEFAULT '',
+      fault_links TEXT DEFAULT '[]',
+      analysis_mode TEXT DEFAULT '',
+      analysis_payload TEXT DEFAULT '{}',
+      decision_payload TEXT DEFAULT '{}',
+      llm_conclusion TEXT DEFAULT '',
+      final_result TEXT DEFAULT '',
+      image_count INTEGER DEFAULT 0,
+      error_message TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS expert_review (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id TEXT DEFAULT '',
+      conclusion TEXT DEFAULT '',
+      verdict TEXT NOT NULL DEFAULT 'expert_verified',
+      remark TEXT DEFAULT '',
+      reviewed_by TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS appeal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id TEXT DEFAULT '',
+      conclusion TEXT DEFAULT '',
+      result TEXT NOT NULL DEFAULT '',
+      remark TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT DEFAULT (datetime('now'))
     );
   `)
 
@@ -172,6 +467,99 @@ export async function initDb() {
   migrateCol('cases', 'remark', "TEXT DEFAULT ''")
   migrateCol('training', 'remark', "TEXT DEFAULT ''")
   migrateCol('cases', 'review_status', "TEXT DEFAULT 'approved'")
+  migrateCol('pending_cases', 'approved_case_id', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'feedback_id', 'INTEGER DEFAULT 0')
+  migrateCol('pending_cases', 'source_case_id', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'correction_payload', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'image_path', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'image_mime_type', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'image_file_size', 'INTEGER DEFAULT 0')
+  migrateCol('pending_cases', 'image_archived_at', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'image_expires_at', "TEXT DEFAULT ''")
+  migrateCol('pending_cases', 'image_deleted_at', "TEXT DEFAULT ''")
+  migrateCol('training', 'source_pending_id', 'INTEGER DEFAULT NULL')
+  migrateCol('feedback', 'capability_hash', "TEXT NOT NULL DEFAULT ''")
+  migrateCol('feedback', 'correction_pending_id', 'INTEGER DEFAULT NULL')
+  migrateCol('feedback', 'correction_consumed_at', "TEXT DEFAULT ''")
+
+  // == 迁移：feedback 表改造为四态 status 列（重建表，移除旧的 NOT NULL feedback 列） ==
+  const feedbackCols = db.prepare('PRAGMA table_info(feedback)').all().map(c => c.name)
+  if (feedbackCols.includes('feedback')) {
+    db.transaction(() => {
+      db.exec('ALTER TABLE feedback RENAME TO feedback_old')
+      db.exec(`CREATE TABLE feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id TEXT DEFAULT '',
+        conclusion TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'unconfirmed',
+        remark TEXT DEFAULT '',
+        source TEXT DEFAULT 'h5',
+        capability_hash TEXT NOT NULL DEFAULT '',
+        correction_pending_id INTEGER DEFAULT NULL,
+        correction_consumed_at TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+      )`)
+      db.exec(`INSERT INTO feedback (id, case_id, conclusion, status, remark, source, created_at)
+        SELECT id, case_id, conclusion,
+          CASE feedback WHEN 'correct' THEN 'confirmed_correct' WHEN 'incorrect' THEN 'reported_incorrect' ELSE 'unconfirmed' END,
+          remark, source, created_at
+        FROM feedback_old`)
+      db.exec('DROP TABLE feedback_old')
+    })()
+  }
+
+  // == 迁移：feedback 升级为在线鉴定主记录，图片元数据单独存表 ==
+  migrateCol('feedback', 'submission_id', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'process_status', "TEXT NOT NULL DEFAULT 'completed'")
+  migrateCol('feedback', 'install_status', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'auth_personnel', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'package_damage', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'fault_links', "TEXT DEFAULT '[]'")
+  migrateCol('feedback', 'analysis_mode', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'analysis_payload', "TEXT DEFAULT '{}'")
+  migrateCol('feedback', 'decision_payload', "TEXT DEFAULT '{}'")
+  migrateCol('feedback', 'llm_conclusion', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'final_result', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'image_count', 'INTEGER DEFAULT 0')
+  migrateCol('feedback', 'error_message', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'updated_at', "TEXT DEFAULT ''")
+  migrateCol('feedback', 'completed_at', "TEXT DEFAULT ''")
+  db.exec(`CREATE TABLE IF NOT EXISTS feedback_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feedback_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    mime_type TEXT NOT NULL,
+    file_size INTEGER NOT NULL DEFAULT 0,
+    width INTEGER DEFAULT 0,
+    height INTEGER DEFAULT 0,
+    sha256 TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (feedback_id) REFERENCES feedback(id) ON DELETE CASCADE
+  )`)
+  db.prepare("UPDATE feedback SET updated_at = created_at WHERE updated_at = ''").run()
+
+  // 旧版本终态行可能仍保存 Base64。先可靠写入磁盘，再清空大字段；失败时保留原数据供下次重试。
+  const archiveMigration = await archiveTerminalPendingImages()
+  if (archiveMigration.failed) {
+    console.warn(`[knowledge-ai] ${archiveMigration.failed} 条历史纠错图片归档失败，Base64 已保留以便重试`)
+  }
+
+  // 每条报错反馈只能生成一个待审纠错，每个待审纠错也只能写入一条训练样本。
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_feedback_once
+      ON pending_cases(feedback_id) WHERE feedback_id > 0;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_training_pending_once
+      ON training(source_pending_id) WHERE source_pending_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_submission_id
+      ON feedback(submission_id) WHERE submission_id <> '';
+    CREATE INDEX IF NOT EXISTS idx_feedback_created_at
+      ON feedback(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_feedback_process_status
+      ON feedback(process_status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_feedback_images_feedback
+      ON feedback_images(feedback_id, sort_order);
+  `)
 
   // 预编译常用语句
   const stmts = {
@@ -180,16 +568,46 @@ export async function initDb() {
     approvedCases: db.prepare("SELECT * FROM cases WHERE review_status = 'approved' ORDER BY created_at DESC"),
     caseById: db.prepare('SELECT * FROM cases WHERE id = ?'),
     insertPending: db.prepare(`INSERT INTO pending_cases (
-      title, deviceModel, statusObs, crackLocation, crackShape, crackPrinciple,
-      crackStage, result, remark, imageBase64, source
+      feedback_id, source_case_id, title, deviceModel, statusObs, crackLocation,
+      crackShape, crackPrinciple, crackStage, result, remark, imageBase64,
+      correction_payload, source
     ) VALUES (
-      @title, @deviceModel, @statusObs, @crackLocation, @crackShape, @crackPrinciple,
-      @crackStage, @result, @remark, @imageBase64, @source
+      @feedback_id, @source_case_id, @title, @deviceModel, @statusObs, @crackLocation,
+      @crackShape, @crackPrinciple, @crackStage, @result, @remark, @imageBase64,
+      @correction_payload, @source
     )`),
     pendingAll: db.prepare('SELECT * FROM pending_cases ORDER BY created_at DESC'),
     pendingById: db.prepare('SELECT * FROM pending_cases WHERE id = ?'),
     pendingUpdateStatus: db.prepare(`UPDATE pending_cases SET status = ?, reviewed_by = ?, review_remark = ?, reviewed_at = datetime('now') WHERE id = ?`),
+    pendingClaimApproval: db.prepare(`UPDATE pending_cases SET
+      status = 'approving', approved_case_id = ?, reviewed_by = ?, review_remark = ?, reviewed_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`),
+    pendingFinalizeApproval: db.prepare(`UPDATE pending_cases SET
+      status = 'approved', reviewed_by = ?, review_remark = ?, reviewed_at = datetime('now')
+      WHERE id = ? AND status = 'approving' AND approved_case_id = ?`),
+    pendingResetApproval: db.prepare(`UPDATE pending_cases SET
+      status = 'pending', approved_case_id = '', reviewed_at = ''
+      WHERE id = ? AND status = 'approving' AND approved_case_id = ?`),
+    pendingReject: db.prepare(`UPDATE pending_cases SET
+      status = 'rejected', reviewed_by = ?, review_remark = ?, reviewed_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`),
     pendingCount: db.prepare('SELECT COUNT(*) as total FROM pending_cases WHERE status = ?'),
+    feedbackForCorrection: db.prepare(`SELECT id, case_id, status, capability_hash, correction_pending_id
+      FROM feedback WHERE id = ?`),
+    prepareFeedbackForCorrection: db.prepare(`UPDATE feedback SET
+      status = 'reported_incorrect', remark = @remark
+      WHERE id = @feedback_id
+        AND case_id = @case_id
+        AND capability_hash = @capability_hash
+        AND status IN ('unconfirmed', 'reported_incorrect')
+        AND correction_pending_id IS NULL`),
+    consumeFeedbackForCorrection: db.prepare(`UPDATE feedback SET
+      correction_pending_id = @pending_id, correction_consumed_at = datetime('now')
+      WHERE id = @feedback_id
+        AND case_id = @case_id
+        AND capability_hash = @capability_hash
+        AND status = 'reported_incorrect'
+        AND correction_pending_id IS NULL`),
     insertCase: db.prepare(`INSERT INTO cases (
       id, title, deviceModel, symptoms, crackShape, crackLocation,
       physicalFeature, liquidState, installStatus, packageDamage,
@@ -225,12 +643,13 @@ export async function initDb() {
     insertTraining: db.prepare(`INSERT INTO training (
       features, statusObs, location, shape, principle, stage, conclusion,
       caseId, originalStatusObs, originalLocation, originalShape, originalPrinciple, originalStage, originalConclusion,
-      source, imageBase64, remark
+      source, imageBase64, remark, source_pending_id
     ) VALUES (
       @features, @statusObs, @location, @shape, @principle, @stage, @conclusion,
       @caseId, @originalStatusObs, @originalLocation, @originalShape, @originalPrinciple, @originalStage, @originalConclusion,
-      @source, @imageBase64, @remark
+      @source, @imageBase64, @remark, @source_pending_id
     )`),
+    trainingByPendingId: db.prepare('SELECT * FROM training WHERE source_pending_id = ?'),
     countTraining: db.prepare('SELECT COUNT(*) as total FROM training'),
   }
 
@@ -242,46 +661,70 @@ export async function initDb() {
  */
 export async function migrateFromJson(stmts) {
   let migrated = 0
-  // 先检查是否已有数据
-  if (stmts.countCases.get().total > 0) {
-    console.log('[db] SQLite 已有数据，跳过迁移')
-    return 0
+  const hasMigration = db.prepare('SELECT 1 FROM schema_migrations WHERE name = ?')
+  const markMigration = db.prepare('INSERT INTO schema_migrations (name) VALUES (?)')
+
+  const readLegacyArray = async (path, label) => {
+    let raw
+    try { raw = await readFile(path, 'utf-8') }
+    catch (error) {
+      if (error?.code === 'ENOENT') return null
+      throw new Error(`[db] ${label} 读取失败: ${error.message}`)
+    }
+    let parsed
+    try { parsed = JSON.parse(raw) }
+    catch (error) { throw new Error(`[db] ${label} JSON 损坏: ${error.message}`) }
+    if (!Array.isArray(parsed)) throw new Error(`[db] ${label} 必须是 JSON 数组`)
+    return parsed
   }
 
-  // 迁移 cases.json
-  try {
-    const raw = await readFile(CASES_FILE, 'utf-8')
-    const cases = JSON.parse(raw)
-    if (Array.isArray(cases) && cases.length > 0) {
-      const insertMany = db.transaction((items) => {
-        for (const c of items) {
+  if (!hasMigration.get('legacy_cases_json_v1')) {
+    const cases = await readLegacyArray(CASES_FILE, 'cases.json')
+    if (cases === null) {
+      console.log('[db] cases.json 不存在，跳过')
+    } else {
+      let inserted = 0
+      db.transaction(() => {
+        for (const c of cases) {
+          if (!c || typeof c !== 'object' || Array.isArray(c) || typeof c.id !== 'string' || !c.id) {
+            throw new Error('cases.json 包含缺少 id 的无效案例')
+          }
+          if (stmts.caseById.get(c.id)) continue
           stmts.insertCase.run(serializeCase(c))
+          inserted++
         }
-      })
-      insertMany(cases)
-      migrated += cases.length
-      console.log(`[db] 已从 cases.json 迁移 ${cases.length} 条案例`)
+        markMigration.run('legacy_cases_json_v1')
+      })()
+      migrated += inserted
+      console.log(`[db] 已从 cases.json 迁移 ${inserted} 条案例（跳过 ${cases.length - inserted} 条重复项）`)
     }
-  } catch {
-    console.log('[db] cases.json 不存在或为空，跳过')
   }
 
-  // 迁移 training.json
-  try {
-    const raw = await readFile(TRAINING_FILE, 'utf-8')
-    const training = JSON.parse(raw)
-    if (Array.isArray(training) && training.length > 0) {
-      const insertMany = db.transaction((items) => {
-        for (const t of items) {
-          stmts.insertTraining.run(serializeTraining(t))
+  if (!hasMigration.get('legacy_training_json_v1')) {
+    const training = await readLegacyArray(TRAINING_FILE, 'training.json')
+    if (training === null) {
+      console.log('[db] training.json 不存在，跳过')
+    } else {
+      // 旧训练表无自然主键；以完整序列化内容去重，避免迁移中断或旧版本重复导入。
+      const fingerprints = new Set(stmts.allTraining.all().map(row =>
+        crypto.createHash('sha256').update(JSON.stringify(serializeTraining(deserializeTraining(row)))).digest('hex')
+      ))
+      let inserted = 0
+      db.transaction(() => {
+        for (const t of training) {
+          if (!t || typeof t !== 'object' || Array.isArray(t)) throw new Error('training.json 包含无效训练数据')
+          const serialized = serializeTraining(t)
+          const fingerprint = crypto.createHash('sha256').update(JSON.stringify(serialized)).digest('hex')
+          if (fingerprints.has(fingerprint)) continue
+          stmts.insertTraining.run(serialized)
+          fingerprints.add(fingerprint)
+          inserted++
         }
-      })
-      insertMany(training)
-      migrated += training.length
-      console.log(`[db] 已从 training.json 迁移 ${training.length} 条训练数据`)
+        markMigration.run('legacy_training_json_v1')
+      })()
+      migrated += inserted
+      console.log(`[db] 已从 training.json 迁移 ${inserted} 条训练数据（跳过 ${training.length - inserted} 条重复项）`)
     }
-  } catch {
-    console.log('[db] training.json 不存在或为空，跳过')
   }
 
   return migrated
@@ -358,6 +801,9 @@ export function serializeTraining(t) {
     source: t.source || 'manual',
     imageBase64: t.imageBase64 || '',
     remark: t.remark || '',
+    source_pending_id: Number.isSafeInteger(Number(t.source_pending_id)) && Number(t.source_pending_id) > 0
+      ? Number(t.source_pending_id)
+      : null,
   }
 }
 
@@ -395,21 +841,32 @@ export async function backupDb(backupPath) {
   if (!db) await initDb()
   const date = new Date().toISOString().slice(0, 10)
   const dest = backupPath || join(BACKUP_DIR, `knowledge-backup-${date}.db`)
-  const { copyFile, unlink } = await import('node:fs/promises')
+  const tempDest = `${dest}.${process.pid}.${crypto.randomUUID()}.tmp`
 
   // 先 checkpoint 回收 WAL 空间
   checkpointWal()
 
-  // 删除已有备份文件（VACUUM INTO 不覆盖）
-  try { await unlink(dest) } catch { /* 不存在则忽略 */ }
-
-  // VACUUM INTO 到备份文件（参数由内部生成，安全可靠）
-  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`)
-  console.log(`[db] 数据库已备份到: ${dest} (${(await import('node:fs/promises')).stat(dest).then(s => s.size).catch(() => 0)} bytes)`)
+  try {
+    // 先生成完整私有临时文件，再原子替换旧备份，避免失败时丢失最后一份可用备份。
+    db.exec(`VACUUM INTO '${tempDest.replace(/'/g, "''")}'`)
+    await chmod(tempDest, 0o600)
+    try {
+      await rename(tempDest, dest)
+    } catch (error) {
+      if (!['EEXIST', 'EPERM'].includes(error?.code)) throw error
+      await unlink(dest).catch(unlinkError => { if (unlinkError?.code !== 'ENOENT') throw unlinkError })
+      await rename(tempDest, dest)
+    }
+    await chmod(dest, 0o600)
+  } catch (error) {
+    await unlink(tempDest).catch(() => {})
+    throw error
+  }
+  const backupSize = await stat(dest).then(info => info.size).catch(() => 0)
+  console.log(`[db] 数据库已备份到: ${dest} (${backupSize} bytes)`)
 
   // 清理旧备份（保留最近 7 天）
   try {
-    const { readdir, unlink } = await import('node:fs/promises')
     const files = await readdir(BACKUP_DIR)
     const backupFiles = files
       .filter(f => f.startsWith('knowledge-backup-') && f.endsWith('.db'))
@@ -570,35 +1027,78 @@ export function deleteEvalsByIds(ids) {
   return db.prepare(`DELETE FROM evaluations WHERE id IN (${placeholders})`).run(...ids).changes
 }
 
-// ===== 在线判定正确率反馈 =====
+// ===== 在线判定反馈（四态：unconfirmed / confirmed_correct / reported_incorrect / expert_verified）=====
+// 说明：用户反馈、专家复核、最终申诉分表记录，互不覆盖。
+//  - feedback      用户反馈（unconfirmed / confirmed_correct / reported_incorrect）
+//  - expert_review 专家抽检复核（expert_verified / expert_rejected）
+//  - appeal        最终申诉结果
 
 export function saveFeedback(data) {
   if (!db) throw new Error('DB not initialized')
-  const info = db.prepare(`INSERT INTO feedback (case_id, conclusion, feedback, remark, source)
-    VALUES (@case_id, @conclusion, @feedback, @remark, @source)`).run({
+  const capabilityToken = crypto.randomBytes(32).toString('base64url')
+  const capabilityHash = crypto.createHash('sha256').update(capabilityToken).digest('hex')
+  const info = db.prepare(`INSERT INTO feedback (case_id, conclusion, status, remark, source, capability_hash)
+    VALUES (@case_id, @conclusion, 'unconfirmed', @remark, 'h5', @capability_hash)`).run({
     case_id: data.caseId || '',
     conclusion: data.conclusion || '',
-    feedback: data.feedback,
     remark: data.remark || '',
-    source: data.source || 'h5',
+    capability_hash: capabilityHash,
   })
-  return { id: Number(info.lastInsertRowid), ...getFeedbackStats() }
+  return { id: Number(info.lastInsertRowid), capabilityToken, ...getFeedbackStats() }
 }
 
-export function reportFeedback(id, remark) {
+function setFeedbackStatus(id, status, remark, capabilityToken) {
   if (!db) throw new Error('DB not initialized')
   if (!id) throw new Error('缺少反馈记录 id')
-  const info = db.prepare("UPDATE feedback SET feedback = 'incorrect', remark = @remark WHERE id = @id").run({ id, remark: remark || '' })
+  if (typeof capabilityToken !== 'string' || capabilityToken.length < 32 || capabilityToken.length > 128) {
+    throw new Error('缺少有效的反馈凭证')
+  }
+  const allowed = ['confirmed_correct', 'reported_incorrect']
+  if (!allowed.includes(status)) throw new Error('无效的反馈状态: ' + status)
+  const capabilityHash = crypto.createHash('sha256').update(capabilityToken).digest('hex')
+  const info = db.prepare(`UPDATE feedback SET status = @status, remark = @remark
+    WHERE id = @id AND capability_hash = @capability_hash AND status = 'unconfirmed'`).run({
+    id,
+    status,
+    remark: remark || '',
+    capability_hash: capabilityHash,
+  })
   return { updated: info.changes, ...getFeedbackStats() }
 }
 
+export function reportFeedback(id, remark, capabilityToken) {
+  return setFeedbackStatus(id, 'reported_incorrect', remark, capabilityToken)
+}
+
+export function confirmFeedback(id, capabilityToken) {
+  return setFeedbackStatus(id, 'confirmed_correct', '', capabilityToken)
+}
+
 export function getFeedbackStats() {
-  if (!db) return { correct: 0, incorrect: 0, total: 0, accuracy: 0 }
-  const correct = db.prepare("SELECT COUNT(*) as c FROM feedback WHERE feedback = 'correct'").get().c
-  const incorrect = db.prepare("SELECT COUNT(*) as c FROM feedback WHERE feedback = 'incorrect'").get().c
-  const total = correct + incorrect
-  const accuracy = total > 0 ? Math.round((correct / total) * 1000) / 10 : 0
-  return { correct, incorrect, total, accuracy }
+  if (!db) return { unconfirmed: 0, confirmed_correct: 0, reported_incorrect: 0, total: 0, reportRate: 0, unreportRate: 0 }
+  const count = (status) => db.prepare("SELECT COUNT(*) as c FROM feedback WHERE status = ? AND process_status = 'completed'").get(status).c
+  const unconfirmed = count('unconfirmed')
+  const confirmed_correct = count('confirmed_correct')
+  const reported_incorrect = count('reported_incorrect')
+  const total = unconfirmed + confirmed_correct + reported_incorrect
+  // 用户主动报错率 = 主动报错次数 / 完成判定次数；未报错率 = 1 - 主动报错率
+  const reportRate = total > 0 ? Math.round((reported_incorrect / total) * 1000) / 10 : 0
+  const unreportRate = total > 0 ? Math.round(((total - reported_incorrect) / total) * 1000) / 10 : 0
+  return { unconfirmed, confirmed_correct, reported_incorrect, total, reportRate, unreportRate }
+}
+
+export function getExpertReviewStats() {
+  if (!db) return { total: 0, expert_verified: 0, expert_rejected: 0 }
+  const total = db.prepare('SELECT COUNT(*) as c FROM expert_review').get().c
+  const expert_verified = db.prepare("SELECT COUNT(*) as c FROM expert_review WHERE verdict = 'expert_verified'").get().c
+  const expert_rejected = db.prepare("SELECT COUNT(*) as c FROM expert_review WHERE verdict = 'expert_rejected'").get().c
+  return { total, expert_verified, expert_rejected }
+}
+
+export function getAppealStats() {
+  if (!db) return { total: 0 }
+  const total = db.prepare('SELECT COUNT(*) as c FROM appeal').get().c
+  return { total }
 }
 
 // ===== 集中式字段定义 =====
