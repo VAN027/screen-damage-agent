@@ -379,7 +379,52 @@ const routes = [
       }
     },
   },
+  // ========== 电视方向调试页及受保护代理 ==========
+  {
+    method: 'POST',
+    path: '/api/admin/debug/tv-orient',
+    auth: 'admin',
+    maxBodyBytes: 16 * 1024 * 1024,
+    handler: (req, res, { body }) => pipeProxy(
+      'POST',
+      `${KNOWLEDGE_AI_URL}/api/debug/tv-orient`,
+      body,
+      req,
+      res,
+      {
+        'X-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        'Authorization': req.headers.authorization || '',
+      },
+    ),
+  },
+  {
+    method: 'GET',
+    path: '/api/admin/debug/tv-orient-defaults',
+    auth: 'admin',
+    handler: async (req, res) => {
+      try {
+        const result = await fetchJson(`${KNOWLEDGE_AI_URL}/api/debug/tv-orient-defaults`, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Token': INTERNAL_SERVICE_TOKEN,
+            'Authorization': req.headers.authorization || '',
+          },
+          timeout: 10000,
+        })
+        json(res, 200, result)
+      } catch (e) {
+        json(res, e.statusCode || 502, e.upstreamBody || { success: false, error: { code: e.code || 'PROXY_ERROR', message: e.message } })
+      }
+    },
+  },
   // ========== 静态文件：管理后台页面 ==========
+  {
+    method: 'GET',
+    path: '/admin/tv-orient',
+    handler: (_req, res) => {
+      serveFile(res, join(__dirname, '..', '..', 'knowledge-ai', 'tools', 'tv-orient-debug.html'), 'text/html; charset=utf-8')
+    },
+  },
   {
     method: 'GET',
     path: '/admin',
