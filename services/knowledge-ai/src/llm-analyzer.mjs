@@ -716,7 +716,12 @@ async function buildSimilarCaseContext(imageBase64, config) {
 }
 
 const ORIENTATION_COMPARE_PROMPT = `你只负责比较同一台电视的两张方向候选图。候选 A 与候选 B 相差 180°。
-请观察电视边框侧边居中的品牌文字或 Logo、屏幕内可辨认文字、底座/支架等方向证据，判断哪张图是天侧在上、地侧在下。
+请判断哪张图是电视顶部在上、地面一侧在下。请重点观察：
+1. 较宽的电视下边框；
+2. 地板、桌面、墙面和其他环境物体；
+3. 底座、支架、指示灯；
+4. 电视侧边的品牌 Logo 或文字；
+同时参考屏幕内可辨认文字、电视边框侧边居中的品牌文字或 Logo 等方向证据。
 不要分析屏幕损伤，不要根据裂纹方向猜测。证据不足必须返回 uncertain。
 只返回 JSON：{"choice":"A|B|uncertain","confidence":0到1之间的数字,"evidence":"不超过80字的可见证据"}`
 
