@@ -2000,7 +2000,8 @@ const routes = [
           return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 base64 图片' } })
         }
         const normalized = await normalizeTVImage(body.image, {
-          allowModel: false,
+          // 调试页默认复现实际 hybrid/llm 用户链路；只有显式传 false 才关闭模型兜底。
+          allowModel: body.allow_model !== false && body.allow_model !== 'false',
           useOcr: body.ocr_enabled !== false && body.ocr_enabled !== 'false',
         })
         const orientation = normalized.orientation
@@ -2013,10 +2014,16 @@ const routes = [
           need_flip180: [180, 270].includes(orientation.angle),
           tv_region: orientation.geometry || {},
           ocr_result: orientation.ocr || {},
-          params_used: { service: 'long-running', modelFallback: false },
+          params_used: {
+            service: 'user-orientation-pipeline',
+            modelFallback: body.allow_model !== false && body.allow_model !== 'false',
+          },
           annotated_base64: originalBase64,
           rotated_base64: normalizedBase64,
           requires_confirmation: orientation.requiresConfirmation,
+          source: orientation.source,
+          multimodal: orientation.multimodal || null,
+          reason: orientation.reason || '',
         } })
       } catch (e) {
         json(res, 500, { success: false, error: { code: 'DETECT_ERROR', message: e.message } })

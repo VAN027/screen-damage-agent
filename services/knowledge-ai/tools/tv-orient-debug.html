@@ -107,7 +107,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="btn-row">
       <button class="btn btn-detect" id="btnDetect" onclick="runDetect()" disabled>🔍 开始检测</button>
     </div>
-    <div class="hint">* 拖动滑块自动实时检测（280ms 防抖）</div>
+    <div class="hint">默认按实际用户链路启用多模态模型兜底：EXIF → OpenCV → OCR → 0°/180° 候选比较 → 必要时人工确认。</div>
   </div>
 
   <!-- Center: Images -->
@@ -224,7 +224,7 @@ async function runDetect() {
   btn.disabled = true; loading.style.display = 'flex';
   btn.textContent = '⏳ 检测中...';
 
-  const body = { image: currentImage };
+  const body = { image: currentImage, allow_model: true };
   document.querySelectorAll('.param-row[data-key]').forEach(row => {
     body[row.dataset.key] = apiVal(row.dataset.key);
   });
@@ -248,6 +248,9 @@ async function runDetect() {
       ? `<div style="color:#546;font-size:10px;margin:8px 0 4px;">OCR 识别文字 (${ocrTexts.length})</div>
          <div class="result-json">${ocrTexts.map(t => `${esc(t.text)}  <span style="color:#64ffda">${(t.score*100).toFixed(0)}%</span>`).join('\n')}</div>`
       : '';
+    const multimodalHtml = d.multimodal
+      ? `选择 ${esc(d.multimodal.choice || 'uncertain')}，置信度 ${(Number(d.multimodal.confidence || 0) * 100).toFixed(1)}%\n${esc(d.multimodal.evidence || d.multimodal.error || '')}`
+      : '本次未触发（OCR 已经给出可靠方向，或模型未配置）';
 
     document.getElementById('resultContent').innerHTML = `
       <div style="margin-bottom:8px;">
@@ -261,9 +264,14 @@ async function runDetect() {
         <div><span style="color:#546;">长轴:</span> ${tv.longAxis || '-'}</div>
         <div><span style="color:#546;">几何置信度:</span> ${tv.confidence ? (tv.confidence*100).toFixed(1)+'%' : '-'}</div>
         <div><span style="color:#546;">需人工确认:</span> ${d.requires_confirmation ? '是' : '否'}</div>
+        <div><span style="color:#546;">判断来源:</span> ${esc(d.source || '-')}</div>
         <div><span style="color:#546;">OCR方向:</span> ${d.ocr_result?.decision || '-'}</div>
         <div><span style="color:#546;">OCR置信度:</span> ${d.ocr_result?.confidence ? (d.ocr_result.confidence*100).toFixed(1)+'%' : '-'}</div>
       </div>
+      <div style="color:#546;font-size:10px;margin:6px 0 4px;">多模态模型兜底</div>
+      <div class="result-json">${multimodalHtml}</div>
+      <div style="color:#546;font-size:10px;margin:6px 0 4px;">判断说明</div>
+      <div class="result-json">${esc(d.reason || '-')}</div>
       ${ocrTextsHtml}
       <div style="color:#546;font-size:10px;margin-bottom:4px;">当前参数</div>
       <div class="result-json">${JSON.stringify(d.params_used, null, 1)}</div>
