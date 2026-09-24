@@ -2039,7 +2039,7 @@ const routes = [
         blur_kernel: 5, dilate_kernel: 7, dilate_iter: 1,
         area_min_ratio: 0.12, fill_min: 0.3,
         rot90_ratio: 1.1, ocr_enabled: true,
-        ocr_strip_ratio: 0.15, ocr_min_score: 0.6,
+        ocr_strip_ratio: 0.15, ocr_min_score: 0.8,
       }})
     },
   },
