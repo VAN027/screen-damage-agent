@@ -107,6 +107,7 @@ async function normalizeBuffer(buffer, { allowModel = true, useOcr = true, signa
   } catch (error) {
     return {
       buffer: sourceBuffer,
+      sourceImage: sourceDataUrl,
       normalizedImage: sourceDataUrl,
       orientation: {
         status: 'confirmation_required',
@@ -146,6 +147,7 @@ async function normalizeBuffer(buffer, { allowModel = true, useOcr = true, signa
   const normalizedBuffer = decision.angle ? await jpegBuffer(sourceBuffer, decision.angle) : sourceBuffer
   return {
     buffer: normalizedBuffer,
+    sourceImage: sourceDataUrl,
     normalizedImage: asDataUrl(normalizedBuffer),
     orientation: {
       status: decision.requiresConfirmation

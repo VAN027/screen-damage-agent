@@ -2005,7 +2005,7 @@ const routes = [
           useOcr: body.ocr_enabled !== false && body.ocr_enabled !== 'false',
         })
         const orientation = normalized.orientation
-        const originalBase64 = body.image.replace(/^data:image\/\w+;base64,/, '')
+        const sourceBase64 = (normalized.sourceImage || body.image).replace(/^data:image\/\w+;base64,/, '')
         const normalizedBase64 = normalized.normalizedImage.replace(/^data:image\/\w+;base64,/, '')
         json(res, 200, { success: true, data: {
           angle: orientation.angle,
@@ -2018,7 +2018,7 @@ const routes = [
             service: 'user-orientation-pipeline',
             modelFallback: body.allow_model !== false && body.allow_model !== 'false',
           },
-          annotated_base64: originalBase64,
+          annotated_base64: sourceBase64,
           rotated_base64: normalizedBase64,
           requires_confirmation: orientation.requiresConfirmation,
           source: orientation.source,
