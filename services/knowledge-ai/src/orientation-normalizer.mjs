@@ -6,6 +6,7 @@ const IMAGE_DATA_URL_RE = /^data:image\/(?:jpeg|jpg|png|webp|gif|bmp|avif);base6
 const MAX_INPUT_BYTES = 10 * 1024 * 1024
 const MAX_INPUT_PIXELS = 20_000_000
 const GEOMETRY_CONFIDENCE = 0.62
+const OCR_CONFIDENCE = 0.8
 const MODEL_CONFIDENCE = 0.76
 
 function orientationError(message, code = 'ORIENTATION_ERROR', statusCode = 422, details = undefined) {
@@ -58,7 +59,7 @@ export function decideOrientation(detection, modelDecision = null) {
   const geometryReliable = tvDetected && geometryConfidence >= GEOMETRY_CONFIDENCE
   const ocrReliable = geometryReliable
     && ['normal', 'rotated180'].includes(ocrDecision)
-    && ocrConfidence >= 0.64
+    && ocrConfidence >= OCR_CONFIDENCE
 
   if (ocrReliable) {
     return {
@@ -125,7 +126,7 @@ async function normalizeBuffer(buffer, { allowModel = true, useOcr = true, signa
   const geometryReliable = detection.tvDetected === true
     && Number(detection.geometryConfidence) >= GEOMETRY_CONFIDENCE
   const ocrReliable = ['normal', 'rotated180'].includes(detection?.ocr?.decision)
-    && Number(detection?.ocr?.confidence) >= 0.64
+    && Number(detection?.ocr?.confidence) >= OCR_CONFIDENCE
 
   if (allowModel && geometryReliable && !ocrReliable) {
     try {

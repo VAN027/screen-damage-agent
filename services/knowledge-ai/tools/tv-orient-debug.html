@@ -100,7 +100,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     </div>
     <div class="param-group"><h3>OCR 方向判断</h3>
       <div class="param-row" data-key="ocr_strip_ratio" data-min="5" data-max="40" data-step="1"><label>边框条带(%)</label><input type="range" value="15"><span class="val">15%</span></div>
-      <div class="param-row" data-key="ocr_min_score" data-min="30" data-max="95" data-step="5"><label>最低置信度(%)</label><input type="range" value="60"><span class="val">60%</span></div>
+      <div class="param-row" data-key="ocr_min_score" data-min="30" data-max="95" data-step="5"><label>最低置信度(%)</label><input type="range" value="80"><span class="val">80%</span></div>
       <div class="param-row"><label>启用 OCR</label><input type="checkbox" id="ocr_enabled" checked style="width:auto;margin-left:6px;"></div>
     </div>
 
@@ -172,7 +172,7 @@ function esc(s) {
 }
 
 const PRESETS = {
-  default: { canny_low:30, canny_high:100, blur_kernel:5, dilate_kernel:7, dilate_iter:1, area_min_ratio:12, fill_min:30, rot90_ratio:110, ocr_strip_ratio:15, ocr_min_score:60 },
+  default: { canny_low:30, canny_high:100, blur_kernel:5, dilate_kernel:7, dilate_iter:1, area_min_ratio:12, fill_min:30, rot90_ratio:110, ocr_strip_ratio:15, ocr_min_score:80 },
   sensitive: { canny_low:10, canny_high:50, blur_kernel:3, dilate_kernel:5, dilate_iter:2, area_min_ratio:8, fill_min:20, rot90_ratio:110, ocr_strip_ratio:15, ocr_min_score:50 },
   large_tv: { canny_low:20, canny_high:80, blur_kernel:5, dilate_kernel:9, dilate_iter:2, area_min_ratio:20, fill_min:40, rot90_ratio:110, ocr_strip_ratio:20, ocr_min_score:60 },
   small_tv: { canny_low:40, canny_high:120, blur_kernel:3, dilate_kernel:5, dilate_iter:1, area_min_ratio:5, fill_min:20, rot90_ratio:115, ocr_strip_ratio:10, ocr_min_score:50 },

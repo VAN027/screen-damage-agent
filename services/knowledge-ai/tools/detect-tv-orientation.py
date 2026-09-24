@@ -52,7 +52,7 @@ DEFAULT_PARAMS = {
     # OCR 方向判断
     "ocr_enabled": True,
     "ocr_strip_ratio": 0.15,   # 边框条带裁剪比例
-    "ocr_min_score": 0.6,      # OCR 最低置信度
+    "ocr_min_score": 0.8,      # OCR 最低置信度
 }
 
 # 懒加载 OCR 模型（进程级单例，避免重复加载）
@@ -172,7 +172,7 @@ def _extract_bezel_strips(upright_img, strip_ratio=0.15):
     return strips
 
 
-def _ocr_detect_flip(strip_images, min_score=0.6):
+def _ocr_detect_flip(strip_images, min_score=0.8):
     """
     对多个边框条带做文字方向分类，返回倒置判断。
 
@@ -367,7 +367,7 @@ def detect_tv_orientation(img_buf_or_path, params=None, annotate=False):
         # 裁剪边框条带
         strips = _extract_bezel_strips(upright_img, p.get("ocr_strip_ratio", 0.15))
         # OCR 方向判断
-        ocr_result = _ocr_detect_flip(strips, p.get("ocr_min_score", 0.6))
+        ocr_result = _ocr_detect_flip(strips, p.get("ocr_min_score", 0.8))
         need_flip180 = ocr_result.get("flip", False)
         # OCR 文本识别（识别摆正后电视上的文字内容）
         ocr_texts, ocr_text_error = _ocr_read_texts(upright_img)
