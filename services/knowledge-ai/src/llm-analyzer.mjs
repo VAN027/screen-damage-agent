@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
   showRagPanel: true,
   showAiPanel: true,
   analysisMode: 'hybrid', // 默认分析模式: hybrid=RAG+LLM 混合 | rag=仅RAG识别 | llm=仅LLM识别
+  orientationMode: 'auto', // auto=自动旋转 | manual=用户手动调整
   annoFields: [
     { id: 'title', label: '标题（可选）', type: 'input', required: false },
     { id: 'crackLocation', label: '屏损位置', type: 'tag-grid', required: true, options: ['天侧','地侧','左侧','右侧','四角区域','中央区域','全屏区域','局部不规则区域','__custom__'] },
@@ -316,6 +317,39 @@ async function fetchModelEndpoint(url, options, maxAttempts = 3) {
   }
   const code = lastError?.cause?.code || lastError?.code
   const error = new Error(`模型服务网络连接失败${code ? `（${code}）` : ''}，请稍后重试`)
+  error.cause = lastError
+  throw error
+}
+
+const RETRYABLE_MODEL_HTTP_STATUS = new Set([408, 429, 500, 502, 503, 504])
+
+async function fetchModelJsonWithRetry(url, options, maxAttempts = 4) {
+  let lastError
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, options)
+      if (!response.ok) {
+        if (RETRYABLE_MODEL_HTTP_STATUS.has(response.status) && attempt < maxAttempts && !options?.signal?.aborted) {
+          await response.body?.cancel().catch(() => {})
+          const delay = 1000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 300)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        return { response, data: null }
+      }
+      // Reading the body is deliberately inside the retry boundary. A remote
+      // socket often resets after response headers while a model result is streaming.
+      const data = await response.json()
+      return { response, data }
+    } catch (error) {
+      lastError = error
+      if (options?.signal?.aborted || !isTransientModelNetworkError(error) || attempt === maxAttempts) break
+      const delay = 1000 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 300)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  const code = lastError?.cause?.code || lastError?.code
+  const error = new Error(`模型服务网络连接失败${code ? `（${code}）` : ''}，已重试${maxAttempts}次，请稍后重试`)
   error.cause = lastError
   throw error
 }
@@ -765,7 +799,7 @@ export async function judgeTVOrientationCandidates(candidateA, candidateB, signa
       const mediaType = image.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg'
       return { type: 'image', source: { type: 'base64', media_type: mediaType, data: image.replace(/^data:image\/\w+;base64,/, '') } }
     }
-    const resp = await fetchModelEndpoint(normalizeAnthropicEndpoint(config.endpoint), {
+    const { response: resp, data } = await fetchModelJsonWithRetry(normalizeAnthropicEndpoint(config.endpoint), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -789,10 +823,9 @@ export async function judgeTVOrientationCandidates(candidateA, candidateB, signa
       await resp.body?.cancel().catch(() => {})
       throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
     }
-    const data = await resp.json()
     raw = data.content?.map(item => item.text || '').join('') || ''
   } else if (config.provider === 'ollama') {
-    const resp = await fetchModelEndpoint(config.endpoint, {
+    const { response: resp, data } = await fetchModelJsonWithRetry(config.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -812,10 +845,9 @@ export async function judgeTVOrientationCandidates(candidateA, candidateB, signa
       await resp.body?.cancel().catch(() => {})
       throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
     }
-    const data = await resp.json()
     raw = data.message?.content || ''
   } else {
-    const resp = await fetchModelEndpoint(normalizeEndpoint(config.endpoint), {
+    const { response: resp, data } = await fetchModelJsonWithRetry(normalizeEndpoint(config.endpoint), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -842,7 +874,6 @@ export async function judgeTVOrientationCandidates(candidateA, candidateB, signa
       await resp.body?.cancel().catch(() => {})
       throw new Error(`方向兜底模型调用失败（HTTP ${resp.status}）`)
     }
-    const data = await resp.json()
     raw = data.choices?.[0]?.message?.content || ''
   }
 

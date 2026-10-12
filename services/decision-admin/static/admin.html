@@ -896,6 +896,14 @@ textarea#caseField_remark { height: 50px; }
               </select>
               <div style="font-size:11px;color:#999;margin-top:4px;">此设置为前端默认值，用户可在页面上临时切换</div>
             </div>
+            <div style="margin-top:12px;">
+              <label style="display:block;margin-bottom:4px;font-size:13px;color:#555;">上传图片方向处理</label>
+              <select id="orientationMode">
+                <option value="auto">自动旋转（OpenCV + 多模态复核）</option>
+                <option value="manual">用户手动调整（跳过自动检测）</option>
+              </select>
+              <div style="font-size:11px;color:#999;margin-top:4px;">手动模式会在开始鉴定前逐张请用户确认方向，不调用 OpenCV 和方向多模态模型。</div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -1823,6 +1831,7 @@ async function loadModelConfigPage() {
     document.getElementById('showRagPanel').checked = data.showRagPanel !== false
     document.getElementById('showAiPanel').checked = data.showAiPanel !== false
     document.getElementById('analysisMode').value = data.analysisMode || 'hybrid'
+    document.getElementById('orientationMode').value = data.orientationMode === 'manual' ? 'manual' : 'auto'
     applyModelEnabledLinkage()
     if (data.annoFields && Array.isArray(data.annoFields)) {
       currentAnnoFields = data.annoFields
@@ -1879,6 +1888,7 @@ async function saveModelConfig() {
     showRagPanel: document.getElementById('showRagPanel').checked,
     showAiPanel: document.getElementById('showAiPanel').checked,
     analysisMode: document.getElementById('analysisMode').value,
+    orientationMode: document.getElementById('orientationMode').value,
   }
   try {
     await knowledgeApi('/model-config', { method: 'POST', body: JSON.stringify(body) })

@@ -14,6 +14,7 @@ import { previewDatabaseBatch, deleteDatabaseBatch } from './database-batch.mjs'
 const _fieldDefs = loadFieldDefsSync()
 import { extname, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { randomUUID } from 'node:crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -40,6 +41,59 @@ function boundedRequestString(value, field, maxLength) {
   const normalized = value.trim()
   if (normalized.length > maxLength) throw Object.assign(new Error(`${field} 超过 ${maxLength} 个字符上限`), { statusCode: 400, code: 'INVALID_FORMAT', expose: true })
   return normalized
+}
+
+const orientationDebugJobs = new Map()
+const ORIENTATION_JOB_TTL_MS = 10 * 60 * 1000
+
+function pruneOrientationDebugJobs() {
+  const now = Date.now()
+  for (const [id, job] of orientationDebugJobs) {
+    if (job.status !== 'running' && now - job.updatedAt > ORIENTATION_JOB_TTL_MS) orientationDebugJobs.delete(id)
+  }
+}
+
+function updateOrientationJob(job, event) {
+  const now = Date.now()
+  const stage = job.stages[event.stage] || { status: 'pending', durationMs: null, message: '' }
+  if (event.status === 'running') stage.startedAt = now
+  stage.status = event.status
+  stage.message = event.message || ''
+  if (Number.isFinite(Number(event.durationMs))) stage.durationMs = Math.round(Number(event.durationMs) * 10) / 10
+  else if (event.status === 'completed' && stage.startedAt) stage.durationMs = now - stage.startedAt
+  job.stages[event.stage] = stage
+  job.currentStage = event.status === 'running' ? event.stage : job.currentStage
+  job.updatedAt = now
+}
+
+async function buildOrientationDebugResult(body, onProgress = null) {
+  const normalized = await normalizeTVImage(body.image, {
+    allowModel: body.allow_model !== false && body.allow_model !== 'false',
+    // OCR 默认关闭，仅调试页显式勾选时运行；代码与接口保留用于兜底测试。
+    useOcr: body.ocr_enabled === true || body.ocr_enabled === 'true',
+    debug: true,
+    onProgress,
+  })
+  const orientation = normalized.orientation
+  return {
+    angle: orientation.angle,
+    confidence: orientation.confidence,
+    need_rot90: orientation.geometry?.baseRotation === 90,
+    need_flip180: [180, 270].includes(orientation.angle),
+    tv_region: orientation.geometry || {},
+    opencv_debug: orientation.debug || null,
+    ocr_result: orientation.ocr || {},
+    params_used: {
+      service: 'user-orientation-pipeline',
+      modelFallback: body.allow_model !== false && body.allow_model !== 'false',
+    },
+    annotated_base64: (normalized.sourceImage || body.image).replace(/^data:image\/\w+;base64,/, ''),
+    rotated_base64: normalized.normalizedImage.replace(/^data:image\/\w+;base64,/, ''),
+    requires_confirmation: orientation.requiresConfirmation,
+    source: orientation.source,
+    multimodal: orientation.multimodal || null,
+    reason: orientation.reason || '',
+  }
 }
 
 function positiveInteger(value, field = 'id') {
@@ -1085,7 +1139,7 @@ const routes = [
         for (const image of images) {
           results.push(await normalizeTVImage(image, {
             allowModel: body.allowModel !== false,
-            useOcr: true,
+            useOcr: false,
           }))
         }
         json(res, 200, {
@@ -1240,6 +1294,7 @@ const routes = [
           showRagPanel: config.showRagPanel !== false,
           showAiPanel: config.showAiPanel !== false,
           analysisMode: ['hybrid', 'rag', 'llm'].includes(config.analysisMode) ? config.analysisMode : 'hybrid',
+          orientationMode: ['auto', 'manual'].includes(config.orientationMode) ? config.orientationMode : 'auto',
         },
       })
     },
@@ -1993,38 +2048,59 @@ const routes = [
   },
   {
     method: 'POST',
+    path: '/api/debug/tv-orient-job',
+    handler: async (_req, res, { body }) => {
+      pruneOrientationDebugJobs()
+      if (body.action === 'status') {
+        const job = orientationDebugJobs.get(String(body.jobId || ''))
+        if (!job) return json(res, 404, { success: false, error: { code: 'JOB_NOT_FOUND', message: '检测任务不存在或已过期' } })
+        return json(res, 200, { success: true, data: job })
+      }
+      if (!isValidImageDataUrl(body.image)) {
+        return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 base64 图片' } })
+      }
+      const stageIds = ['preprocess', 'opencv', 'canny', 'contours', 'geometry', 'ocr', 'candidates', 'multimodal', 'fusion', 'rotation']
+      const now = Date.now()
+      const job = {
+        id: randomUUID(),
+        status: 'running',
+        currentStage: 'preprocess',
+        createdAt: now,
+        updatedAt: now,
+        totalDurationMs: null,
+        stages: Object.fromEntries(stageIds.map(id => [id, { status: 'pending', durationMs: null, message: '' }])),
+        result: null,
+        error: null,
+      }
+      orientationDebugJobs.set(job.id, job)
+      setImmediate(async () => {
+        try {
+          job.result = await buildOrientationDebugResult(body, event => updateOrientationJob(job, event))
+          job.status = 'completed'
+          job.currentStage = null
+        } catch (error) {
+          job.status = 'failed'
+          job.error = String(error.message || error).slice(0, 300)
+          if (job.currentStage && job.stages[job.currentStage]?.status === 'running') {
+            updateOrientationJob(job, { stage: job.currentStage, status: 'failed', message: job.error })
+          }
+        } finally {
+          job.updatedAt = Date.now()
+          job.totalDurationMs = job.updatedAt - job.createdAt
+        }
+      })
+      json(res, 202, { success: true, data: { jobId: job.id } })
+    },
+  },
+  {
+    method: 'POST',
     path: '/api/debug/tv-orient',
     handler: async (_req, res, { body }) => {
       try {
         if (!isValidImageDataUrl(body.image)) {
           return json(res, 400, { success: false, error: { code: 'INVALID', message: '请提供 base64 图片' } })
         }
-        const normalized = await normalizeTVImage(body.image, {
-          // 调试页默认复现实际 hybrid/llm 用户链路；只有显式传 false 才关闭模型兜底。
-          allowModel: body.allow_model !== false && body.allow_model !== 'false',
-          useOcr: body.ocr_enabled !== false && body.ocr_enabled !== 'false',
-        })
-        const orientation = normalized.orientation
-        const sourceBase64 = (normalized.sourceImage || body.image).replace(/^data:image\/\w+;base64,/, '')
-        const normalizedBase64 = normalized.normalizedImage.replace(/^data:image\/\w+;base64,/, '')
-        json(res, 200, { success: true, data: {
-          angle: orientation.angle,
-          confidence: orientation.confidence,
-          need_rot90: orientation.geometry?.baseRotation === 90,
-          need_flip180: [180, 270].includes(orientation.angle),
-          tv_region: orientation.geometry || {},
-          ocr_result: orientation.ocr || {},
-          params_used: {
-            service: 'user-orientation-pipeline',
-            modelFallback: body.allow_model !== false && body.allow_model !== 'false',
-          },
-          annotated_base64: sourceBase64,
-          rotated_base64: normalizedBase64,
-          requires_confirmation: orientation.requiresConfirmation,
-          source: orientation.source,
-          multimodal: orientation.multimodal || null,
-          reason: orientation.reason || '',
-        } })
+        json(res, 200, { success: true, data: await buildOrientationDebugResult(body) })
       } catch (e) {
         json(res, 500, { success: false, error: { code: 'DETECT_ERROR', message: e.message } })
       }
@@ -2038,7 +2114,7 @@ const routes = [
         canny_low: 30, canny_high: 100,
         blur_kernel: 5, dilate_kernel: 7, dilate_iter: 1,
         area_min_ratio: 0.12, fill_min: 0.3,
-        rot90_ratio: 1.1, ocr_enabled: true,
+        rot90_ratio: 1.1, ocr_enabled: false,
         ocr_strip_ratio: 0.15, ocr_min_score: 0.8,
       }})
     },

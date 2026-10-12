@@ -382,6 +382,23 @@ const routes = [
   // ========== 电视方向调试页及受保护代理 ==========
   {
     method: 'POST',
+    path: '/api/admin/debug/tv-orient-job',
+    auth: 'admin',
+    maxBodyBytes: 16 * 1024 * 1024,
+    handler: (req, res, { body }) => pipeProxy(
+      'POST',
+      `${KNOWLEDGE_AI_URL}/api/debug/tv-orient-job`,
+      body,
+      req,
+      res,
+      {
+        'X-Internal-Token': INTERNAL_SERVICE_TOKEN,
+        'Authorization': req.headers.authorization || '',
+      },
+    ),
+  },
+  {
+    method: 'POST',
     path: '/api/admin/debug/tv-orient',
     auth: 'admin',
     maxBodyBytes: 16 * 1024 * 1024,

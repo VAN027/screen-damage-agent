@@ -33,6 +33,26 @@ test('maps a vertical TV plus an upside-down OCR decision to 270 degrees', () =>
   assert.equal(result.source, 'geometry+ocr')
 })
 
+test('combines OCR and multimodal evidence when both select the same candidate', () => {
+  const result = decideOrientation(detection(), {
+    choice: 'A', confidence: 0.86, evidence: '文字、底座和环境方向均为正向',
+  })
+  assert.equal(result.angle, 0)
+  assert.equal(result.requiresConfirmation, false)
+  assert.equal(result.source, 'geometry+ocr+multimodal')
+  assert.equal(result.confidence, 0.86)
+})
+
+test('requires confirmation when reliable OCR and multimodal decisions conflict', () => {
+  const result = decideOrientation(detection(), {
+    choice: 'B', confidence: 0.92, evidence: '候选 B 的环境方向为正向',
+  })
+  assert.equal(result.angle, 0)
+  assert.equal(result.requiresConfirmation, true)
+  assert.equal(result.source, 'ocr-multimodal-conflict')
+  assert.match(result.reason, /冲突/)
+})
+
 test('uses the multimodal comparison only as a two-candidate fallback', () => {
   const result = decideOrientation(
     detection({ ocr: { decision: 'uncertain', confidence: 0.4 } }),

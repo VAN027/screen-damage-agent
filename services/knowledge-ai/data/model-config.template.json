@@ -12,6 +12,7 @@
   "kbMaxChunks": 7,
   "showRagPanel": true,
   "showAiPanel": true,
+  "orientationMode": "auto",
   "annoFields": [
     { "id": "title", "label": "标题（可选）", "type": "input", "required": false },
     { "id": "installStatus", "label": "安装状态", "type": "tag-grid", "required": false,

@@ -92,10 +92,19 @@ export async function extractFeatures(imageBase64) {
  * 检测电视机方向。Python 服务常驻，OpenCV/Paddle 模型按进程复用。
  * 失败会抛出异常，由上层明确标记为需要人工确认，禁止静默当作 0°。
  */
-export async function detectTVOrientation(imageBase64, { useOcr = true, signal } = {}) {
+export async function detectTVOrientation(imageBase64, { useOcr = false, debug = false, signal } = {}) {
   return clipApi('/api/knowledge/orientation', {
     method: 'POST',
-    body: JSON.stringify({ image_base64: imageBase64, use_ocr: useOcr }),
+    body: JSON.stringify({ image_base64: imageBase64, use_ocr: useOcr, debug }),
+    timeoutMs: INFERENCE_TIMEOUT_MS,
+    signal,
+  })
+}
+
+export async function compareTVOrientationOcr(imageBase64, points, { signal } = {}) {
+  return clipApi('/api/knowledge/orientation-ocr', {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageBase64, points }),
     timeoutMs: INFERENCE_TIMEOUT_MS,
     signal,
   })

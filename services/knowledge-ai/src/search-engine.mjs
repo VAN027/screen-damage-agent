@@ -218,7 +218,7 @@ export async function saveImages(caseId, dataUrls) {
 
     // 复用常驻方向服务；案例导入没有交互界面，只在证据达到自动阈值时改写。
     try {
-      const normalized = await normalizeTVImageBuffer(data, { allowModel: false, useOcr: true })
+      const normalized = await normalizeTVImageBuffer(data, { allowModel: false, useOcr: false })
       if (normalized.orientation.requiresConfirmation) {
         console.warn(`[orientation] 案例 ${caseId} 第 ${i + 1} 张图片方向未自动改写: ${normalized.orientation.reason}`)
         data = await autoOrientImage(data)

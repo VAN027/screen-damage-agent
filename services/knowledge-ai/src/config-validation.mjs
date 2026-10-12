@@ -50,7 +50,7 @@ export function buildSafeConfigUpdate(current, body, kind) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw configRequestError('模型配置必须是对象')
   const modelFields = new Set([
     'provider', 'model', 'apiKey', 'endpoint', 'temperature', 'maxTokens', 'enabled', 'systemPrompt',
-    'kbEnabled', 'kbSearchQuery', 'kbMaxChunks', 'showRagPanel', 'showAiPanel', 'analysisMode', 'annoFields',
+    'kbEnabled', 'kbSearchQuery', 'kbMaxChunks', 'showRagPanel', 'showAiPanel', 'analysisMode', 'orientationMode', 'annoFields',
   ])
   const annotationFields = new Set(['provider', 'model', 'apiKey', 'endpoint', 'temperature', 'maxTokens', 'enabled', 'systemPrompt', 'analysisMode'])
   const allowed = kind === 'annotation' ? annotationFields : modelFields
@@ -76,6 +76,8 @@ export function buildSafeConfigUpdate(current, body, kind) {
     }
     updated.kbSearchQuery = boundedRequestString(updated.kbSearchQuery, 'kbSearchQuery', 2000)
     if (!Number.isInteger(updated.kbMaxChunks) || updated.kbMaxChunks < 1 || updated.kbMaxChunks > 20) throw configRequestError('kbMaxChunks 必须是 1-20 的整数')
+    if (updated.orientationMode === undefined) updated.orientationMode = 'auto'
+    if (!['auto', 'manual'].includes(updated.orientationMode)) throw configRequestError('orientationMode 无效')
     if (Object.prototype.hasOwnProperty.call(body, 'annoFields')) updated.annoFields = sanitizeAnnotationFields(body.annoFields)
   }
 

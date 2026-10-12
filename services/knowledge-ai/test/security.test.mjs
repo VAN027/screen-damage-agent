@@ -21,10 +21,20 @@ function modelConfig(overrides = {}) {
     showRagPanel: true,
     showAiPanel: true,
     analysisMode: 'hybrid',
+    orientationMode: 'auto',
     annoFields: [],
     ...overrides,
   }
 }
+
+test('model config only accepts supported image orientation modes', () => {
+  const manual = buildSafeConfigUpdate(modelConfig(), { orientationMode: 'manual' }, 'model')
+  assert.equal(manual.orientationMode, 'manual')
+  assert.throws(
+    () => buildSafeConfigUpdate(modelConfig(), { orientationMode: 'disabled' }, 'model'),
+    error => error.code === 'INVALID_MODEL_CONFIG' && /orientationMode/.test(error.message),
+  )
+})
 
 test('model endpoints require HTTPS and block metadata/private targets', { concurrency: false }, () => {
   const previous = process.env.LLM_ALLOWED_HOSTS

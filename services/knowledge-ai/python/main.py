@@ -43,7 +43,7 @@ from pathlib import Path
 import httpx
 import torch
 from transformers import AutoImageProcessor, AutoModel
-from orientation import detect_tv_orientation
+from orientation import compare_tv_orientation_ocr, detect_tv_orientation
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -465,7 +465,12 @@ class ExtractRequest(BaseModel):
 
 class OrientationRequest(BaseModel):
     image_base64: str = Field(max_length=MAX_IMAGE_BASE64_CHARS + 64)
-    use_ocr: bool = True
+    use_ocr: bool = False
+    debug: bool = False
+
+class OrientationOcrRequest(BaseModel):
+    image_base64: str = Field(max_length=MAX_IMAGE_BASE64_CHARS + 64)
+    points: List[List[float]] = Field(min_length=4, max_length=4)
 
 class SearchRequest(BaseModel):
     image_base64: str = Field(max_length=MAX_IMAGE_BASE64_CHARS + 64)
@@ -527,10 +532,23 @@ async def orientation(request: OrientationRequest):
 
     try:
         # OpenCV and Paddle inference are blocking; keep them off the ASGI event loop.
-        return await run_in_threadpool(detect_tv_orientation, img, request.use_ocr)
+        return await run_in_threadpool(detect_tv_orientation, img, request.use_ocr, request.debug)
     except Exception as exc:
         logger.exception("电视方向检测失败")
         raise HTTPException(status_code=500, detail=f"电视方向检测失败: {exc}") from exc
+
+@app.post("/api/knowledge/orientation-ocr")
+async def orientation_ocr(request: OrientationOcrRequest):
+    """Compare OCR evidence at 0/180 degrees for an existing TV quadrilateral."""
+    try:
+        img = _decode_image(request.image_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"OCR 图片处理失败: {exc}") from exc
+    try:
+        return await run_in_threadpool(compare_tv_orientation_ocr, img, request.points)
+    except Exception as exc:
+        logger.exception("电视方向 OCR 比较失败")
+        raise HTTPException(status_code=500, detail=f"电视方向 OCR 比较失败: {exc}") from exc
 
 @app.post("/api/knowledge/extract-base64")
 async def extract(request: ExtractRequest):

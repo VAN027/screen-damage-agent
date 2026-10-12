@@ -457,7 +457,7 @@ let lbDragStartX = 0
 let lbDragStartY = 0
 let lbStartX = 0
 let lbStartY = 0
-let panelConfig = { showRagPanel: true, showAiPanel: true, analysisMode: 'hybrid' }
+let panelConfig = { showRagPanel: true, showAiPanel: true, analysisMode: 'hybrid', orientationMode: 'auto' }
 let orientationPreparationPromise = null
 let orientationConfirmationResolve = null
 let orientationPreviewAngle = 0
@@ -549,6 +549,7 @@ async function loadPanelConfig() {
       panelConfig.showAiPanel = data.data.showAiPanel !== false
       // 分析模式由管理后台配置（hybrid / rag / llm），前端不提供切换
       panelConfig.analysisMode = ['hybrid', 'rag', 'llm'].includes(data.data.analysisMode) ? data.data.analysisMode : 'hybrid'
+      panelConfig.orientationMode = data.data.orientationMode === 'manual' ? 'manual' : 'auto'
     }
   } catch {
     // 使用默认值 (两个面板都显示)
@@ -856,27 +857,64 @@ function finishOrientationConfirmation(confirmed) {
 function requestOrientationConfirmation(photo, index, orientation) {
   if (orientationConfirmationResolve) throw new Error('已有图片正在等待方向确认')
   orientationPreviewAngle = 0
-  document.getElementById('orientationTitle').textContent = `确认电视机方向（${index + 1}/${state.photos.length}）`
+  const manual = orientation?.manual === true
+  document.getElementById('orientationTitle').textContent = `${manual ? '调整' : '确认'}电视机方向（${index + 1}/${state.photos.length}）`
   document.getElementById('orientationPreview').src = photo.analysisUrl
   const confidence = Math.round((Number(orientation?.confidence) || 0) * 100)
-  document.getElementById('orientationReason').textContent = `${orientation?.reason || '自动方向证据不足'}（置信度 ${confidence}%）`
+  document.getElementById('orientationReason').textContent = manual
+    ? (orientation?.reason || '请手动确认图片方向')
+    : `${orientation?.reason || '自动方向证据不足'}（置信度 ${confidence}%）`
   document.getElementById('orientationOverlay').style.display = 'flex'
   return new Promise(resolve => { orientationConfirmationResolve = resolve })
 }
 
 async function preparePhotoOrientations() {
-  const pending = state.photos
-    .map((photo, index) => ({ photo, index }))
-    .filter(item => !item.photo.orientationPrepared)
+  // Refresh before every submission so an administrator's latest mode takes
+  // effect without requiring the user to reload a page that was already open.
+  await loadPanelConfig()
+  const indexedPhotos = state.photos.map((photo, index) => ({ photo, index }))
+  // In manual mode every image must have an explicit user-manual decision.
+  // This also prevents an image prepared earlier by auto mode from being
+  // silently skipped after the administrator switches modes. On retries,
+  // already confirmed manual images are retained and are not asked twice.
+  const pending = panelConfig.orientationMode === 'manual'
+    ? indexedPhotos.filter(item => item.photo.orientation?.source !== 'user-manual')
+    : indexedPhotos.filter(item => !item.photo.orientationPrepared)
   if (!pending.length) return true
+
+  if (panelConfig.orientationMode === 'manual') {
+    for (const { photo, index } of pending) {
+      photo.analysisUrl = photo.originalAnalysisUrl || photo.analysisUrl || photo.url
+      const userAngle = await requestOrientationConfirmation(photo, index, {
+        manual: true,
+        reason: `第 ${index + 1} 张，共 ${state.photos.length} 张。每张图片都必须确认方向后才会开始鉴定`,
+      })
+      if (userAngle === null) throw new Error('图片方向确认已取消，未开始损伤分析')
+      photo.analysisUrl = await rotateImageDataUrl(photo.analysisUrl, userAngle)
+      photo.orientation = {
+        status: 'user_confirmed',
+        angle: userAngle,
+        requiresConfirmation: false,
+        confidence: 1,
+        userAdjustment: userAngle,
+        source: 'user-manual',
+        reason: '用户手动确认图片方向',
+      }
+      photo.evidenceUrl = await buildEvidenceDataUrl(photo)
+      photo.url = photo.evidenceUrl
+      photo.orientationPrepared = true
+      renderPhotoGrid()
+    }
+    return true
+  }
 
   const response = await fetch('/api/knowledge/orient-images', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       images: pending.map(item => item.photo.originalAnalysisUrl || item.photo.analysisUrl || item.photo.url),
-      // 纯 RAG 模式保持照片不出域；不确定方向转人工确认。
-      allowModel: panelConfig.analysisMode !== 'rag',
+      // 所有模式都通过多模态模型复核 A/B 上下方向；冲突时转人工确认。
+      allowModel: true,
     }),
   })
   const payload = await response.json().catch(() => null)

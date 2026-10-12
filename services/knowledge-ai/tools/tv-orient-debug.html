@@ -20,6 +20,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .upload-zone { border: 2px dashed #0f3460; border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; transition: .2s; margin-bottom: 12px; }
 .upload-zone:hover { border-color: #e94560; }
 .upload-zone.dragover { border-color: #e94560; background: rgba(233,69,96,0.1); }
+.paste-zone { border: 1px solid #2563eb; border-radius: 6px; margin: -4px 0 12px; padding: 10px; color: #93c5fd; text-align: center; font-size: 12px; cursor: text; outline: none; }
+.paste-zone:focus { border-color: #34d399; box-shadow: 0 0 0 2px rgba(52,211,153,.2); color: #d1fae5; }
 
 /* Sliders */
 .param-group { margin-bottom: 10px; }
@@ -39,7 +41,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* Image display */
 .img-container { position: relative; background: #0a0a15; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 200px; }
-.img-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.img-container img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.opencv-edges { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .edge-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .img-pair { display: flex; gap: 8px; flex: 1; }
 .img-pair .img-container { flex: 1; }
@@ -58,13 +61,55 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .presets { display: flex; gap: 4px; flex-wrap: wrap; }
 .hint { font-size: 10px; color: #546; margin-top: 2px; }
 .status-bar { font-size: 11px; color: #546; padding: 4px 0; }
+.visual-legend { position:absolute; right:8px; bottom:8px; z-index:2; background:rgba(0,0,0,.72); border-radius:4px; padding:5px 7px; font-size:10px; color:#cbd5e1; line-height:1.55; }
+.visual-legend i { display:inline-block; width:12px; height:3px; vertical-align:middle; margin-right:4px; }
+.progress-panel { display:none; background:#16213e; border:1px solid #0f3460; border-radius:8px; padding:10px 12px; }
+.progress-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:12px; }
+.progress-stages { display:grid; grid-template-columns:repeat(10,minmax(68px,1fr)); gap:5px; overflow-x:auto; }
+.progress-stage { position:relative; min-width:68px; border-radius:5px; background:#0f172a; padding:7px 5px; text-align:center; border:1px solid #25324d; }
+.progress-stage .stage-name { display:block; font-size:10px; white-space:nowrap; }
+.progress-stage .stage-time { display:block; margin-top:3px; font-size:10px; color:#64748b; font-variant-numeric:tabular-nums; }
+.progress-stage.running { border-color:#38bdf8; background:#082f49; color:#bae6fd; animation:pulse-stage 1.2s infinite; }
+.progress-stage.completed { border-color:#22c55e; background:#052e16; color:#bbf7d0; }
+.progress-stage.failed { border-color:#ef4444; background:#450a0a; color:#fecaca; }
+.progress-stage.skipped { opacity:.6; }
+@keyframes pulse-stage { 50% { box-shadow:0 0 0 3px rgba(56,189,248,.18); } }
+
+/* Screenshot-friendly light theme (default). */
+body.light { background: #eef2f7; color: #1f2937; }
+body.light .topbar { background: #ffffff; border-bottom-color: #cbd5e1; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+body.light .left, body.light .right { background: #ffffff; border-color: #cbd5e1; }
+body.light .center { background: #eef2f7; }
+body.light .upload-zone { border-color: #94a3b8; background: #f8fafc; color: #334155; }
+body.light .upload-zone:hover, body.light .upload-zone.dragover { border-color: #e11d48; background: #fff1f2; }
+body.light .paste-zone { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; }
+body.light .paste-zone:focus { background: #ecfdf5; border-color: #059669; color: #065f46; }
+body.light .param-group h3 { color: #be123c; }
+body.light .param-row label { color: #475569; }
+body.light .param-row .val { color: #047857; }
+body.light .btn-reset, body.light .btn-preset { background: #e2e8f0; color: #334155; }
+body.light .btn-preset { color: #0369a1; }
+body.light .img-container { background: #ffffff; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+body.light .img-label { background: rgba(255,255,255,.92); color: #075985; border: 1px solid #cbd5e1; }
+body.light .right { color: #1f2937; }
+body.light .result-json { background: #f8fafc; color: #1e293b; border: 1px solid #dbe3ee; }
+body.light .hint, body.light .status-bar { color: #64748b; }
+body.light [style*="color:#546"] { color: #64748b !important; }
+body.light #resultContent { color: #475569 !important; }
+body.light .loading { background: rgba(255,255,255,.82); color: #334155; }
+body.light .progress-panel { background:#ffffff; border-color:#cbd5e1; }
+body.light .progress-stage { background:#f8fafc; border-color:#dbe3ee; color:#475569; }
+body.light .progress-stage.running { background:#e0f2fe; border-color:#0284c7; color:#075985; }
+body.light .progress-stage.completed { background:#dcfce7; border-color:#16a34a; color:#166534; }
+body.light .progress-stage.failed { background:#fee2e2; border-color:#dc2626; color:#991b1b; }
 </style>
 </head>
-<body>
+<body class="light">
 <div class="topbar">
   <h1>TV 方向检测调试</h1>
   <span class="status-bar" id="apiStatus">API: 检测中...</span>
   <span style="flex:1"></span>
+  <button class="btn btn-reset" id="themeToggle" onclick="toggleTheme()">切换深色</button>
   <button class="btn btn-reset" onclick="resetAll()">重置全部</button>
 </div>
 
@@ -73,9 +118,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="panel left">
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
       <div style="font-size:28px;margin-bottom:8px;">📁</div>
-      <div style="font-size:13px;">拖放图片到此处<br>或点击选择文件</div>
+      <div style="font-size:13px;">拖放图片到此处<br>点击选择文件，或直接粘贴截图</div>
       <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this.files[0])">
     </div>
+    <div class="paste-zone" id="pasteZone" contenteditable="true" role="textbox" aria-label="粘贴图片区域">点击这里，然后按 Ctrl + V 粘贴截图</div>
 
     <div class="presets">
       <button class="btn btn-preset" onclick="applyPreset('default')">默认</button>
@@ -102,26 +148,32 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="param-group"><h3>OCR 方向判断</h3>
       <div class="param-row" data-key="ocr_strip_ratio" data-min="5" data-max="40" data-step="1"><label>边框条带(%)</label><input type="range" value="15"><span class="val">15%</span></div>
       <div class="param-row" data-key="ocr_min_score" data-min="30" data-max="95" data-step="5"><label>最低置信度(%)</label><input type="range" value="80"><span class="val">80%</span></div>
-      <div class="param-row"><label>启用 OCR</label><input type="checkbox" id="ocr_enabled" checked style="width:auto;margin-left:6px;"></div>
+      <div class="param-row"><label>启用 OCR（调试）</label><input type="checkbox" id="ocr_enabled" style="width:auto;margin-left:6px;"></div>
     </div>
 
     <div class="btn-row">
       <button class="btn btn-detect" id="btnDetect" onclick="runDetect()" disabled>🔍 开始检测</button>
     </div>
-    <div class="hint">默认按实际用户链路启用多模态模型兜底：EXIF → OpenCV → OCR → 0°/180° 候选比较 → 必要时人工确认。</div>
+    <div class="hint">当前实际用户链路：EXIF → OpenCV → 0°/180° 多模态比较 → 必要时人工确认。OCR 默认关闭，仅供调试复核。</div>
   </div>
 
   <!-- Center: Images -->
   <div class="panel center" id="imagePanel">
+    <div class="progress-panel" id="progressPanel">
+      <div class="progress-head"><span id="progressTitle">等待检测</span><span id="progressTotal">总耗时 --</span></div>
+      <div class="progress-stages" id="progressStages"></div>
+    </div>
     <div class="img-pair" style="display:none" id="imgPair">
       <div class="img-container">
         <div class="img-label">原图</div>
         <img id="origImg" alt="原始图片">
       </div>
       <div class="img-container">
-        <div class="img-label">输入图片</div>
+        <div class="img-label">OpenCV 检测过程</div>
         <img id="annotImg" alt="标注图片">
+        <img id="edgeImg" class="opencv-edges" alt="OpenCV Canny 边缘">
         <canvas id="annotCanvas" class="edge-overlay" aria-label="电视边缘检测结果"></canvas>
+        <div class="visual-legend" id="visualLegend" style="display:none"><i style="background:#facc15"></i>候选电视框　<i style="background:#ef4444"></i>最终/推断框<br><i style="background:#22c55e"></i>Canny 边缘　<i style="background:#38bdf8"></i>局部可见边线</div>
         <div class="loading" id="imgLoading" style="display:none">检测中...</div>
       </div>
       <div class="img-container">
@@ -146,11 +198,61 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script>
 const API = '/api/admin/debug/tv-orient';
+const JOB_API = '/api/admin/debug/tv-orient-job';
 const DEFAULTS_API = '/api/admin/debug/tv-orient-defaults';
 const ADMIN_TOKEN_STORAGE_KEY = 'ADMIN_API_TOKEN';
 let currentImage = null;
 let defaults = null;
 let lastDetection = null;
+let detectionInProgress = false;
+let progressTicker = null;
+
+const PROGRESS_STAGES = [
+  ['preprocess','图片预处理'], ['opencv','OpenCV 总流程'], ['canny','Canny'], ['contours','闭运算/轮廓'],
+  ['geometry','候选框'], ['ocr','OCR'], ['candidates','生成 A/B'],
+  ['multimodal','多模态'], ['fusion','结果融合'], ['rotation','旋转输出'],
+];
+
+function formatDuration(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value)) return '--';
+  return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${Math.round(value)}ms`;
+}
+
+function renderProgress(job = null) {
+  const panel = document.getElementById('progressPanel');
+  panel.style.display = 'block';
+  const stages = job?.stages || {};
+  document.getElementById('progressStages').innerHTML = PROGRESS_STAGES.map(([id, label]) => {
+    const stage = stages[id] || { status:'pending' };
+    const liveMs = stage.status === 'running' && stage.startedAt ? Date.now() - stage.startedAt : stage.durationMs;
+    const time = stage.status === 'skipped' ? '已跳过' : (stage.status === 'pending' ? '等待中' : formatDuration(liveMs));
+    return `<div class="progress-stage ${esc(stage.status || 'pending')}" title="${esc(stage.message || '')}"><span class="stage-name">${label}</span><span class="stage-time">${time}</span></div>`;
+  }).join('');
+  const completed = Object.values(stages).filter(stage => ['completed','skipped'].includes(stage.status)).length;
+  document.getElementById('progressTitle').textContent = job?.status === 'completed' ? '检测完成' : (job?.status === 'failed' ? '检测失败' : `检测进行中 ${completed}/${PROGRESS_STAGES.length}`);
+  const total = job?.totalDurationMs ?? (job?.createdAt ? Date.now() - job.createdAt : null);
+  document.getElementById('progressTotal').textContent = `总耗时 ${formatDuration(total)}`;
+}
+
+function beginProgressTicker(job) {
+  clearInterval(progressTicker);
+  progressTicker = setInterval(() => renderProgress(job), 100);
+}
+
+function applyTheme(theme) {
+  const light = theme !== 'dark';
+  document.body.classList.toggle('light', light);
+  document.getElementById('themeToggle').textContent = light ? '切换深色' : '切换明亮';
+  localStorage.setItem('TV_ORIENT_THEME', light ? 'light' : 'dark');
+}
+
+function toggleTheme() {
+  applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+}
+
+// New visitors use the screenshot-friendly light theme by default.
+applyTheme(localStorage.getItem('TV_ORIENT_THEME') || 'light');
 
 async function authenticatedFetch(input, options = {}) {
   let token = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '';
@@ -181,7 +283,6 @@ function drawDetectionEdges() {
   const canvas = document.getElementById('annotCanvas');
   const image = document.getElementById('annotImg');
   const container = canvas?.parentElement;
-  const points = lastDetection?.tv_region?.points;
   if (!canvas || !image || !container) return;
 
   const width = Math.max(1, Math.round(container.clientWidth));
@@ -194,7 +295,7 @@ function drawDetectionEdges() {
   const context = canvas.getContext('2d');
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
   context.clearRect(0, 0, width, height);
-  if (!Array.isArray(points) || points.length < 4 || !image.naturalWidth || !image.naturalHeight) return;
+  if (!image.naturalWidth || !image.naturalHeight) return;
 
   const imageRect = image.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();
@@ -202,22 +303,43 @@ function drawDetectionEdges() {
   const offsetY = imageRect.top - containerRect.top;
   const scaleX = imageRect.width / image.naturalWidth;
   const scaleY = imageRect.height / image.naturalHeight;
-  context.beginPath();
-  points.forEach(([x, y], index) => {
-    const drawX = offsetX + Number(x) * scaleX;
-    const drawY = offsetY + Number(y) * scaleY;
-    if (index === 0) context.moveTo(drawX, drawY);
-    else context.lineTo(drawX, drawY);
+  const debug = lastDetection?.opencv_debug || {};
+  const candidates = Array.isArray(debug.candidates) ? debug.candidates : [];
+  const selectedPoints = lastDetection?.tv_region?.points;
+  const drawPolygon = (points, color, lineWidth, fill, label = '') => {
+    if (!Array.isArray(points) || points.length < 4) return;
+    context.beginPath();
+    points.forEach(([x, y], index) => {
+      const drawX = offsetX + Number(x) * scaleX;
+      const drawY = offsetY + Number(y) * scaleY;
+      if (index === 0) context.moveTo(drawX, drawY); else context.lineTo(drawX, drawY);
+    });
+    context.closePath();
+    if (fill) { context.fillStyle = fill; context.fill(); }
+    context.strokeStyle = color; context.lineWidth = lineWidth;
+    context.shadowColor = 'rgba(0,0,0,.8)'; context.shadowBlur = 2; context.stroke(); context.shadowBlur = 0;
+    if (label) {
+      const [x, y] = points[0];
+      context.font = '600 12px system-ui'; context.fillStyle = color;
+      context.fillText(label, offsetX + Number(x) * scaleX + 4, offsetY + Number(y) * scaleY - 5);
+    }
+  };
+  candidates.forEach((candidate, index) => drawPolygon(candidate.points, '#facc15', 1.5, 'rgba(250,204,21,.04)', `候选 ${index + 1} ${(Number(candidate.score) * 100).toFixed(0)}%`));
+  const partialLines = Array.isArray(debug.partialLines) ? debug.partialLines : [];
+  context.setLineDash([]);
+  partialLines.forEach(points => {
+    if (!Array.isArray(points) || points.length < 2) return;
+    context.beginPath();
+    points.forEach(([x, y], index) => {
+      const drawX = offsetX + Number(x) * scaleX;
+      const drawY = offsetY + Number(y) * scaleY;
+      if (index === 0) context.moveTo(drawX, drawY); else context.lineTo(drawX, drawY);
+    });
+    context.strokeStyle = '#38bdf8'; context.lineWidth = 3; context.stroke();
   });
-  context.closePath();
-  context.fillStyle = 'rgba(239, 68, 68, 0.10)';
-  context.fill();
-  context.strokeStyle = '#ef4444';
-  context.lineWidth = 3;
-  context.shadowColor = 'rgba(0, 0, 0, 0.75)';
-  context.shadowBlur = 3;
-  context.stroke();
-  context.shadowBlur = 0;
+  if (lastDetection?.tv_region?.partial) context.setLineDash([8, 6]);
+  drawPolygon(selectedPoints, '#ef4444', 3, 'rgba(239,68,68,.08)', lastDetection?.tv_region?.partial ? '局部边线推断' : '最终选择');
+  context.setLineDash([]);
 }
 
 window.addEventListener('resize', drawDetectionEdges);
@@ -251,26 +373,120 @@ function applyPreset(name) {
   if (currentImage) runDetect();
 }
 
+function loadImageDataUrl(dataUrl, source = '图片') {
+  if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl || '')) return false;
+  currentImage = dataUrl;
+  lastDetection = null;
+  document.getElementById('origImg').src = currentImage;
+  document.getElementById('singleImg').style.display = 'none';
+  document.getElementById('imgPair').style.display = 'flex';
+  document.getElementById('btnDetect').disabled = false;
+  document.getElementById('annotImg').src = '';
+  document.getElementById('rotImg').src = '';
+  document.getElementById('resultContent').innerHTML = `<span style="color:#546;">${esc(source)}已加载，正在自动检测…</span>`;
+  runDetect();
+  return true;
+}
+
 function handleFile(file) {
-  if (!file) return;
+  if (!file) return false;
   const reader = new FileReader();
-  reader.onload = (e) => {
-    currentImage = e.target.result;
-    lastDetection = null;
-    document.getElementById('origImg').src = currentImage;
-    document.getElementById('singleImg').style.display = 'none';
-    document.getElementById('imgPair').style.display = 'flex';
-    document.getElementById('btnDetect').disabled = false;
-    document.getElementById('annotImg').src = '';
-    document.getElementById('rotImg').src = '';
-    document.getElementById('resultContent').innerHTML = '<span style="color:#546;">图片已加载，点击"开始检测"</span>';
-    runDetect();
+  reader.onload = (e) => loadImageDataUrl(e.target.result, '图片');
+  reader.onerror = () => {
+    document.getElementById('resultContent').innerHTML = '<span style="color:#e94560;">图片读取失败，请重新复制或选择文件</span>';
   };
   reader.readAsDataURL(file);
+  return true;
+}
+
+function handlePastedImage(file) {
+  if (!file || (file.type && !file.type.startsWith('image/'))) return false;
+  handleFile(file);
+  const zone = document.getElementById('dropZone');
+  const originalBorder = zone.style.borderColor;
+  zone.style.borderColor = '#34d399';
+  const pasteZone = document.getElementById('pasteZone');
+  pasteZone.textContent = '图片已粘贴，正在自动检测…';
+  pasteZone.blur();
+  setTimeout(() => { zone.style.borderColor = originalBorder || '#0f3460'; }, 900);
+  return true;
+}
+
+function pasteImageFromEvent(event, forceFeedback = false) {
+  const clipboard = event.clipboardData;
+  const pasteZone = document.getElementById('pasteZone');
+  const files = Array.from(clipboard?.files || []);
+  const items = Array.from(clipboard?.items || []);
+  const file = files.find(item => !item.type || item.type.startsWith('image/'))
+    || items.find(item => item.type && item.type.startsWith('image/'))?.getAsFile();
+  if (file && handlePastedImage(file)) {
+    event.preventDefault();
+    return true;
+  }
+
+  const plainText = clipboard?.getData('text/plain') || '';
+  if (loadImageDataUrl(plainText.trim(), '粘贴图片')) {
+    event.preventDefault();
+    pasteZone.textContent = '图片已粘贴，正在自动检测…';
+    pasteZone.blur();
+    return true;
+  }
+
+  const html = clipboard?.getData('text/html') || '';
+  if (html) {
+    const documentFragment = new DOMParser().parseFromString(html, 'text/html');
+    const source = documentFragment.querySelector('img')?.getAttribute('src') || '';
+    if (loadImageDataUrl(source, '粘贴图片')) {
+      event.preventDefault();
+      pasteZone.textContent = '图片已粘贴，正在自动检测…';
+      pasteZone.blur();
+      return true;
+    }
+  }
+
+  if (forceFeedback) {
+    // Some desktop applications expose a bitmap only to the browser's native
+    // contenteditable paste path. Let that paste finish, then recover its <img>.
+    setTimeout(() => recoverNativePastedImage(), 0);
+  }
+  return false;
+}
+
+async function recoverNativePastedImage() {
+  const pasteZone = document.getElementById('pasteZone');
+  const image = pasteZone.querySelector('img');
+  if (!image) {
+    pasteZone.textContent = '未读取到图片数据；可尝试先用系统截图工具截图，再回到这里粘贴';
+    return;
+  }
+
+  const source = image.currentSrc || image.getAttribute('src') || '';
+  if (loadImageDataUrl(source, '粘贴图片')) {
+    pasteZone.textContent = '图片已粘贴，正在自动检测…';
+    pasteZone.blur();
+    return;
+  }
+
+  if (source.startsWith('blob:') || /^https?:\/\//i.test(source)) {
+    try {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('粘贴内容不是图片');
+      handlePastedImage(new File([blob], 'clipboard-image', { type: blob.type }));
+      return;
+    } catch (_) {
+      pasteZone.textContent = '图片来自受保护的外部地址，浏览器无法读取；请使用截图工具截取后再粘贴';
+      return;
+    }
+  }
+
+  pasteZone.textContent = '浏览器没有提供可读取的图片数据；请使用截图工具截取后再粘贴';
 }
 
 async function runDetect() {
-  if (!currentImage) return;
+  if (!currentImage || detectionInProgress) return;
+  detectionInProgress = true;
   const btn = document.getElementById('btnDetect');
   const loading = document.getElementById('imgLoading');
   btn.disabled = true; loading.style.display = 'flex';
@@ -283,15 +499,42 @@ async function runDetect() {
   body.ocr_enabled = document.getElementById('ocr_enabled').checked;
 
   try {
-    const res = await authenticatedFetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const json = await res.json();
-    if (!json.success) throw new Error(json.error?.message || '检测失败');
+    renderProgress();
+    const startResponse = await authenticatedFetch(JOB_API, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, action:'start' }),
+    });
+    const startPayload = await startResponse.json();
+    if (!startPayload.success || !startPayload.data?.jobId) throw new Error(startPayload.error?.message || '创建检测任务失败');
+
+    let job = { status:'running', createdAt:Date.now(), stages:{} };
+    beginProgressTicker(job);
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (job.status === 'running' && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const statusResponse = await authenticatedFetch(JOB_API, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'status', jobId:startPayload.data.jobId }),
+      });
+      const statusPayload = await statusResponse.json();
+      if (!statusPayload.success) throw new Error(statusPayload.error?.message || '读取检测进度失败');
+      Object.assign(job, statusPayload.data);
+      renderProgress(job);
+    }
+    clearInterval(progressTicker);
+    if (job.status === 'running') throw new Error('检测任务等待超时');
+    if (job.status === 'failed') throw new Error(job.error || '检测失败');
+    const json = { success:true, data:job.result };
 
     const d = json.data;
     lastDetection = d;
     const annotImg = document.getElementById('annotImg');
     annotImg.onload = drawDetectionEdges;
     annotImg.src = 'data:image/jpeg;base64,' + d.annotated_base64;
+    const edgeImg = document.getElementById('edgeImg');
+    const edgeBase64 = d.opencv_debug?.edgeImage;
+    edgeImg.src = edgeBase64 ? 'data:image/png;base64,' + edgeBase64 : '';
+    edgeImg.style.display = edgeBase64 ? 'block' : 'none';
+    document.getElementById('visualLegend').style.display = edgeBase64 || d.tv_region?.points ? 'block' : 'none';
     if (d.rotated_base64) document.getElementById('rotImg').src = 'data:image/jpeg;base64,' + d.rotated_base64;
     requestAnimationFrame(drawDetectionEdges);
 
@@ -304,9 +547,16 @@ async function runDetect() {
       ? `<div style="color:#546;font-size:10px;margin:8px 0 4px;">OCR 识别文字 (${ocrTexts.length})</div>
          <div class="result-json">${ocrTexts.map(t => `${esc(t.text)}  <span style="color:#64ffda">${(t.score*100).toFixed(0)}%</span>`).join('\n')}</div>`
       : '';
-    const multimodalHtml = d.multimodal
+    const multimodalHtml = d.multimodal?.status === 'unavailable'
+      ? `模型服务不可用\n${esc(d.multimodal.error || '网络连接失败，请稍后重试')}`
+      : d.multimodal
       ? `选择 ${esc(d.multimodal.choice || 'uncertain')}，置信度 ${(Number(d.multimodal.confidence || 0) * 100).toFixed(1)}%\n${esc(d.multimodal.evidence || d.multimodal.error || '')}`
-      : '本次未触发（OCR 已经给出可靠方向，或模型未配置）';
+      : '本次未返回结果（电视几何检测未达阈值，或模型未配置）';
+    const debug = d.opencv_debug || {};
+    const rejected = Object.entries(debug.rejected || {}).map(([reason, count]) => `${reason} ×${count}`).join('\n') || '无';
+    const candidatesHtml = (debug.candidates || []).length
+      ? debug.candidates.map((candidate, index) => `候选 ${index + 1}: ${candidate.detectionMethod === 'perspective-quadrilateral' ? '透视四边形' : (candidate.detectionMethod === 'partial-lines' ? '局部边线推断' : '旋转矩形')} · ${(Number(candidate.score) * 100).toFixed(1)}% · 面积 ${(Number(candidate.areaRatio) * 100).toFixed(1)}% · 比例 ${Number(candidate.aspectRatio).toFixed(2)} · 边缘支撑 ${(Number(candidate.edgeSupport) * 100).toFixed(0)}%`).join('\n')
+      : '没有候选电视框';
 
     document.getElementById('resultContent').innerHTML = `
       <div style="margin-bottom:8px;">
@@ -318,6 +568,7 @@ async function runDetect() {
         <div><span style="color:#546;">Flip180:</span> <span style="color:${d.need_flip180?'#fbbf24':'#34d399'}">${d.need_flip180?'是':'否'}</span></div>
         <div><span style="color:#546;">TV检测:</span> ${tv.tvDetected ? '是' : '否'}</div>
         <div><span style="color:#546;">长轴:</span> ${tv.longAxis || '-'}</div>
+        <div><span style="color:#546;">框选方式:</span> ${tv.detectionMethod === 'perspective-quadrilateral' ? '透视四边形' : (tv.detectionMethod === 'partial-lines' ? '局部边线推断' : '旋转矩形')}</div>
         <div><span style="color:#546;">几何置信度:</span> ${tv.confidence ? (tv.confidence*100).toFixed(1)+'%' : '-'}</div>
         <div><span style="color:#546;">需人工确认:</span> ${d.requires_confirmation ? '是' : '否'}</div>
         <div><span style="color:#546;">判断来源:</span> ${esc(d.source || '-')}</div>
@@ -329,26 +580,37 @@ async function runDetect() {
       <div style="color:#546;font-size:10px;margin:6px 0 4px;">判断说明</div>
       <div class="result-json">${esc(d.reason || '-')}</div>
       ${ocrTextsHtml}
+      <div style="color:#546;font-size:10px;margin:6px 0 4px;">OpenCV 可视化</div>
+      <div class="result-json">Canny 工作尺寸: ${debug.edgeWidth || '-'} × ${debug.edgeHeight || '-'}\n闭运算: ${esc(debug.closing || '-')}\n原始轮廓: ${debug.contourCount ?? '-'}\n通过筛选的候选:\n${esc(candidatesHtml)}\n\n淘汰原因:\n${esc(rejected)}</div>
       <div style="color:#546;font-size:10px;margin-bottom:4px;">当前参数</div>
       <div class="result-json">${JSON.stringify(d.params_used, null, 1)}</div>
     `;
   } catch (e) {
+    clearInterval(progressTicker);
     document.getElementById('resultContent').innerHTML = `<span style="color:#e94560;">检测失败: ${e.message}</span>`;
   } finally {
+    detectionInProgress = false;
     btn.disabled = false; loading.style.display = 'none';
     btn.textContent = '🔍 开始检测';
   }
 }
 
 function resetAll() {
+  clearInterval(progressTicker);
+  detectionInProgress = false;
   currentImage = null;
   lastDetection = null;
   document.getElementById('singleImg').style.display = 'flex';
   document.getElementById('imgPair').style.display = 'none';
   document.getElementById('btnDetect').disabled = true;
   document.getElementById('annotImg').src = '';
+  const edgeImg = document.getElementById('edgeImg');
+  edgeImg.src = '';
+  edgeImg.style.display = 'none';
+  document.getElementById('visualLegend').style.display = 'none';
   document.getElementById('rotImg').src = '';
   document.getElementById('resultContent').innerHTML = '<span style="color:#546;">等待检测...</span>';
+  document.getElementById('progressPanel').style.display = 'none';
   document.getElementById('fileInput').value = '';
   document.getElementById('dropZone').style.borderColor = '#0f3460';
   applyPreset('default');
@@ -370,6 +632,8 @@ document.querySelectorAll('.param-row[data-key] input').forEach(s => {
 });
 
 // OCR 开关也触发实时检测
+// Browsers may restore checkbox state across refreshes; force the product default.
+document.getElementById('ocr_enabled').checked = false;
 document.getElementById('ocr_enabled').addEventListener('change', scheduleDetect);
 
 // Drag & drop
@@ -379,6 +643,12 @@ dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
 dz.addEventListener('drop', e => {
   e.preventDefault(); dz.classList.remove('dragover');
   if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+// Screenshots copied from common tools are exposed as image files in clipboardData.
+document.getElementById('pasteZone').addEventListener('paste', event => pasteImageFromEvent(event, true));
+document.addEventListener('paste', event => {
+  if (event.target?.id !== 'pasteZone') pasteImageFromEvent(event, false);
 });
 
 // Load defaults and check API
